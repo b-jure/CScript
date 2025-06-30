@@ -43,8 +43,13 @@ CSMOD_API int csopen_debug(cs_State *C);
 #define CS_LISTLIBNAME  "list"
 CSMOD_API int csopen_list(cs_State *C);
 
+// TODO: add docs and tests
+#define CS_UTF8NAME     "utf8"
+CSMOD_API int csopen_utf8(cs_State *C);
+
 
 /* open all previous libraries */
 CSLIB_API void csL_openlibs(cs_State *C);
+
 
 #endif

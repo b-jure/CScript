@@ -7,10 +7,10 @@
 #define creader_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "creader.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 

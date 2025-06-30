@@ -1,0 +1,11 @@
+assert(reg.match("aaab", ".*b") == "aaab");
+assert(reg.match("aaa", ".*a") == "aaa");
+assert(reg.match("b", ".*b") == "b");
+
+assert(reg.match("aaab", ".+b") == "aaab");
+assert(reg.match("aaa", ".+a") == "aaa");
+assert(!reg.match("b", ".+b"));
+
+assert(reg.match("aaab", ".?b") == "ab");
+assert(reg.match("aaa", ".?a") == "aa");
+assert(reg.match("b", ".?b") == "b");

@@ -7,7 +7,7 @@
 #define cdblib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,7 +16,7 @@
 
 #include "cscriptaux.h"
 #include "cscriptlib.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 /*

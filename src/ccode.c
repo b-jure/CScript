@@ -7,7 +7,7 @@
 #define ccode_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "ccode.h"
 #include "clexer.h"
@@ -15,7 +15,7 @@
 #include "cbits.h"
 #include "cdebug.h"
 #include "cvm.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cobject.h"
 #include "cparser.h"
 #include "cgc.h"
@@ -187,7 +187,7 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
 /* 
 ** OpFormat size table (in bytes).
 */
-CSI_DEF const c_byte csC_opsize[FormatN] = { /* ORDER OPFMT */
+CSI_DEF const c_ubyte csC_opsize[FormatN] = { /* ORDER OPFMT */
     SIZE_INSTR,                             /* FormatI */
     SIZE_INSTR+SIZE_ARG_S,                  /* FormatIS */
     SIZE_INSTR+SIZE_ARG_S*2,                /* FormatISS */
@@ -238,7 +238,7 @@ static c_uint c_abs(int v) {
 ** from the previous line in a singed byte array 'lineinfo' for each
 ** instruction. Storing only the difference makes it easier to fit this
 ** information in a single signed byte and save memory. In cases where the
-** difference of lines is too large to fit in a 'c_sbyte', or the MAXIWTHABS
+** difference of lines is too large to fit in a 'c_byte', or the MAXIWTHABS
 ** limit is reached, we store absolute line information which is held in
 ** 'abslineinfo' array. When we do store absolute line info, we also
 ** indicate the corresponding 'lineinfo' entry with special value ABSLINEINFO,
@@ -263,7 +263,7 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
         fs->iwthabs = 1; /* reset counter */
     }
     csM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
-                    MAXINT, "opcodes", c_sbyte);
+                    MAXINT, "opcodes", c_byte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
         p->lineinfo[++pc] = ABSLINEINFO; /* set as invalid entry */

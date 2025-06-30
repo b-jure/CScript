@@ -7,7 +7,7 @@
 #define cscriptaux_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -16,7 +16,7 @@
 #include "cscript.h"
 
 #include "cscriptaux.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 

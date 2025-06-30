@@ -7,7 +7,7 @@
 #define cmathlib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <float.h>
 #include <math.h>
@@ -19,7 +19,7 @@
 
 #include "cscriptaux.h"
 #include "cscriptlib.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 #if !defined(PI)

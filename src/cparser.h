@@ -125,7 +125,7 @@ typedef struct ExpInfo {
 typedef union LVar {
     struct {
         TValueFields;
-        c_byte kind;
+        c_ubyte kind;
         int sidx; /* stack slot index holding the variable value */
         int pidx; /* index of variable in Proto's 'locals' array */
         OString *name;
@@ -149,8 +149,8 @@ typedef struct LiteralInfo {
 typedef struct Goto {
     int pc; /* position in the code */
     int nactlocals; /* number of active local variables in that position */
-    c_byte close; /* true if goto jump escapes upvalues */
-    c_byte bk; /* true if goto is break (otherwise continue in gen. loop) */
+    c_ubyte close; /* true if goto jump escapes upvalues */
+    c_ubyte bk; /* true if goto is break (otherwise continue in gen. loop) */
 } Goto;
 
 
@@ -215,10 +215,10 @@ typedef struct FunctionState {
     int nupvals;        /* number of elements in 'upvals' */
     int pcswtest;       /* 'pc' of the last test instruction in 'switchstm' */
     int firsttarget;    /* first test target in 'ttargets' */
-    c_byte iwthabs;     /* instructions issued since last abs. line info */
-    c_byte needclose;   /* true if needs to close upvalues before returning */
-    c_byte opbarrier;   /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
-    c_byte lastisend;   /* true if last statement ends control flow
+    c_ubyte iwthabs;     /* instructions issued since last abs. line info */
+    c_ubyte needclose;   /* true if needs to close upvalues before returning */
+    c_ubyte opbarrier;   /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
+    c_ubyte lastisend;   /* true if last statement ends control flow
                          * (1==return, 2==break, 3==continue)*/
 } FunctionState;
 

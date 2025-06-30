@@ -7,7 +7,7 @@
 #define ciolib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <ctype.h>
 #include <errno.h>

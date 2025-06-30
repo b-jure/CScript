@@ -6,7 +6,7 @@
 
 #define cscript_c
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,7 +16,7 @@
 
 #include "cscriptaux.h"
 #include "cscriptlib.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 #if !defined(CS_PROGNAME)

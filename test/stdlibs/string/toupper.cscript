@@ -9,7 +9,7 @@ assert(string.toupper(s, 0, -1) == "THIS IS A TEST STRING, USED FOR TESTING, GET
 assert(string.toupper(s, 4, -1) == "This IS A TEST STRING, USED FOR TESTING, GET IT?");
 assert(string.toupper(s, 4, -8) == "This IS A TEST STRING, USED FOR TESTING, get it?");
 assert(string.toupper(s, 4, -100) == "This is a test string, used for testing, get it?");
-assert(string.toupper("this", 0, -100) == "This");
+assert(string.toupper("this", 0, -100) == "this");
 assert(string.toupper("this", 1, -100) == "this");
 assert(string.toupper("this", -2) == "thIS");
 assert(string.toupper("this", -2, -2) == "thIs");

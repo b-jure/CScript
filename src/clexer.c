@@ -9,7 +9,7 @@
 
 #include <memory.h>
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cobject.h"
 #include "ctypes.h"
@@ -76,7 +76,7 @@ void csY_init(cs_State *C) {
     OString *e = csS_newlit(C, CS_ENV); /* create env name */
     csG_fix(C, obj2gco(e)); /* never collect this name */
     /* create keyword names and never collect them */
-    cs_assert(NUM_KEYWORDS <= MAXBYTE);
+    cs_assert(NUM_KEYWORDS <= MAXUBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = csS_new(C, tkstr[i]);
         s->extra = cast_byte(i + 1);
@@ -294,7 +294,7 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
 ** Invalid first bytes:
 ** 1000XXXX(8), 1001XXXX(9), 1010XXXX(A), 1011XXXX(B)
 */
-static c_byte const utf8len_[] = {
+static c_ubyte const utf8len_[] = {
 /* 0 1 2 3 4 5 6 7 8 9 A B C D E F */
    1,1,1,1,1,1,1,1,0,0,0,0,2,2,3,4
 };

@@ -7,15 +7,15 @@
 #define cobject_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cobject.h"
 #include "cvm.h"
 
 
 int csO_ceillog2 (c_uint x) {
-    static const c_byte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
+    static const c_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
         7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,

@@ -7,7 +7,7 @@
 #define ctable_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 #include <math.h>
@@ -17,7 +17,7 @@
 #include "cscriptconf.h"
 #include "cgc.h"
 #include "cscript.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cmem.h"
 #include "cdebug.h"
 #include "cobject.h"
@@ -200,7 +200,7 @@ static Node *getfreepos(Table *t) {
 static void exchangehashes(Table *ht1, Table *ht2) {
     Node *node = ht1->node;
     Node *lastfree = ht1->lastfree;
-    c_byte sz = ht1->size;
+    c_ubyte sz = ht1->size;
     ht1->size = ht2->size;
     ht1->node = ht2->node;
     ht1->lastfree = ht2->lastfree;

@@ -1,0 +1,18 @@
+local a,b = reg.find("", ""); /// empty patterns are tricky
+assert(a == 0 and b == -1);
+a,b = reg.find("alo", "");
+assert(a == 0 and b == -1);
+a,b = reg.find("a\0o a\0o a\0o", "a", 0); /// first position
+assert(a == 0 and b == 0);
+a,b = reg.find("a\0o a\0o a\0o", "a\0o", 1); /// starts in the middle
+assert(a == 4 and b == 6);
+a,b = reg.find("a\0o a\0o a\0o", "a\0o", 8); /// starts in the middle
+assert(a == 8 and b == 10);
+a,b = reg.find("a\0a\0a\0a\0\0ab", "\0ab", 1); /// finds at the end
+assert(a == 8 and b == 10);
+a,b = reg.find("a\0a\0a\0a\0\0ab", "b"); /// last position
+assert(a == 10 and b == 10);
+assert(!reg.find("a\0a\0a\0a\0\0ab", "b\0")); /// check ending
+assert(!reg.find("", "\0"));
+assert(reg.find("alo123alo", "12") == 3);
+assert(!reg.find("alo123alo", "^12"));

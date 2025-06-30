@@ -7,7 +7,7 @@
 #define cparser_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 
@@ -15,7 +15,7 @@
 #include "cfunction.h"
 #include "cgc.h"
 #include "clexer.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cmem.h"
 #include "cobject.h"
 #include "cobject.h"
@@ -78,17 +78,17 @@ typedef struct Scope {
     int nactlocals; /* number of locals outside of this scope */
     int depth; /* scope depth (number of nested scopes) */
     int firstgoto; /* index of first pending goto jump in this block */
-    c_byte cf; /* control flow */
-    c_byte haveupval; /* set if scope contains upvalue variable */
-    c_byte havetbcvar; /* set if scope contains to-be-closed variable */
-    c_byte haveswexp; /* true if have switch exp. (might get optimized) */
+    c_ubyte cf; /* control flow */
+    c_ubyte haveupval; /* set if scope contains upvalue variable */
+    c_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
+    c_ubyte haveswexp; /* true if have switch exp. (might get optimized) */
 } Scope;
 
 
 /* class declaration state */
 typedef struct ClassState {
     struct ClassState *prev; /* chain of nested declarations */
-    c_byte super; /* true if class declaration inherits */
+    c_ubyte super; /* true if class declaration inherits */
 } ClassState;
 
 
@@ -120,10 +120,10 @@ typedef struct FuncContext {
     int firsttarget;
     int lasttarget; /* last target in 'ttargets' */
     int lastgoto; /* last pending goto in 'gt' */
-    c_byte iwthabs;
-    c_byte needclose;
-    c_byte opbarrier;
-    c_byte lastisend;
+    c_ubyte iwthabs;
+    c_ubyte needclose;
+    c_ubyte opbarrier;
+    c_ubyte lastisend;
 } FuncContext;
 
 
@@ -232,6 +232,22 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
                     csY_tok2str(lx, what), csY_tok2str(lx, who), linenum));
     }
 }
+
+
+static int optional(Lexer *lx, int tk) {
+    if (check(lx, tk)) {
+        csY_scan(lx); /* skip optional token */
+        return 1; /* true; have optional token */
+    }
+    return 0; /* false; no optional token */
+}
+
+
+#define endoptional(lx,tk,opt)  { if (opt) expectnext(lx, tk); }
+
+
+#define endoptional_match(lx,opt,what,who,ln) { \
+      if (opt) expectmatch(lx, what, who, ln); }
 
 
 static const char *errstmname(Lexer *lx, const char *err) {
@@ -641,7 +657,7 @@ static void close_func(Lexer *lx) {
     csM_shrinkarray(C, p->p, p->sizep, fs->np, Proto *);
     csM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
     csM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
-    csM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, c_sbyte);
+    csM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, c_byte);
     csM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
                        AbsLineInfo);
     csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
@@ -1098,7 +1114,7 @@ static void method(Lexer *lx) {
 }
 
 
-static void metafield(Lexer *lx, c_byte *amt) {
+static void metafield(Lexer *lx, c_ubyte *amt) {
     FunctionState *fs = lx->fs;
     OString *mtname;
     ExpInfo e;
@@ -1125,7 +1141,7 @@ static void metafield(Lexer *lx, c_byte *amt) {
 
 static int classbody(Lexer *lx) {
     int nmethods = 0;
-    c_byte amt[CS_MT_NUM] = {0};
+    c_ubyte amt[CS_MT_NUM] = {0};
     while (!check(lx, '}') && !check(lx, TK_EOS)) {
         if (!check(lx, TK_FN))
             metafield(lx, amt);
@@ -1276,8 +1292,8 @@ static Binopr getbinopr(int token) {
 ** if 'left' > 'right' then operator is right associative.
 */
 static const struct {
-    c_byte left;
-    c_byte right;
+    c_ubyte left;
+    c_ubyte right;
 } priority[] = { /* ORDER OPR */
     /* binary operators priority */
     {12, 12}, {12, 12},                         /* '+' '-' */
@@ -1647,12 +1663,12 @@ static void classstm(Lexer *lx, int linenum) {
 /* 'switch' statement state. */
 typedef struct {
     TValue v; /* constant expression value */
-    c_byte isconst; /* true if 'e' is constant */
-    c_byte nomatch; /* true if switch has no compile-time match */
-    c_byte havedefault; /* if switch has 'default' case */
-    c_byte havenil; /* if switch has 'nil' case */
-    c_byte havetrue; /* if switch has 'true' case */
-    c_byte havefalse; /* if switch has 'false' case */
+    c_ubyte isconst; /* true if 'e' is constant */
+    c_ubyte nomatch; /* true if switch has no compile-time match */
+    c_ubyte havedefault; /* if switch has 'default' case */
+    c_ubyte havenil; /* if switch has 'nil' case */
+    c_ubyte havetrue; /* if switch has 'true' case */
+    c_ubyte havefalse; /* if switch has 'false' case */
     int firstli; /* first literal value in parser state 'literals' array */
     int jmp; /* jump that needs patch if 'case' expression is not 'CMATCH' */
     enum { CNONE, CDFLT, CASE, CMATCH, CMISMATCH } c; /* cases */
@@ -2040,12 +2056,13 @@ static void ifstm(Lexer *lx) {
         .opT = OP_TESTPOP, .opJ = OP_JMP,
         .pcCond = currPC, .pcClause = NOJMP,
     };
+    int opt;
     storecontext(fs, &cb.ctxbefore);
     csY_scan(lx); /* skip 'if' */
-    expectnext(lx, '(');
+    opt = optional(lx, '(');
     cb.condline = lx->line;
     expr(lx, &cb.e);
-    expectnext(lx, ')');
+    endoptional(lx, ')', opt);
     codeconstexp(fs, &cb.e);
     condbody(lx, &cb);
 }
@@ -2073,16 +2090,16 @@ static void whilestm(Lexer *lx) {
         .opT = OP_TESTPOP, .opJ = OP_JMPS,
         .pcCond = currPC, .pcClause = NOJMP,
     };
-    int line;
+    int line, opt;
     csY_scan(lx); /* skip 'while' */
     enterloop(fs, &ls, 0);
     storecontext(fs, &cb.ctxbefore);
     line = lx->line;
-    expectnext(lx, '(');
+    opt = optional(lx, '(');
     cb.condline = lx->line;
     expr(lx, &cb.e);
     codeconstexp(fs, &cb.e);
-    expectmatch(lx, ')', '(', line);
+    endoptional_match(lx, opt, ')', '(', line);
     condbody(lx, &cb);
     leaveloop(fs);
 }
@@ -2222,11 +2239,11 @@ static void forstm(Lexer *lx) {
         .pcClause = NOJMP
     };
     Scope s;
-    int line;
+    int line, opt;
     csY_scan(lx); /* skip 'for' */
     enterscope(fs, &s, 0); /* enter initializer scope */
     line = lx->line;
-    expectnext(lx, '(');
+    opt = optional(lx, '(');
     /* 1st clause (initializer) */
     forinitializer(lx); 
     enterloop(fs, &ls, 0); /* enter loop scope */
@@ -2236,7 +2253,7 @@ static void forstm(Lexer *lx) {
     cb.condline = forcondition(lx, &cb.e);
     /* 3rd clause */
     forlastclause(lx, &cb.ctxbefore, &cb.e, cb.condline, &cb.pcClause);
-    expectmatch(lx, ')', '(', line);
+    endoptional_match(lx, opt, ')', '(', line);
     condbody(lx, &cb); /* forbody */
     leaveloop(fs); /* leave loop scope */
     leavescope(fs); /* leave initializer scope */

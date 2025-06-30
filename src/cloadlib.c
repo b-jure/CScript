@@ -7,7 +7,7 @@
 #define cloadlib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 #include <stdlib.h>

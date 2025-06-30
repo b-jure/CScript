@@ -8,7 +8,7 @@
 #define cmem_h
 
 
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 /* memory error */
@@ -37,13 +37,13 @@
         ((p) = csM_shrinkarr_(C, p, &(s), f, sizeof(t)))
 
 
-CSI_FUNC void *csM_malloc_(cs_State *C, c_mem size, int tag);
-CSI_FUNC void *csM_realloc_(cs_State *C, void *ptr, c_mem osize,
-                            c_mem nsize);
-CSI_FUNC void *csM_saferealloc(cs_State *C, void *ptr, c_mem osize,
-                               c_mem nsize);
+CSI_FUNC void *csM_malloc_(cs_State *C, c_umem size, int tag);
+CSI_FUNC void *csM_realloc_(cs_State *C, void *ptr, c_umem osize,
+                            c_umem nsize);
+CSI_FUNC void *csM_saferealloc(cs_State *C, void *ptr, c_umem osize,
+                               c_umem nsize);
 CSI_FUNC c_noret csM_toobig(cs_State *C);
-CSI_FUNC void csM_free_(cs_State *C, void *ptr, c_mem osize);
+CSI_FUNC void csM_free_(cs_State *C, void *ptr, c_umem osize);
 CSI_FUNC void *csM_growarr_(cs_State *C, void *ptr, int *sizep, int len,
                            int elemsz, int ensure, int lim, const char *what);
 CSI_FUNC void *csM_shrinkarr_(cs_State *C, void *ptr, int *sizep, int final,

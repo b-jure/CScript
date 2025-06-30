@@ -7,7 +7,7 @@
 #define cscriptlib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cscriptlib.h"
 #include "cscriptaux.h"
@@ -23,6 +23,7 @@ static const cs_Entry loadedlibs[] = {
     {CS_REGLIBNAME, csopen_reg},
     {CS_DBLIBNAME, csopen_debug},
     {CS_LISTLIBNAME, csopen_list},
+    {CS_UTF8NAME, csopen_utf8},
     {NULL, NULL}
 };
 

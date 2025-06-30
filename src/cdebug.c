@@ -7,7 +7,7 @@
 #define cdebug_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 
@@ -17,7 +17,7 @@
 #include "ccode.h"
 #include "cfunction.h"
 #include "cstring.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cobject.h"
 #include "cprotected.h"
 #include "cmeta.h"
@@ -1079,7 +1079,7 @@ int csD_tracecall(cs_State *C, int delta) {
 int csD_traceexec(cs_State *C, const Instruction *pc, ptrdiff_t stacksize) {
     CallFrame *cf = C->cf;
     const Proto *p = cf_func(cf)->p;
-    c_byte mask = C->hookmask;
+    c_ubyte mask = C->hookmask;
     int isize, extra, counthook;
     SPtr base;
     if (!(mask & (CS_MASK_LINE | CS_MASK_COUNT))) { /* no hooks? */

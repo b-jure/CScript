@@ -7,7 +7,7 @@
 #define cfunction_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cfunction.h"
 #include "cdebug.h"

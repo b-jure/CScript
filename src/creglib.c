@@ -7,7 +7,7 @@
 #define creglib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -431,8 +431,8 @@ static int find_aux(cs_State *C, int find) {
     size_t ls, lp;
     const char *s = csL_check_lstring(C, 0, &ls);
     const char *p = csL_check_lstring(C, 1, &lp);
-    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls-1);
-    if (init >= ls) { /* start after string's end? */
+    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls-(ls>0));
+    if (init > ls || (ls != 0 && init == ls)) { /* start after string's end? */
         csL_push_fail(C); /* cannot find anything */
         return 1;
     }

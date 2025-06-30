@@ -9,7 +9,7 @@
 
 
 #include "cscript.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 /*
@@ -50,7 +50,7 @@ typedef union Value {
 
 
 /* 'TValue' fields, defined for reuse and alignment purposes */
-#define TValueFields    Value val; c_byte tt
+#define TValueFields    Value val; c_ubyte tt
 
 
 /* 'Value' with type */
@@ -159,7 +159,7 @@ typedef struct {
 ** ----------------------------------------------------------------------- */
 
 /* common header for objects */
-#define ObjectHeader    struct GCObject* next; c_byte tt_; c_byte mark
+#define ObjectHeader    struct GCObject* next; c_ubyte tt_; c_ubyte mark
 
 
 /* common type for collectable objects */
@@ -342,7 +342,7 @@ typedef struct List {
 typedef union Node {
     struct NodeKey {
         TValueFields; /* fields for value */
-        c_byte key_tt; /* key type tag */
+        c_ubyte key_tt; /* key type tag */
         int next; /* offset for next node */
         Value key_val; /* key value */
     } s;
@@ -366,7 +366,7 @@ typedef union Node {
 
 typedef struct Table {
     ObjectHeader; /* internal only object */
-    c_byte size; /* 2^size */
+    c_ubyte size; /* 2^size */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
     GCObject *gclist;
@@ -422,8 +422,8 @@ typedef struct OString {
     ObjectHeader;
     /* reserved words or tag names index for short strings;
      * flag for long strings indicating that it has hash */
-    c_byte extra;
-    c_byte shrlen; /* length for short strings, 0xFF for longs strings */
+    c_ubyte extra;
+    c_ubyte shrlen; /* length for short strings, 0xFF for longs strings */
     c_uint hash;
     union {
         size_t lnglen; /* length for long strings */
@@ -489,8 +489,8 @@ typedef struct OClass {
 typedef struct UpValInfo {
     OString *name;  /* upvalue name */
     int idx;        /* index in stack or outer function local var list */
-    c_byte onstack; /* is it on stack */
-    c_byte kind;
+    c_ubyte onstack; /* is it on stack */
+    c_ubyte kind;
 } UpValInfo;
 
 
@@ -526,7 +526,7 @@ typedef struct AbsLineInfo {
 */
 typedef struct Proto {
     ObjectHeader;
-    c_byte isvararg;        /* true if this function accepts extra params */
+    c_ubyte isvararg;        /* true if this function accepts extra params */
     int arity;              /* number of fixed (named) function parameters */
     int maxstack;           /* max stack size for this function */
     int sizep;              /* size of 'p' */
@@ -543,7 +543,7 @@ typedef struct Proto {
     TValue *k;              /* constant values */
     Instruction *code;      /* bytecode */
     UpValInfo *upvals;      /* debug information for upvalues */
-    c_sbyte *lineinfo;      /* information about source lines (debug) */
+    c_byte *lineinfo;       /* information about source lines (debug) */
     AbsLineInfo *abslineinfo; /* idem */
     int *instpc;            /* list of pc's for each instruction (debug) */
     LVarInfo *locals;       /* information about local variables (debug) */

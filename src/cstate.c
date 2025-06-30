@@ -7,7 +7,7 @@
 #define cstate_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 

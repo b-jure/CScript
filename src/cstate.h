@@ -84,7 +84,7 @@ typedef struct CallFrame {
     int ftransfer; /* offset of first value transferred */
     int ntransfer; /* number of values transferred */
     int nresults; /* number of expected results from this function */
-    c_byte status; /* call status */
+    c_ubyte status; /* call status */
 } CallFrame;
 
 
@@ -112,21 +112,21 @@ typedef struct StringTable {
 typedef struct GState {
     cs_Alloc falloc; /* allocator */
     void *ud_alloc; /* userdata for 'falloc' */
-    c_smem totalbytes; /* number of bytes allocated - gcgcdebt */
-    c_smem gcdebt; /* number of bbytes not yet compensated by collector */
-    c_mem gcestimate; /* gcestimate of non-garbage memory in use */
+    c_mem totalbytes; /* number of bytes allocated - gcgcdebt */
+    c_mem gcdebt; /* number of bbytes not yet compensated by collector */
+    c_umem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
     TValue c_list; /* global C list */
     TValue c_table; /* global C table */
     TValue nil; /* special nil value (also init flag) */
     c_uint seed; /* initial seed for hashing */
-    c_byte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-    c_byte gcstate; /* GC state bits */
-    c_byte gcstopem; /* stops emergency collections */
-    c_byte gcstop; /* control wheter GC is running */
-    c_byte gcemergency; /* true if this is emergency collection */
-    c_byte gcparams[CS_GCP_NUM];
-    c_byte gccheck; /* true if collection was triggered since last check */
+    c_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
+    c_ubyte gcstate; /* GC state bits */
+    c_ubyte gcstopem; /* stops emergency collections */
+    c_ubyte gcstop; /* control wheter GC is running */
+    c_ubyte gcemergency; /* true if this is emergency collection */
+    c_ubyte gcparams[CS_GCP_NUM];
+    c_ubyte gccheck; /* true if collection was triggered since last check */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
     GCObject *fin; /* list of objects that have finalizer */
@@ -156,8 +156,8 @@ typedef struct GState {
 /* CScript thread state */
 struct cs_State {
     ObjectHeader;
-    c_byte status;
-    c_byte allowhook;
+    c_ubyte status;
+    c_ubyte allowhook;
     c_ushort ncf; /* number of call frames in 'cf' list */
     GCObject *gclist;
     struct cs_State *twups; /* next thread with open upvalues */
@@ -207,7 +207,7 @@ struct cs_State {
 
 /* eXtra space + main thread State */
 typedef struct XS {
-    c_byte extra_[CS_EXTRASPACE];
+    c_ubyte extra_[CS_EXTRASPACE];
     cs_State c;
 } XS;
 
@@ -220,7 +220,7 @@ typedef struct XSG {
 
 
 /* cast 'cs_State' back to start of 'XS' */
-#define fromstate(C)    cast(XS *, cast(c_byte *, (C)) - offsetof(XS, c))
+#define fromstate(C)    cast(XS *, cast(c_ubyte *, (C)) - offsetof(XS, c))
 
 /* }====================================================================== */
 

@@ -9,7 +9,7 @@
 
 
 #if !defined(cstrlib_c) && !defined(creglib_c)
-#error Only string or pattern-matching library can include this header file.
+#error "Only string and pattern-matching library can include this header file."
 #endif
 
 
@@ -19,20 +19,19 @@
 #include "cscript.h"
 
 
-
 /* macro to 'unsign' a character */
-#define uchar(c)	((unsigned char)(c))
+#define uchar(c)	((c_ubyte)(c))
 
 
 /*
 ** Some sizes are better limited to fit in 'int', but must also fit in
 ** 'size_t'. (We assume that 'cs_Integer' cannot be smaller than 'int'.)
 */
-#define MAX_SIZET	((size_t)(~(size_t)0))
+#define MAX_SIZET	cast_sizet(~cast_sizet(0))
 
 
 #define STR_MAXSIZE \
-	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : (size_t)(INT_MAX))
+	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : cast_sizet(MAXINT))
 
 
 /*
@@ -40,11 +39,11 @@
 */
 static size_t posrelStart(cs_Integer pos, size_t len) {
     if (pos >= 0) /* already absolute? */
-        return (size_t)pos;
+        return cast_sizet(pos);
     else if (pos < -(cs_Integer)len) /* negative out-of-bounds 'pos'? */
         return 0; /* clip to 0 */
     else /* otherwise negative in-range 'pos' */
-        return len + (size_t)pos;
+        return len + cast_sizet(pos);
 }
 
 

@@ -34,6 +34,10 @@ syn case match
 syn sync minlines=1000
 
 
+"-Identifier------{
+syn match cscriptIdentifier /\<\h\w*\>/
+"-----------------}
+
 "-Metamethods-----{
 syn keyword cscriptMetaMethod __getidx __setidx __gc __close __call __init
 syn keyword cscriptMetaMethod __concat __mod __pow __add __sub __mul __div
@@ -178,6 +182,13 @@ syn match cscriptFunc /\<list\.flatten\>/
 syn match cscriptFunc /\<list\.concat\>/
 syn match cscriptFunc /\<list\.sort\>/
 syn match cscriptFunc /\<list\.maxindex\>/
+"-UTF8 library----}{
+syn match cscriptFunc /\<utf8\.offset\>/
+syn match cscriptFunc /\<utf8\.codepoint\>/
+syn match cscriptFunc /\<utf8\.char\>/
+syn match cscriptFunc /\<utf8\.len\>/
+syn match cscriptFunc /\<utf8\.itercodes\>/
+syn match cscriptFunc /\<utf8\.charpattern\>/
 "-----------------}}
 
 "-Operators-------{
@@ -247,10 +258,6 @@ syn match cscriptFloat /\<0x\x[[:digit:]_]*\.\=[pP][-+]\=\d[[:digit:]_]*\>/
 
 " flag an octal number with wrong digits
 syn match cscriptOctalError contained /0\o*[89]\d*/
-"-----------------}
-
-"-Identifier------{
-syn match cscriptIdentifier /\<\h\w*\>/
 "-----------------}
 
 "-Keywords--------{

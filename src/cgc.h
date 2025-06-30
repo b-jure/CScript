@@ -170,7 +170,7 @@
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a
-** maximum value of up to 1023 in a 'c_byte'.
+** maximum value of up to 1023 in a 'c_ubyte'.
 */
 #define getgcparam(p)           ((p) * 4)
 #define setgcparam(p,v)         ((p) = (v) / 4)
@@ -186,7 +186,7 @@ CSI_FUNC void csG_checkfin(cs_State *C, GCObject *o, List *metalist);
 CSI_FUNC void csG_fix(cs_State *C, GCObject *o);
 CSI_FUNC void csG_barrier_(cs_State *C, GCObject *r, GCObject *o);
 CSI_FUNC void csG_barrierback_(cs_State *C, GCObject *r);
-CSI_FUNC void csG_setgcdebt(GState *gs, c_smem gcdebt);
+CSI_FUNC void csG_setgcdebt(GState *gs, c_mem gcdebt);
 CSI_FUNC void csG_incmode(cs_State *C);
 
 #endif

@@ -9,7 +9,7 @@ assert(string.tolower(s, 0, -1) == "this is a test string, used for testing, get
 assert(string.tolower(s, 4, -1) == "THIS is a test string, used for testing, get it?");
 assert(string.tolower(s, 4, -8) == "THIS is a test string, used for testing, GET IT?");
 assert(string.tolower(s, 4, -100) == "THIS IS A TEST STRING, USED FOR TESTING, GET IT?");
-assert(string.tolower("THIS", 0, -100) == "tHIS");
+assert(string.tolower("THIS", 0, -100) == "THIS");
 assert(string.tolower("THIS", 1, -100) == "THIS");
 assert(string.tolower("THIS", -2) == "THis");
 assert(string.tolower("THIS", -2, -2) == "THiS");

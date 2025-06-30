@@ -7,7 +7,7 @@
 #ifndef capi_h
 #define capi_h
 
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cstate.h"
 
 /*

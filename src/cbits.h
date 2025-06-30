@@ -46,7 +46,7 @@
 ** (integer type) into 'dest'.
 */
 #define set3bytes(dest,src) \
-    { c_byte *dest_=cast_bytep(dest); int src_=cast_int(src); \
+    { c_ubyte *dest_=cast_bytep(dest); int src_=cast_int(src); \
       setbyte(dest_, 0, getbyte(src_, 0)); \
       setbyte(dest_, 1, getbyte(src_, 1)); \
       setbyte(dest_, 2, getbyte(src_, 2)); }

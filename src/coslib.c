@@ -7,7 +7,7 @@
 #define coslib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <stdlib.h>
 #include <unistd.h>

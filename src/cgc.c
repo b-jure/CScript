@@ -7,13 +7,13 @@
 #define cgc_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cgc.h"
 #include "clist.h"
 #include "cscriptconf.h"
 #include "cfunction.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cmeta.h"
 #include "cobject.h"
 #include "cstate.h"
@@ -125,11 +125,11 @@ void csG_fix(cs_State *C, GCObject *o) {
 
 
 /* set collector gcdebt */
-void csG_setgcdebt(GState *gs, c_smem debt) {
-    c_smem total = gettotalbytes(gs);
+void csG_setgcdebt(GState *gs, c_mem debt) {
+    c_mem total = gettotalbytes(gs);
     cs_assert(total > 0);
-    if (debt < total - MAXSMEM) /* 'totalbytes' would underflow ? */
-        debt = total - MAXSMEM; /* set maximum relative debt possible */
+    if (debt < total - MAXMEM) /* 'totalbytes' would underflow ? */
+        debt = total - MAXMEM; /* set maximum relative debt possible */
     gs->totalbytes = total - debt;
     gs->gcdebt = debt;
 }
@@ -304,7 +304,7 @@ static void clearkey(Node *n) {
 }
 
 
-static c_mem marktable(GState *gs, Table *t) {
+static c_umem marktable(GState *gs, Table *t) {
     Node *last = htnodelast(t);
     for (Node *n = htnode(t, 0); n < last; n++) {
         if (!isempty(nodeval(n))) { /* entry is not empty? */
@@ -318,7 +318,7 @@ static c_mem marktable(GState *gs, Table *t) {
 }
 
 
-static c_mem markproto(GState *gs, Proto *p) {
+static c_umem markproto(GState *gs, Proto *p) {
     int i;
     markobjectN(gs, p->source);
     for (i = 0; i < p->sizep; i++)
@@ -334,7 +334,7 @@ static c_mem markproto(GState *gs, Proto *p) {
 }
 
 
-static c_mem markcclosure(GState *gs, CClosure *cl) {
+static c_umem markcclosure(GState *gs, CClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
         TValue *uv = &cl->upvals[i];
         markvalue(gs, uv);
@@ -343,7 +343,7 @@ static c_mem markcclosure(GState *gs, CClosure *cl) {
 }
 
 
-static c_mem markcsclosure(GState *gs, CSClosure *cl) {
+static c_umem markcsclosure(GState *gs, CSClosure *cl) {
     markobjectN(gs, cl->p);
     for (int i = 0; i < cl->nupvalues; i++) {
         UpVal *uv = cl->upvals[i];
@@ -353,7 +353,7 @@ static c_mem markcsclosure(GState *gs, CSClosure *cl) {
 }
 
 
-static c_mem markuserdata(GState *gs, UserData *ud) {
+static c_umem markuserdata(GState *gs, UserData *ud) {
     markobjectN(gs, ud->metalist);
     markobjectN(gs, ud->methods);
     for (int i = 0; i < ud->nuv; i++)
@@ -379,7 +379,7 @@ static c_mem markuserdata(GState *gs, UserData *ud) {
 ** really did get modified after we marked it black) without
 ** using write barriers.
 */
-static c_mem markthread(GState *gs, cs_State *C) {
+static c_umem markthread(GState *gs, cs_State *C) {
     SPtr sp = C->stack.p;
     if (gs->gcstate == GCSpropagate)
         linkgclist(C, gs->grayagain); /* traverse 'C' again in 'atomic' */
@@ -442,7 +442,7 @@ static int markopenupvalues(GState *gs) {
 }
 
 
-static c_mem marklist(GState *gs, List *l) {
+static c_umem marklist(GState *gs, List *l) {
     cs_assert(l->n > 0);
     for (int i = 0; i < l->n; i++)
         markvalue(gs, &l->b[i]);
@@ -453,7 +453,7 @@ static c_mem marklist(GState *gs, List *l) {
 /* 
 ** Traverse a single gray object turning it to black.
 */
-static c_mem propagate(GState *gs) {
+static c_umem propagate(GState *gs) {
     GCObject *o = gs->graylist;
     cs_assert(!iswhite(o)); /* 'o' must be gray */
     notw2black(o); /* mark gray object as black */
@@ -472,8 +472,8 @@ static c_mem propagate(GState *gs) {
 
 
 /* propagates all gray objects */
-static c_mem propagateall(GState *gs) {
-    c_mem work = 0;
+static c_umem propagateall(GState *gs) {
+    c_umem work = 0;
     while (gs->graylist)
         work += propagate(gs);
     return work;
@@ -569,7 +569,7 @@ static GCObject **sweeplist(cs_State *C, GCObject **l, int nobjects,
 static int sweepstep(cs_State *C, GCObject **nextlist, int nextstate) {
     GState *gs = G(C);
     if (gs->sweeppos) {
-        c_smem old_gcdebt = gs->gcdebt;
+        c_mem old_gcdebt = gs->gcdebt;
         int count;
         gs->gccheck = 1; /* set check flag */
         gs->sweeppos = sweeplist(C, gs->sweeppos, GCSWEEPMAX, &count);
@@ -616,7 +616,7 @@ static void entersweep(cs_State *C) {
 static void checksizes(cs_State *C, GState *gs) {
     if (!gs->gcemergency) {
         if (gs->strtab.nuse < gs->strtab.size / 4) { /* strtab too big? */
-            c_smem old_gcdebt = gs->gcdebt;
+            c_mem old_gcdebt = gs->gcdebt;
             csS_resize(C, gs->strtab.size / 2);
             gs->gcestimate += gs->gcdebt - old_gcdebt; /* correct estimate */
         }
@@ -747,8 +747,8 @@ static void separatetobefin(GState *gs, int force) {
 }
 
 
-static c_mem marktobefin(GState *gs) {
-    c_mem count = 0;
+static c_umem marktobefin(GState *gs) {
+    c_umem count = 0;
     for (GCObject *o = gs->tobefin; o != NULL; o = o->next) {
         markobject(gs, o);
         count++;
@@ -757,9 +757,9 @@ static c_mem marktobefin(GState *gs) {
 }
 
 
-static c_mem atomic(cs_State *C) {
+static c_umem atomic(cs_State *C) {
     GState *gs = G(C);
-    c_smem work = 0;
+    c_mem work = 0;
     GCObject *grayagain = gs->grayagain;
     gs->grayagain = NULL;
     cs_assert(gs->weak == NULL); /* 'weak' unused */
@@ -793,13 +793,13 @@ static c_mem atomic(cs_State *C) {
 ** by testing from the side of Lua developers).
 */
 static void setpause(GState *gs) {
-    c_smem threshold, debt;
+    c_mem threshold, debt;
     int pause = getgcparam(gs->gcparams[CS_GCP_PAUSE]);
-    c_smem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
+    c_mem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
     cs_assert(estimate > 0);
-    threshold = (pause < MAXSMEM / estimate) /* can fit ? */
+    threshold = (pause < MAXMEM / estimate) /* can fit ? */
               ? estimate * pause /* yes */
-              : MAXSMEM; /* no, overflows; truncate to maximum */
+              : MAXMEM; /* no, overflows; truncate to maximum */
     /* debt = totalbytes - ((gcestimate/100)*pause) */
     debt = gettotalbytes(gs) - threshold;
     if (debt > 0) debt = 0;
@@ -828,8 +828,8 @@ static void restartgc(GState *gs) {
 ** indicates end of the sweep phase. GCScallfin calls finalizers of all the
 ** objects in 'tobefin' and puts them back into 'objects' list after the call.
 */
-static c_mem singlestep(cs_State *C) {
-    c_mem work;
+static c_umem singlestep(cs_State *C) {
+    c_umem work;
     GState *gs = G(C);
     gs->gcstopem = 1; /* prevent emergency collections */
     switch (gs->gcstate) {
@@ -940,13 +940,13 @@ void csG_rununtilstate(cs_State *C, int statemask) {
 */
 static void step(cs_State *C, GState *gs) {
     int stepmul = (getgcparam(gs->gcparams[CS_GCP_STEPMUL])|1);
-    c_byte nbits = gs->gcparams[CS_GCP_STEPSIZE];
-    c_smem debt = (gs->gcdebt / WORK2MEM) * stepmul;
-    c_smem stepsize = (nbits <= sizeof(c_smem) * 8 - 2) /* fits ? */
+    c_ubyte nbits = gs->gcparams[CS_GCP_STEPSIZE];
+    c_mem debt = (gs->gcdebt / WORK2MEM) * stepmul;
+    c_mem stepsize = (nbits <= sizeof(c_mem) * 8 - 2) /* fits ? */
                     ? ((cast_smem(1) << nbits) / WORK2MEM) * stepmul
-                    : MAXSMEM; /* overflows; keep maximum value */
+                    : MAXMEM; /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
-        c_mem work = singlestep(C); /* perform one single step */
+        c_umem work = singlestep(C); /* perform one single step */
         debt -= work;
     } while (debt > -stepsize && gs->gcstate != GCSpause);
     if (gs->gcstate == GCSpause) /* pause? */

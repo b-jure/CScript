@@ -1,39 +1,37 @@
 /*
-** climits.h
+** cscriptlimits.h
 ** Limits, basic types and some other definitions
 ** See Copyright Notice in cscript.h
 */
 
 
-#ifndef climits_h
-#define climits_h
+#ifndef cscriptlimits_h
+#define cscriptlimits_h
 
 #include "cscript.h"
 
 
-typedef size_t          c_mem;
-#define MAXMEM          ((c_mem)(~(c_mem)(0)))
-typedef ptrdiff_t       c_smem;
-#define MAXSMEM         ((c_smem)(MAXMEM >> 1))
+typedef size_t          c_umem;
+#define MAXUMEM         ((c_umem)(~(c_umem)(0)))
+typedef ptrdiff_t       c_mem;
+#define MAXMEM          ((c_mem)(MAXUMEM >> 1))
 
 
-typedef unsigned char   c_byte;
-#define MAXBYTE         ((c_byte)(~(c_byte)(0)))
-typedef signed char     c_sbyte;
-#define MAXSBYTE        ((c_byte)(MAXBYTE >> 1))
+typedef unsigned char   c_ubyte;
+#define MAXUBYTE        ((c_ubyte)(~(c_ubyte)(0)))
+typedef signed char     c_byte;
+#define MAXBYTE         ((c_ubyte)(MAXUBYTE >> 1))
 
 
 /* 
-** Unsigned 32-bit integer; for 'nCcalls'.
-** This value must have 16 bits for counting nested CScript
-** function calls and another 16 bits for nested C calls.
+** Unsigned size of (at least) 4 bytes.
 */
 typedef uint32_t        c_uint32;
 
 
 /* nice to have */
-typedef unsigned int    c_uint;
 typedef unsigned short  c_ushort;
+typedef unsigned int    c_uint;
 typedef unsigned long   c_ulong;
 
 
@@ -49,7 +47,6 @@ typedef unsigned long   c_ulong;
         (sizeof(size_t) < sizeof(cs_Integer) \
             ? (SIZE_MAX) \
             : (size_t)(CS_INTEGER_MAX))
-
 
 
 /* convert pointer 'p' to 'unsigned int' */
@@ -125,7 +122,7 @@ typedef unsigned long   c_ulong;
 ** Instructions (opcodes) are 1-byte in size not including the instruction
 ** arguments.
 */
-typedef c_byte Instruction;
+typedef c_ubyte Instruction;
 
 
 
@@ -240,14 +237,14 @@ typedef c_byte Instruction;
 #define cast(t, e)          ((t)(e))
 
 #define cast_node(e)        cast(Node*,(e))
-#define cast_byte(e)        cast(c_byte,(e))
-#define cast_bytep(e)       cast(c_byte*,(e))
-#define cast_sbyte(e)       cast(c_sbyte,(e))
+#define cast_byte(e)        cast(c_ubyte,(e))
+#define cast_bytep(e)       cast(c_ubyte*,(e))
+#define cast_sbyte(e)       cast(c_byte,(e))
 #define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(c_uint,(e))
-#define cast_mem(e)         cast(c_mem,(e))
-#define cast_smem(e)        cast(c_smem,(e))
+#define cast_mem(e)         cast(c_umem,(e))
+#define cast_smem(e)        cast(c_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_char(e)        cast(char,(e))
 #define cast_uchar(e)       cast(unsigned char,(e))

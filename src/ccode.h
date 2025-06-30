@@ -305,7 +305,7 @@ typedef struct {
     OpFormat format; /* opcode format */
     int push; /* how many values the opcode pushes */
     int pop; /* how many values the opcode pops */
-    c_byte chgsp; /* true if opcode changes value at current stack pointer */
+    c_ubyte chgsp; /* true if opcode changes value at current stack pointer */
 } OpProperties; 
 
 
@@ -320,7 +320,7 @@ CSI_DEC(const OpProperties csC_opproperties[NUM_OPCODES];)
 
 
 /* Instruction format sizes in bytes (or in units of 'Instruction's) */
-CSI_DEC(const c_byte csC_opsize[FormatN];)
+CSI_DEC(const c_ubyte csC_opsize[FormatN];)
 #define getopSize(i)    (csC_opsize[getopFormat(i)])
 
 

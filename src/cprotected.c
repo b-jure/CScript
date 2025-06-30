@@ -7,7 +7,7 @@
 #define cprotected_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <setjmp.h>
 #include <stdlib.h>
@@ -150,7 +150,7 @@ int csPR_call(cs_State *C, ProtectedFn fn, void *ud,
               ptrdiff_t old_top, ptrdiff_t ef) {
     int status;
     CallFrame *old_cf = C->cf;
-    c_byte old_allowhook = C->allowhook;
+    c_ubyte old_allowhook = C->allowhook;
     ptrdiff_t old_errfunc = C->errfunc;
     C->errfunc = ef;
     status = csPR_rawcall(C, fn, ud);
@@ -183,7 +183,7 @@ static void closep(cs_State *C, void *ud) {
 /* call 'csF_close' in protected mode */
 int csPR_close(cs_State *C, ptrdiff_t level, int status) {
     CallFrame *old_cf = C->cf;
-    c_byte old_allowhook = C->allowhook;
+    c_ubyte old_allowhook = C->allowhook;
     for (;;) { /* keep closing upvalues until no more errors */
         struct PCloseData pcd = { restorestack(C, level), status };
         status = csPR_rawcall(C, closep, &pcd);

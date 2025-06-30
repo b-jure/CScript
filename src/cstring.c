@@ -7,7 +7,7 @@
 #define cstring_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cstate.h"
 #include "cscript.h"
@@ -18,7 +18,7 @@
 #include "cdebug.h"
 #include "cmem.h"
 #include "cvm.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cprotected.h"
 
 #include <string.h>
@@ -306,7 +306,7 @@ static const unsigned char table[] = { -1,
 };
 
 static const char *str2int(const char *s, cs_Integer *i) {
-    const c_byte *val = table + 1;
+    const c_ubyte *val = table + 1;
     cs_Unsigned lim = CS_INTEGER_MIN;
     int sign = 1;
     uint32_t x;
@@ -617,7 +617,7 @@ const char *csS_pushvfstring(cs_State *C, const char *fmt, va_list argp) {
                 break;
             }
             default: {
-                c_byte c = cast(unsigned char, *(end + 1));
+                c_ubyte c = cast(unsigned char, *(end + 1));
                 csD_runerror(C, "invalid format specifier '%%%c'", c);
                 /* UNREACHED */
                 return NULL;

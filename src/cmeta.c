@@ -7,7 +7,7 @@
 #define cmeta_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cmeta.h"
 #include "clist.h"
@@ -40,7 +40,7 @@ void csMM_init(cs_State *C) {
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le", "__name"
     };
-    cs_assert(FIRSTMM + CS_MT_NUM <= MAXBYTE);
+    cs_assert(FIRSTMM + CS_MT_NUM <= MAXUBYTE);
     for (int i = 0; i < CS_MT_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
         s->extra = cast_byte(i + FIRSTMM);

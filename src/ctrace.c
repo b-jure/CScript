@@ -7,7 +7,7 @@
 #define ctrace_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,7 +16,7 @@
 #include "cmeta.h"
 #include "ccode.h"
 #include "cdebug.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cobject.h"
 #include "cstring.h"
 

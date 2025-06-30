@@ -7,7 +7,7 @@
 
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "clist.h"
 #include "cdebug.h"
@@ -18,7 +18,7 @@
 #include "cprotected.h"
 #include "cscript.h"
 #include "cscriptconf.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "ctable.h"
 #include "cobject.h"
 #include "cscript.h"
@@ -1547,15 +1547,15 @@ CS_API int cs_gc(cs_State *C, int option, ...) {
         }
 	case CS_GC_STEP: { /* perform GC step */
             int data = va_arg(argp, int); /* Kbytes */
-            c_smem gcdebt = 1; /* true if GC did work */
-            c_byte old_gcstop = gs->gcstop;
+            c_mem gcdebt = 1; /* true if GC did work */
+            c_ubyte old_gcstop = gs->gcstop;
             gs->gcstop = 0; /* allow GC to run */
             if (data == 0) {
                 csG_setgcdebt(gs, 0); /* force to run one basic step */
                 csG_step(C);
             } else { /* add 'data' to total gcdebt */
                 /* convert 'data' to bytes (data = bytes/2^10) */
-                gcdebt = cast(c_smem, data) * 1024 + gs->gcdebt;
+                gcdebt = cast(c_mem, data) * 1024 + gs->gcdebt;
                 csG_setgcdebt(gs, gcdebt);
                 csG_checkGC(C);
             }

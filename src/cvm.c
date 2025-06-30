@@ -7,7 +7,7 @@
 #define cvm_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include <string.h>
 
@@ -18,7 +18,7 @@
 #include "cgc.h"
 #include "ctable.h"
 #include "cscript.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cobject.h"
 #include "cdebug.h"
 #include "cobject.h"

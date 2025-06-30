@@ -7,17 +7,17 @@
 #define clstlib_c
 #define CS_LIB
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "cscript.h"
 
 #include "cscriptaux.h"
 #include "cscriptlib.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 
 
 #define lbcheck(idx)        (0 <= (cs_Integer)(idx))
-#define ubcheck(idx)        ((cs_Integer)(idx) < INT_MAX)
+#define ubcheck(idx)        ((cs_Integer)(idx) < MAXINT)
 
 /* check if 'idx' is in bounds */
 #define bcheck(idx)         (lbcheck(idx) && ubcheck(idx))
@@ -142,7 +142,7 @@ static int lst_move(cs_State *C) {
 
 static int lst_new(cs_State *C) {
     cs_Unsigned size = (cs_Unsigned)csL_check_integer(C, 0);
-    csL_check_arg(C, size <= cast_uint(INT_MAX), 0, "out of range");
+    csL_check_arg(C, size <= cast_uint(MAXINT), 0, "out of range");
     cs_push_list(C, cast_int(size));
     return 1;
 }
@@ -158,7 +158,7 @@ static int lst_flatten(cs_State *C) {
     e = (e > last) ? last : e; /* flatten up to last index */
     if (i > e) return 0; /* empty range */
     n = c_castS2U(e) - c_castS2U(i); /* number of elements minus 1 */
-    cs_assert(n < cast_uint(INT_MAX)); /* bounds are already checked */
+    cs_assert(n < cast_uint(MAXINT)); /* bounds are already checked */
     if (c_unlikely(!cs_checkstack(C, (int)(++n))))
         return csL_error(C, "too many results");
     for (; i < e; i++) /* push l[i..e - 1] (to avoid overflows in 'i') */
@@ -372,7 +372,7 @@ static void auxsort(cs_State *C, Idx lo, Idx hi, unsigned rnd) {
 static int lst_sort(cs_State *C) {
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
     if (size > 1) { /* non trivial? */
-        csL_check_arg(C, size <= INT_MAX, 0, "list too big");
+        csL_check_arg(C, size <= MAXINT, 0, "list too big");
         if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
             csL_check_type(C, 1, CS_T_FUNCTION); /* it must be a function */
         cs_setntop(C, 2); /* make sure there are two arguments */

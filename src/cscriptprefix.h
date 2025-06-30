@@ -1,11 +1,11 @@
 /*
-** cprefix.h
+** cscriptprefix.h
 ** Definitions for CScript code that must come before any other header file
 ** See Copyright Notice in cscript.h
 */
 
-#ifndef cprefix_h
-#define cprefix_h
+#ifndef cscriptprefix_h
+#define cscriptprefix_h
 
 /* Enable some POSIX functions and definitions */
 #if !defined(_XOPEN_SOURCE)

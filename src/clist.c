@@ -7,10 +7,10 @@
 #define clist_c
 #define CS_CORE
 
-#include "cprefix.h"
+#include "cscriptprefix.h"
 
 #include "clist.h"
-#include "climits.h"
+#include "cscriptlimits.h"
 #include "cstring.h"
 #include "cgc.h"
 #include "cmem.h"
@@ -72,7 +72,7 @@ List *csA_newl(cs_State *C, int n) {
 
 void csA_init(cs_State *C) {
     static const char *fields[LFNUM] = { "len", "last", "x", "y", "z" };
-    cs_assert(FIRSTLF + LFNUM <= MAXBYTE);
+    cs_assert(FIRSTLF + LFNUM <= MAXUBYTE);
     for (int i = 0; i < LFNUM; i++) {
         OString *s = csS_new(C, fields[i]);
         s->extra = cast_byte(i + FIRSTLF);
