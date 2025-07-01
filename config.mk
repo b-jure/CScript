@@ -73,8 +73,8 @@ SYSLIBS =
 
 # Testing flags
 ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
-MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DCS_USE_APICHECK -DCSI_ASSERT
-	   #-DCSI_DISASSEMBLE_BYTECODE #-DCSI_TRACE_EXEC
+MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DCS_USE_APICHECK -DCSI_ASSERT \
+	   -DCSI_DISASSEMBLE_BYTECODE #-DCSI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

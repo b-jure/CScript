@@ -8,12 +8,6 @@
 #ifndef ctypes_h
 #define ctypes_h
 
-
-/* miscellaneous macros (not part of C standard) */
-#define ctogcase(c)     ((c) ^ 0x20)
-#define ctodigit(c)     ((c) & 0x0F) /* c to digit (unchecked) */
-#define cisodigit(c)    ((unsigned)(c)-'0' < 8u)
-
 #define	ctoascii(c)	((c) & 0x7F)
 #define ctolower(c)     ((c) | 0x20)
 #define ctoupper(c)     ((c) & 0x5F)
@@ -31,5 +25,9 @@
 #define cisprint(c)     ((unsigned)(c)-0x20 < 0x5Fu)
 #define cispunct(c)     (cisgraph(c) && !cisalnum(c))
 #define cisspace(c)     ((c) == ' ' || (unsigned)(c) - '\t' < 0x05u)
+
+/* miscellaneous macros (not ISO C) */
+#define ctodigit(c)     ((c) & 0x0F) /* c to digit (unchecked) */
+#define cisodigit(c)    ((unsigned)(c)-'0' < 8u)
 
 #endif

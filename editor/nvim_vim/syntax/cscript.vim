@@ -261,7 +261,7 @@ syn match cscriptOctalError contained /0\o*[89]\d*/
 "-----------------}
 
 "-Keywords--------{
-syn keyword cscriptStatement break return continue
+syn keyword cscriptStatement break return continue fn local
 syn keyword cscriptConditional if else
 syn keyword cscriptLabel case default switch
 syn keyword cscriptRepeat loop while for
@@ -298,30 +298,22 @@ syn keyword cscriptForEach contained containedin=cscriptForEach in
 syn match cscriptInError /\<in\>/
 "-----------------}
 
-syn match cscriptSemicolon /;/
-syn match cscriptComma /,/
-
-syn region cscriptLocalStatement transparent start=/\<local\_s*\h\w*\_s*/ end=/\ze\%(;\|=\|{\)/ contains=cscriptComma,cscriptLocal,cscriptAttribute,cscriptClassDefinition,cscriptFunction,cscriptFn,cscriptFunctionCall
-syn keyword cscriptLocal local contained
-syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/ contained
-
 "-Classes---------{
 syn region cscriptClassDefinition transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=cscriptClass skipwhite skipempty
 syn keyword cscriptClass class inherits
 syn keyword cscriptSuper super
 "-----------------}
 
-syn region cscriptFunction transparent start=/\<fn\_s\+\k\+\%(\.\k\+\)*\%(\_s*(\zs\)\@=/ end=/)/ keepend contains=cscriptFn,cscriptFunctionCall
-syn match cscriptFunctionCall /\k\+\%(\_s*(\)\@=/ keepend
-syn keyword cscriptFn fn
-
+"-Other----------_{
+syn match cscriptFunctionCall /\k\+\_s*(\@=/
+syn match cscriptSemicolon /;/
+syn match cscriptComma /,/
+syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/
+"-----------------}
 
 hi def link cscriptAttribute            StorageClass
-hi def link cscriptFn                   cscriptStatement
 hi def link cscriptSemicolon            cscriptStatement
-hi def link cscriptLocal                cscriptStatement
 hi def link cscriptIdentifier           NONE
-hi def link cscriptFunction             cscriptStatement
 hi def link cscriptSuper                PreProc
 hi def link cscriptClassDefinition      cscriptStatement
 hi def link cscriptClass                cscriptStatement

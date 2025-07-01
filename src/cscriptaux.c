@@ -994,8 +994,8 @@ CSLIB_API char *csL_buff_ensure(csL_Buffer *B, size_t sz) {
 */
 CSLIB_API void csL_buff_push_lstring(csL_Buffer *B, const char *s, size_t l) {
     if (l > 0) {
-        char *b = buffensure(B, l, -1);
-        memcpy(b, s, l*sizeof(char));
+        char *p = buffensure(B, l, -1);
+        memcpy(p, s, l*sizeof(char));
         csL_buffadd(B, l);
     }
 }

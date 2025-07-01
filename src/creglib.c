@@ -370,7 +370,7 @@ static size_t get_onecapture(MatchState *ms, int i, const char *s,
         if (c_unlikely(capl == CAP_UNFINISHED))
             csL_error(ms->C, "unfinished capture");
         else if (capl == CAP_POSITION)
-            cs_push_integer(ms->C, (ms->capture[i].init - ms->src_init) + 1);
+            cs_push_integer(ms->C, ms->capture[i].init - ms->src_init);
         return capl;
     }
 }
@@ -431,7 +431,7 @@ static int find_aux(cs_State *C, int find) {
     size_t ls, lp;
     const char *s = csL_check_lstring(C, 0, &ls);
     const char *p = csL_check_lstring(C, 1, &lp);
-    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls-(ls>0));
+    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls);
     if (init > ls || (ls != 0 && init == ls)) { /* start after string's end? */
         csL_push_fail(C); /* cannot find anything */
         return 1;
@@ -510,7 +510,7 @@ static int reg_gmatch(cs_State *C) {
     size_t ls, lp;
     const char *s = csL_check_lstring(C, 0, &ls);
     const char *p = csL_check_lstring(C, 1, &lp);
-    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls - 1);
+    size_t init = posrelStart(csL_opt_integer(C, 2, 0), ls);
     GMatchState *gm;
     cs_setntop(C, 2); /* keep strings on closure to avoid being collected */
     gm = (GMatchState *)cs_push_userdata(C, sizeof(GMatchState), 0);
@@ -529,20 +529,22 @@ static void add_s(MatchState *ms, csL_Buffer *b, const char *s,
     cs_State *C = ms->C;
     const char *news = cs_to_lstring(C, 2, &l);
     const char *p;
-    while ((p = (char *)memchr(news, C_ESC, l)) != NULL) {
-        csL_buff_push_lstring(b, news, p - news);
-        p++; /* skip ESC */
+    while ((p = cast_charp(memchr(news, C_ESC, l))) != NULL) {
+        csL_buff_push_lstring(b, news, cast_sizet(p - news));
+        p++; /* skip C_ESC */
         if (*p == C_ESC) /* '%%' */
             csL_buff_push(b, *p);
         else if (*p == '0') /* '%0' */
-            csL_buff_push_lstring(b, s, e - s);
+            csL_buff_push_lstring(b, s, cast_sizet(e - s));
         else if (isdigit(uchar(*p))) { /* '%n' */
             const char *cap;
             ptrdiff_t resl = get_onecapture(ms, *p - '1', s, e, &cap);
-            if (resl == CAP_POSITION)
+            if (resl == CAP_POSITION) {
+                csL_to_lstring(C, -1, NULL); /* conv. position to string */
+                cs_remove(C, -2); /* remove position */
                 csL_buff_push_stack(b); /* add pos. to accumulated result */
-            else
-                csL_buff_push_lstring(b, cap, resl);
+            } else
+                csL_buff_push_lstring(b, cap, cast_sizet(resl));
         } else
             csL_error(C, "invalid use of '%c' in replacement string", C_ESC);
         l -= p + 1 - news;
@@ -568,7 +570,8 @@ static int add_value(MatchState *ms, csL_Buffer *b, const char *s,
             cs_call(C, n, 1); /* call it */
             break;
         }
-        case CS_T_TABLE: { /* index the table */
+        case CS_T_LIST: case CS_T_INSTANCE: case CS_T_TABLE: {
+            /* index the list/instance/table */
             push_onecapture(ms, 0, s, e); /* first capture is the index */
             cs_get(C, 2);
             break;
@@ -580,7 +583,7 @@ static int add_value(MatchState *ms, csL_Buffer *b, const char *s,
     }
     if (!cs_to_bool(C, -1)) { /* nil or false? */
         cs_pop(C, 1); /* remove value */
-        csL_buff_push_lstring(b, s, e - s); /* keep original text */
+        csL_buff_push_lstring(b, s, cast_sizet(e-s)); /* keep original text */
         return 0; /* no changes */
     } else if (c_unlikely(!cs_is_string(C, -1))) {
         return csL_error(C, "invalid replacement value (a %s)",
@@ -598,18 +601,18 @@ static int reg_gsub(cs_State *C) {
     const char *p = csL_check_lstring(C, 1, &lp); /* pattern */
     const char *lastmatch = NULL; /* end of last match */
     int tr = cs_type(C, 2); /* replacement type */
-    cs_Integer max_s = csL_opt_integer(C, 3, srcl + 1); /* max replacements */
+    cs_Integer max_s = csL_opt_integer(C, 3, (cs_Integer)srcl + 1);
     int anchor = (*p == '^');
     cs_Integer n = 0; /* replacement count */
     int changed = 0; /* change flag */
     MatchState ms;
     csL_Buffer b;
     csL_expect_arg(C, tr == CS_T_STRING || tr == CS_T_FUNCTION ||
-                      tr == CS_T_TABLE, 2, "string/function/table");
+                      tr == CS_T_TABLE ||  tr == CS_T_INSTANCE ||
+                      tr == CS_T_LIST, 2, "string/function/table/instance/list");
     csL_buff_init(C, &b);
-    if (anchor) {
-        p++; lp--; /* skip anchor character */
-    }
+    if (anchor)
+        p++, lp--; /* skip anchor character */
     prep_state(&ms, C, src, srcl, p, lp);
     while (n < max_s) {
         const char *e;
@@ -626,7 +629,7 @@ static int reg_gsub(cs_State *C) {
     if (!changed) /* no changes? */
         cs_push(C, 0); /* return original string */
     else { /* something changed */
-        csL_buff_push_lstring(&b, src, ms.src_end-src);
+        csL_buff_push_lstring(&b, src, cast_sizet(ms.src_end-src));
         csL_buff_end(&b); /* create and return new string */
     }
     cs_push_integer(C, n); /* number of substitutions */

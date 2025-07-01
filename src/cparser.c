@@ -234,22 +234,6 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
 }
 
 
-static int optional(Lexer *lx, int tk) {
-    if (check(lx, tk)) {
-        csY_scan(lx); /* skip optional token */
-        return 1; /* true; have optional token */
-    }
-    return 0; /* false; no optional token */
-}
-
-
-#define endoptional(lx,tk,opt)  { if (opt) expectnext(lx, tk); }
-
-
-#define endoptional_match(lx,opt,what,who,ln) { \
-      if (opt) expectmatch(lx, what, who, ln); }
-
-
 static const char *errstmname(Lexer *lx, const char *err) {
     const char *stm;
     switch (lx->fs->lastisend) {
@@ -1228,8 +1212,9 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             return;
         }
         case TK_FN: {
-            csY_scan(lx); /* skip 'fn' */
-            funcbody(lx, e, 0, lx->line);
+            int linenum = lx->line;
+            csY_scan(lx);
+            funcbody(lx, e, 0, linenum);
             return;
         }
         case TK_CLASS: {
@@ -1604,16 +1589,17 @@ static void paramlist(Lexer *lx) {
 
 
 /* emit closure instruction */
-static void codeclosure(Lexer *lx, ExpInfo *e) {
+static void codeclosure(Lexer *lx, ExpInfo *e, int line) {
     FunctionState *fs = lx->fs->prev;
     initexp(e, EXP_FINEXPR, csC_emitIL(fs, OP_CLOSURE, fs->np - 1));
+    csC_fixline(fs, line);
     csC_reserveslots(fs, 1); /* space for closure */
 }
 
 
 static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
-    FunctionState newfs;
     Scope scope;
+    FunctionState newfs;
     newfs.p = addproto(lx);
     newfs.p->defline = line;
     open_func(lx, &newfs, &scope);
@@ -1626,12 +1612,16 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int line) {
     }
     paramlist(lx); /* get function parameters */
     expectmatch(lx, ')', '(', line);
-    line = lx->line; /* line where '{' is located */
-    expectnext(lx, '{');
-    decl_list(lx, '}'); /* function body */
-    newfs.p->deflastline = lx->line;
-    expectmatch(lx, '}', '{', line);
-    codeclosure(lx, v);
+    if (match(lx, '{')) {
+        int curlyline = lx->line;
+        decl_list(lx, '}');
+        newfs.p->deflastline = lx->line;
+        expectmatch(lx, '}', '{', curlyline);
+    } else {
+        stm(lx);
+        newfs.p->deflastline = lx->line;
+    }
+    codeclosure(lx, v, line);
     cs_assert(ismethod == (newfs.cs != NULL && (newfs.cs == newfs.prev->cs)));
     newfs.cs = NULL; /* clear ClassState (if any) */
     close_func(lx);
@@ -1962,9 +1952,7 @@ static void switchstm(Lexer *lx) {
     storecontext(fs, &ctxbefore);
     fs->switchscope = &s; /* set the current 'switch' scope */
     csY_scan(lx); /* skip 'switch' */
-    expectnext(lx, '(');
     expr(lx, &e); /* get the 'switch' expression... */
-    expectnext(lx, ')');
     if ((ss.isconst = codeconstexp(fs, &e))) /* constant expression? */
         csC_const2v(fs, &e, &ss.v); /* get its value */
     line = lx->line;
@@ -2056,13 +2044,10 @@ static void ifstm(Lexer *lx) {
         .opT = OP_TESTPOP, .opJ = OP_JMP,
         .pcCond = currPC, .pcClause = NOJMP,
     };
-    int opt;
     storecontext(fs, &cb.ctxbefore);
     csY_scan(lx); /* skip 'if' */
-    opt = optional(lx, '(');
     cb.condline = lx->line;
     expr(lx, &cb.e);
-    endoptional(lx, ')', opt);
     codeconstexp(fs, &cb.e);
     condbody(lx, &cb);
 }
@@ -2090,16 +2075,12 @@ static void whilestm(Lexer *lx) {
         .opT = OP_TESTPOP, .opJ = OP_JMPS,
         .pcCond = currPC, .pcClause = NOJMP,
     };
-    int line, opt;
     csY_scan(lx); /* skip 'while' */
     enterloop(fs, &ls, 0);
     storecontext(fs, &cb.ctxbefore);
-    line = lx->line;
-    opt = optional(lx, '(');
     cb.condline = lx->line;
     expr(lx, &cb.e);
     codeconstexp(fs, &cb.e);
-    endoptional_match(lx, opt, ')', '(', line);
     condbody(lx, &cb);
     leaveloop(fs);
 }
@@ -2213,7 +2194,7 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
     cs_assert(*pcClause == NOJMP);
     if (inf) /* infinite loop? */
         loadcontext(fs, ctxbefore); /* remove condition */
-    if (check(lx, ')')) /* no end clause? */
+    if (check(lx, ')') || check(lx, ';')) /* no end clause? */
         return; /* done (converted to a 'while' or 'loop') */
     else {
         bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
@@ -2243,7 +2224,7 @@ static void forstm(Lexer *lx) {
     csY_scan(lx); /* skip 'for' */
     enterscope(fs, &s, 0); /* enter initializer scope */
     line = lx->line;
-    opt = optional(lx, '(');
+    opt = match(lx, '(');
     /* 1st clause (initializer) */
     forinitializer(lx); 
     enterloop(fs, &ls, 0); /* enter loop scope */
@@ -2253,7 +2234,10 @@ static void forstm(Lexer *lx) {
     cb.condline = forcondition(lx, &cb.e);
     /* 3rd clause */
     forlastclause(lx, &cb.ctxbefore, &cb.e, cb.condline, &cb.pcClause);
-    endoptional_match(lx, opt, ')', '(', line);
+    if (opt) /* have optional ')' ? */
+        expectmatch(lx, ')', '(', line);
+    else /* otherwise must terminate last clause with ';' */
+        expectnext(lx, ';');
     condbody(lx, &cb); /* forbody */
     leaveloop(fs); /* leave loop scope */
     leavescope(fs); /* leave initializer scope */

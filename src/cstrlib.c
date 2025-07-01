@@ -800,20 +800,26 @@ static int s_replace(cs_State *C) {
 }
 
 
+// TODO: update docs
 static int s_substr(cs_State *C) {
     size_t l, posi, posj;
     const char *s = csL_check_lstring(C, 0, &l);
     cs_Integer i = csL_opt_integer(C, 1, 0);
     cs_Integer j = csL_opt_integer(C, 2, -1);
-    if (-(cs_Integer)l <= j) {
-        posi = posrelStart(i, l);
+    if (cs_to_bool(C, 3)) { /* positions must be absolute? */
+        if (!(i < 0 || j < 0 || j < i))
+            posi = i, posj = j;
+        else /* otherwise force to push empty string */
+            posi = 1, posj = 0;
+    } else if (-(cs_Integer)l <= j) {
+        posi = posrelStart(i, l),
         posj = posrelEnd(j, l);
-        if (posi <= posj) {
-            cs_push_lstring(C, s + posi, (posj-posi)+1);
-            return 1;
-        }
-        /* else fall through */
+    } else goto pushempty;
+    if (posi <= posj) {
+        cs_push_lstring(C, s + posi, (posj-posi)+1);
+        return 1;
     }
+pushempty:
     cs_push_literal(C, "");
     return 1;
 }

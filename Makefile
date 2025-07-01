@@ -170,3 +170,126 @@ ccode.o:
 	$(CC) $(CFLAGS) $(CMCFLAGS) -c ccode.c
 
 # DO NOT DELETE
+capi.o: src/capi.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/clist.h \
+ src/cdebug.h src/cstate.h src/cfunction.h src/ccode.h src/cbits.h \
+ src/cparser.h src/clexer.h src/creader.h src/cmem.h src/cgc.h \
+ src/cmeta.h src/cprotected.h src/ctable.h src/cstring.h src/cvm.h \
+ src/capi.h
+cbaselib.o: src/cbaselib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+ccode.o: src/ccode.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/ccode.h \
+ src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
+ src/ctable.h src/cdebug.h src/cstate.h src/clist.h src/cvm.h src/cgc.h
+cdblib.o: src/cdblib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cdebug.o: src/cdebug.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cdebug.h \
+ src/cstate.h src/clist.h src/capi.h src/ccode.h src/cbits.h \
+ src/cparser.h src/clexer.h src/creader.h src/cmem.h src/cfunction.h \
+ src/cstring.h src/cprotected.h src/cmeta.h src/cvm.h src/cgc.h \
+ src/ctable.h
+cfunction.o: src/cfunction.c src/cscriptprefix.h src/ctrace.h \
+ src/cobject.h src/cscript.h src/cscriptconf.h src/cscriptlimits.h \
+ src/cfunction.h src/ccode.h src/cbits.h src/cparser.h src/clexer.h \
+ src/creader.h src/cmem.h src/cstate.h src/clist.h src/cdebug.h src/cgc.h \
+ src/cmeta.h src/cvm.h src/cprotected.h
+cgc.o: src/cgc.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cgc.h \
+ src/cbits.h src/cstate.h src/clist.h src/cfunction.h src/ccode.h \
+ src/cparser.h src/clexer.h src/creader.h src/cmem.h src/cmeta.h \
+ src/ctable.h src/cstring.h src/cvm.h src/cprotected.h
+ciolib.o: src/ciolib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+clexer.o: src/clexer.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/ctypes.h \
+ src/cgc.h src/cbits.h src/cstate.h src/clist.h src/clexer.h \
+ src/creader.h src/cmem.h src/cdebug.h src/cprotected.h src/ctable.h \
+ src/cstring.h
+clist.o: src/clist.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/clist.h \
+ src/cstring.h src/cstate.h src/clexer.h src/creader.h src/cmem.h \
+ src/cgc.h src/cbits.h src/cmeta.h src/cdebug.h
+cloadlib.o: src/cloadlib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+clstlib.o: src/clstlib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cmathlib.o: src/cmathlib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cmem.o: src/cmem.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cgc.h \
+ src/cbits.h src/cstate.h src/clist.h src/cdebug.h src/cmem.h \
+ src/cprotected.h src/creader.h
+cmeta.o: src/cmeta.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cmeta.h \
+ src/clist.h src/clexer.h src/creader.h src/cmem.h src/cstring.h \
+ src/cstate.h src/cdebug.h src/ctable.h src/cbits.h src/cgc.h src/cvm.h \
+ src/cprotected.h
+cobject.o: src/cobject.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cvm.h \
+ src/cstate.h src/clist.h
+coslib.o: src/coslib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cparser.o: src/cparser.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/ccode.h \
+ src/cbits.h src/cparser.h src/clexer.h src/creader.h src/cmem.h \
+ src/cfunction.h src/cstate.h src/clist.h src/cgc.h src/cstring.h \
+ src/ctable.h src/cvm.h
+cprotected.o: src/cprotected.c src/cscriptprefix.h src/ctrace.h \
+ src/cobject.h src/cscript.h src/cscriptconf.h src/cscriptlimits.h \
+ src/cprotected.h src/creader.h src/cmem.h src/cparser.h src/clexer.h \
+ src/cfunction.h src/ccode.h src/cbits.h src/cstate.h src/clist.h \
+ src/cstring.h src/cgc.h
+creader.o: src/creader.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/creader.h \
+ src/cmem.h
+creglib.o: src/creglib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cstrlib.h \
+ src/cscriptaux.h src/cscriptlib.h
+cscriptaux.o: src/cscriptaux.c src/cscriptprefix.h src/ctrace.h \
+ src/cobject.h src/cscript.h src/cscriptconf.h src/cscriptlimits.h \
+ src/cscriptaux.h
+cscript.o: src/cscript.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cscriptlib.o: src/cscriptlib.c src/cscriptprefix.h src/ctrace.h \
+ src/cobject.h src/cscript.h src/cscriptconf.h src/cscriptlimits.h \
+ src/cscriptlib.h src/cscriptaux.h
+cstate.o: src/cstate.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/ctable.h \
+ src/cbits.h src/clist.h src/cstate.h src/capi.h src/cdebug.h \
+ src/cfunction.h src/ccode.h src/cparser.h src/clexer.h src/creader.h \
+ src/cmem.h src/cgc.h src/cmeta.h src/cprotected.h src/cstring.h
+cstring.o: src/cstring.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cstate.h \
+ src/clist.h src/cstring.h src/clexer.h src/creader.h src/cmem.h \
+ src/cgc.h src/cbits.h src/ctypes.h src/cdebug.h src/cvm.h \
+ src/cprotected.h
+cstrlib.o: src/cstrlib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cstrlib.h \
+ src/cscriptaux.h src/cscriptlib.h
+ctable.o: src/ctable.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cstring.h \
+ src/cstate.h src/clist.h src/clexer.h src/creader.h src/cmem.h \
+ src/ctable.h src/cbits.h src/cgc.h src/cdebug.h
+ctrace.o: src/ctrace.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cmeta.h \
+ src/ccode.h src/cbits.h src/cparser.h src/clexer.h src/creader.h \
+ src/cmem.h src/cdebug.h src/cstate.h src/clist.h src/cstring.h
+cutf8lib.o: src/cutf8lib.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/cscriptaux.h \
+ src/cscriptlib.h
+cvm.o: src/cvm.c src/cscriptprefix.h src/ctrace.h src/cobject.h \
+ src/cscript.h src/cscriptconf.h src/cscriptlimits.h src/capi.h \
+ src/cstate.h src/clist.h src/cfunction.h src/ccode.h src/cbits.h \
+ src/cparser.h src/clexer.h src/creader.h src/cmem.h src/cgc.h \
+ src/ctable.h src/cdebug.h src/cvm.h src/cmeta.h src/cstring.h \
+ src/cprotected.h src/cjmptable.h

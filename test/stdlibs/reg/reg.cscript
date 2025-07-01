@@ -7,7 +7,7 @@ local fn checkerror(msg, f, ...) {
 
 local fn f(s, p) {
     local i,e = reg.find(s, p);
-    if i return string.substr(s, i, e);
+    if i return string.substr(s, i, e, 1);
 }
 
 assert(f("aloALO", "%l*") == "alo");
@@ -16,262 +16,253 @@ assert(f("aLo_ALO", "%a*") == "aLo");
 assert(f("  \n\r*&\n\r   xuxu  \n\n", "%g%g%g+") == "xuxu");
 
 
-////// Adapt a pattern to UTF-8
-///local fn PU (p)
-///  /// distribute '?' into each individual byte of a character.
-///  /// (For instance, "á?" becomes "\195?\161?".)
-///  p = reg.gsub(p, "(" .. utf8.charpattern .. ")%?", fn (c)
-///    return reg.gsub(c, ".", "%0?")
-///  end)
-///  /// change '.' to utf-8 character patterns
-///  p = reg.gsub(p, "%.", utf8.charpattern)
-///  return p
-///end
-///
-///
-///assert(f("aaab", "a*") == "aaa");
-///assert(f("aaa", "^.*$") == "aaa");
-///assert(f("aaa", "b*") == "");
-///assert(f("aaa", "ab*a") == "aa")
-///assert(f("aba", "ab*a") == "aba")
-///assert(f("aaab", "a+") == "aaa")
-///assert(f("aaa", "^.+$") == "aaa")
-///assert(!f("aaa", "b+"))
-///assert(!f("aaa", "ab+a"))
-///assert(f("aba", "ab+a") == "aba")
-///assert(f("a$a", ".$") == "a")
-///assert(f("a$a", ".%$") == "a$")
-///assert(f("a$a", ".$.") == "a$a")
-///assert(!f("a$a", "$$"))
-///assert(!f("a$b", "a$"))
-///assert(f("a$a", "$") == "")
-///assert(f("", "b*") == "")
-///assert(!f("aaa", "bb*"))
-///assert(f("aaab", "a-") == "")
-///assert(f("aaa", "^.-$") == "aaa")
-///assert(f("aabaaabaaabaaaba", "b.*b") == "baaabaaabaaab")
-///assert(f("aabaaabaaabaaaba", "b.-b") == "baaab")
-///assert(f("alo xo", ".o$") == "xo")
-///assert(f(" \n isto é assim", "%S%S*") == "isto")
-///assert(f(" \n isto é assim", "%S*$") == "assim")
-///assert(f(" \n isto é assim", "[a-z]*$") == "assim")
-///assert(f("um caracter ? extra", "[^%sa-z]") == "?")
-///assert(f("", "a?") == "")
-///assert(f("á", PU"á?") == "á")
-///assert(f("ábl", PU"á?b?l?") == "ábl")
-///assert(f("  ábl", PU"á?b?l?") == "")
-///assert(f("aa", "^aa?a?a") == "aa")
-///assert(f("]]]áb", "[^]]+") == "áb")
-///assert(f("0alo alo", "%x*") == "0a")
-///assert(f("alo alo", "%C+") == "alo alo")
-///print("+")
-///
-///
-///local fn f1 (s, p)
-///  p = reg.gsub(p, "%%([0-9])", fn (s)
-///        return "%" .. (tonumber(s)+1)
-///       end)
-///  p = reg.gsub(p, "^(^?)", "%1()", 1)
-///  p = reg.gsub(p, "($?)$", "()%1", 1)
-///  local t = {reg.match(s, p)}
-///  return string.substr(s, t[1], t[#t] - 1)
-///end
-///
-///assert(f1("alo alx 123 b\0o b\0o", "(..*) %1") == "b\0o b\0o")
-///assert(f1("axz123= 4= 4 34", "(.+)=(.*)=%2 %1") == "3= 4= 4 3")
-///assert(f1("=======", "^(=*)=%1$") == "=======")
-///assert(!reg.match("==========", "^([=]*)=%1$"))
-///
-///local fn range (i, j)
-///  if i <= j then
-///    return i, range(i+1, j)
-///  end
-///end
-///
-///local abc = string.char(range(0, 127)) .. string.char(range(128, 255));
-///
-///assert(string.len(abc) == 256)
-///
-///local fn strset (p)
-///  local res = {s=""}
-///  reg.gsub(abc, p, fn (c) res.s = res.s .. c end)
-///  return res.s
-///end;
-///
-///assert(string.len(strset("[\200-\210]")) == 11)
-///
-///assert(strset("[a-z]") == "abcdefghijklmnopqrstuvwxyz")
-///assert(strset("[a-z%d]") == strset("[%da-uu-z]"))
-///assert(strset("[a-]") == "-a")
-///assert(strset("[^%W]") == strset("[%w]"))
-///assert(strset("[]%%]") == "%]")
-///assert(strset("[a%-z]") == "-az")
-///assert(strset("[%^%[%-a%]%-b]") == "-[]^ab")
-///assert(strset("%Z") == strset("[\1-\255]"))
-///assert(strset(".") == strset("[\1-\255%z]"))
-///print("+");
-///
-///assert(reg.match("alo xyzK", "(%w+)K") == "xyz")
-///assert(reg.match("254 K", "(%d*)K") == "")
-///assert(reg.match("alo ", "(%w*)$") == "")
-///assert(!reg.match("alo ", "(%w+)$"))
-///assert(reg.find("(álo)", "%(á") == 1)
-///local a, b, c, d, e = reg.match("âlo alo", PU"^(((.).). (%w*))$")
-///assert(a == "âlo alo" and b == "âl" and c == "â" and d == "alo" and e == nil)
-///a, b, c, d  = reg.match("0123456789", "(.+(.?)())")
-///assert(a == "0123456789" and b == "" and c == 11 and d == nil)
-///print("+")
-///
-///assert(reg.gsub("ülo ülo", "ü", "x") == "xlo xlo")
-///assert(reg.gsub("alo úlo  ", " +$", "") == "alo úlo")  /// trim
-///assert(reg.gsub("  alo alo  ", "^%s*(.-)%s*$", "%1") == "alo alo")  /// double trim
-///assert(reg.gsub("alo  alo  \n 123\n ", "%s+", " ") == "alo alo 123 ")
-///local t = "abç d"
-///a, b = reg.gsub(t, PU"(.)", "%1@")
-///assert(a == "a@b@ç@ @d@" and b == 5)
-///a, b = reg.gsub("abçd", PU"(.)", "%0@", 2)
-///assert(a == "a@b@çd" and b == 2)
-///assert(reg.gsub("alo alo", "()[al]", "%1") == "12o 56o")
-///assert(reg.gsub("abc=xyz", "(%w*)(%p)(%w+)", "%3%2%1-%0") ==
-///              "xyz=abc-abc=xyz")
-///assert(reg.gsub("abc", "%w", "%1%0") == "aabbcc")
-///assert(reg.gsub("abc", "%w+", "%0%1") == "abcabc")
-///assert(reg.gsub("áéí", "$", "\0óú") == "áéí\0óú")
-///assert(reg.gsub("", "^", "r") == "r")
-///assert(reg.gsub("", "$", "r") == "r")
-///print("+")
-///
-///
-///do   /// new (5.3.3) semantics for empty matches
-///  assert(reg.gsub("a b cd", " *", "-") == "-a-b-c-d-")
-///
-///  local res = ""
-///  local sub = "a  \nbc\t\td"
-///  local i = 1
-///  for p, e in string.gmatch(sub, "()%s*()") do
-///    res = res .. string.substr(sub, i, p - 1) .. "-"
-///    i = e
-///  end
-///  assert(res == "-a-b-c-d-")
-///end
-///
-///
-///assert(reg.gsub("um (dois) tres (quatro)", "(%(%w+%))", string.upper) ==
-///            "um (DOIS) tres (QUATRO)")
-///
-///do
-///  local fn setglobal (n,v) rawset(_G, n, v) end
-///  reg.gsub("a=roberto,roberto=a", "(%w+)=(%w%w*)", setglobal)
-///  assert(_G.a=="roberto" and _G.roberto=="a")
-///  _G.a = nil; _G.roberto = nil
-///end
-///
-///fn f(a,b) return reg.gsub(a,".",b) end
-///assert(reg.gsub("trocar tudo em |teste|b| é |beleza|al|", "|([^|]*)|([^|]*)|", f) ==
-///            "trocar tudo em bbbbb é alalalalalal")
-///
-///local fn dostring (s) return load(s, "")() or "" end
-///assert(reg.gsub("alo $a="x"$ novamente $return a$",
-///                   "$([^$]*)%$",
-///                   dostring) == "alo  novamente x")
-///
-///local x = reg.gsub("$x=reg.gsub("alo", ".", string.upper)$ assim vai para $return x$",
-///         "$([^$]*)%$", dostring)
-///assert(x == " assim vai para ALO")
-///_G.a, _G.x = nil
-///
-///local t = {}
-///local s = "a alo jose  joao"
-///local r = reg.gsub(s, "()(%w+)()", fn (a,w,b)
-///             assert(string.len(w) == b-a);
-///             t[a] = b-a;
-///           end)
-///assert(s == r and t[1] == 1 and t[3] == 3 and t[7] == 4 and t[13] == 4)
-///
-///
-///local fn isbalanced (s)
-///  return !reg.find(reg.gsub(s, "%b()", ""), "[()]")
-///end
-///
-///assert(isbalanced("(9 ((8))(\0) 7) \0\0 a b ()(c)() a"))
-///assert(!isbalanced("(9 ((8) 7) a b (\0 c) a"))
-///assert(reg.gsub("alo "oi" alo", "%b""", """) == "alo " alo")
-///
-///
-///local t = {"apple", "orange", "lime"; n=0}
-///assert(reg.gsub("x and x and x", "x", fn () t.n=t.n+1; return t[t.n] end)
-///        == "apple and orange and lime")
-///
-///t = {n=0}
-///reg.gsub("first second word", "%w%w*", fn (w) t.n=t.n+1; t[t.n] = w end)
-///assert(t[1] == "first" and t[2] == "second" and t[3] == "word" and t.n == 3)
-///
-///t = {n=0}
-///assert(reg.gsub("first second word", "%w+",
-///         fn (w) t.n=t.n+1; t[t.n] = w end, 2) == "first second word")
-///assert(t[1] == "first" and t[2] == "second" and t[3] == undef)
-///
-///checkerror("invalid replacement value %(a table%)",
-///            reg.gsub, "alo", ".", {a = {}})
-///checkerror("invalid capture index %%2", reg.gsub, "alo", ".", "%2")
-///checkerror("invalid capture index %%0", reg.gsub, "alo", "(%0)", "a")
-///checkerror("invalid capture index %%1", reg.gsub, "alo", "(%1)", "a")
-///checkerror("invalid use of "%%"", reg.gsub, "alo", ".", "%x")
-///
-///
-///if !_soft then
-///  print("big strings")
-///  local a = string.rep("a", 300000)
-///  assert(reg.find(a, "^a*.?$"))
-///  assert(!reg.find(a, "^a*.?b$"))
-///  assert(reg.find(a, "^a-.?$"))
-///
-///  /// bug in 5.1.2
-///  a = string.rep("a", 10000) .. string.rep("b", 10000)
-///  assert(!pcall(reg.gsub, a, "b"))
-///end
-///
-////// recursive nest of gsubs
-///local fn rev (s)
-///  return reg.gsub(s, "(.)(.+)", fn (c,s1) return rev(s1)..c end)
-///end
-///
-///local x = "abcdef"
-///assert(rev(rev(x)) == x)
-///
-///
-////// gsub with tables
-///assert(reg.gsub("alo alo", ".", {}) == "alo alo")
-///assert(reg.gsub("alo alo", "(.)", {a="AA", l=""}) == "AAo AAo")
-///assert(reg.gsub("alo alo", "(.).", {a="AA", l="K"}) == "AAo AAo")
-///assert(reg.gsub("alo alo", "((.)(.?))", {al="AA", o=false}) == "AAo AAo")
-///
-///assert(reg.gsub("alo alo", "().", {"x","yy","zzz"}) == "xyyzzz alo")
-///
-///t = {}; setmetatable(t, {__index = fn (t,s) return string.upper(s) end})
-///assert(reg.gsub("a alo b hi", "%w%w+", t) == "a ALO b HI")
-///
-///
-////// tests for gmatch
-///local a = 0
-///for i in string.gmatch("abcde", "()") do assert(i == a+1); a=i end
-///assert(a==6)
-///
-///t = {n=0}
-///for w in string.gmatch("first second word", "%w+") do
-///      t.n=t.n+1; t[t.n] = w
-///end
-///assert(t[1] == "first" and t[2] == "second" and t[3] == "word")
-///
-///t = {3, 6, 9}
-///for i in string.gmatch ("xuxx uu ppar r", "()(.)%2") do
-///  assert(i == table.remove(t, 1))
-///end
-///assert(#t == 0)
-///
-///t = {}
-///for i,j in string.gmatch("13 14 10 = 11, 15= 16, 22=23", "(%d+)%s*=%s*(%d+)") do
-///  t[tonumber(i)] = tonumber(j)
+/// Adapt a pattern to UTF-8
+local fn PU(p) {
+    /// distribute '?' into each individual byte of a character.
+    /// (For instance, "á?" becomes "\195?\161?".)
+    p = reg.gsub(p, "(" .. utf8.charpattern .. ")%?", fn(c) {
+        return reg.gsub(c, ".", "%0?");
+    });
+    /// change '.' to utf-8 character patterns
+    p = reg.gsub(p, "%.", utf8.charpattern);
+    return p;
+}
+
+
+assert(f("aaab", "a*") == "aaa");
+assert(f("aaa", "^.*$") == "aaa");
+assert(f("aaa", "b*") == "");
+assert(f("aaa", "ab*a") == "aa");
+assert(f("aba", "ab*a") == "aba");
+assert(f("aaab", "a+") == "aaa");
+assert(f("aaa", "^.+$") == "aaa");
+assert(!f("aaa", "b+"));
+assert(!f("aaa", "ab+a"));
+assert(f("aba", "ab+a") == "aba");
+assert(f("a$a", ".$") == "a");
+assert(f("a$a", ".%$") == "a$");
+assert(f("a$a", ".$.") == "a$a");
+assert(!f("a$a", "$$"));
+assert(!f("a$b", "a$"));
+assert(f("a$a", "$") == "");
+assert(f("", "b*") == "");
+assert(!f("aaa", "bb*"));
+assert(f("aaab", "a-") == "");
+assert(f("aaa", "^.-$") == "aaa");
+assert(f("aabaaabaaabaaaba", "b.*b") == "baaabaaabaaab");
+assert(f("aabaaabaaabaaaba", "b.-b") == "baaab");
+assert(f("alo xo", ".o$") == "xo");
+assert(f(" \n isto é assim", "%S%S*") == "isto");
+assert(f(" \n isto é assim", "%S*$") == "assim");
+assert(f(" \n isto é assim", "[a-z]*$") == "assim");
+assert(f("um caracter ? extra", "[^%sa-z]") == "?");
+assert(f("", "a?") == "");
+assert(f("á", PU("á?")) == "á");
+assert(f("ábl", PU("á?b?l?")) == "ábl");
+assert(f("  ábl", PU("á?b?l?")) == "");
+assert(f("aa", "^aa?a?a") == "aa");
+assert(f("]]]áb", "[^]]+") == "áb");
+assert(f("0alo alo", "%x*") == "0a");
+assert(f("alo alo", "%C+") == "alo alo");
+
+
+local fn f1(s, p) {
+    p = reg.gsub(p, "%%([0-9])", fn(s) {
+        return "%" .. tostr(tonum(s)+1);
+    });
+    p = reg.gsub(p, "^(^?)", "%1()", 1);
+    p = reg.gsub(p, "($?)$", "()%1", 1);
+    local l = [reg.match(s, p)];
+    return string.substr(s, l[0], l.last - 1);
+}
+
+assert(f1("alo alx 123 b\0o b\0o", "(..*) %1") == "b\0o b\0o");
+assert(f1("axz123= 4= 4 34", "(.+)=(.*)=%2 %1") == "3= 4= 4 3");
+assert(f1("=======", "^(=*)=%1$") == "=======");
+assert(!reg.match("==========", "^([=]*)=%1$"));
+
+local fn range(i, j) {
+    if i <= j
+        return i, range(i+1, j);
+}
+
+local abc = string.char(range(0, 127)) .. string.char(range(128, 255));
+
+assert(len(abc) == 256);
+
+local fn strset(p) {
+    local res = {s=""};
+    reg.gsub(abc, p, fn(c) { res.s = res.s .. c; });
+    return res.s;
+}
+
+assert(len(strset("[\200-\210]")) == 11);
+
+assert(strset("[a-z]") == "abcdefghijklmnopqrstuvwxyz");
+assert(strset("[a-z%d]") == strset("[%da-uu-z]"));
+assert(strset("[a-]") == "-a");
+assert(strset("[^%W]") == strset("[%w]"));
+assert(strset("[]%%]") == "%]");
+assert(strset("[a%-z]") == "-az");
+assert(strset("[%^%[%-a%]%-b]") == "-[]^ab");
+assert(strset(".") == strset("[\0-\255]"));
+
+assert(reg.match("alo xyzK", "(%w+)K") == "xyz");
+assert(reg.match("254 K", "(%d*)K") == "");
+assert(reg.match("alo ", "(%w*)$") == "");
+assert(!reg.match("alo ", "(%w+)$"));
+assert(reg.find("(álo)", "%(á") == 0);
+local a, b, c, d, e = reg.match("âlo alo", PU("^(((.).). (%w*))$"));
+assert(a == "âlo alo" and b == "âl" and c == "â" and d == "alo" and e == nil);
+a, b, c, d  = reg.match("0123456789", "(.+(.?)())");
+assert(a == "0123456789" and b == "" and c == 10 and d == nil);
+
+assert(reg.gsub("ülo ülo", "ü", "x") == "xlo xlo");
+assert(reg.gsub("alo úlo  ", " +$", "") == "alo úlo"); /// trim
+assert(reg.gsub("  alo alo  ", "^%s*(.-)%s*$", "%1") == "alo alo"); /// double trim
+assert(reg.gsub("alo  alo  \n 123\n ", "%s+", " ") == "alo alo 123 ");
+local t = "abç d";
+a, b = reg.gsub(t, PU("(.)"), "%1@");
+assert(a == "a@b@ç@ @d@" and b == 5);
+a, b = reg.gsub("abçd", PU("(.)"), "%0@", 2);
+assert(a == "a@b@çd" and b == 2);
+assert(reg.gsub("alo alo", "()[al]", "%1") == "01o 45o");
+assert(reg.gsub("abc=xyz", "(%w*)(%p)(%w+)", "%3%2%1-%0") == "xyz=abc-abc=xyz");
+assert(reg.gsub("abc", "%w", "%1%0") == "aabbcc");
+assert(reg.gsub("abc", "%w+", "%0%1") == "abcabc");
+assert(reg.gsub("áéí", "$", "\0óú") == "áéí\0óú");
+assert(reg.gsub("", "^", "r") == "r");
+assert(reg.gsub("", "$", "r") == "r");
+
+
+{
+    assert(reg.gsub("a b cd", " *", "-") == "-a-b-c-d-");
+    local res = "";
+    local sub = "a  \nbc\t\td";
+    local i = 0;
+    foreach p, e in reg.gmatch(sub, "()%s*()") {
+        res = res .. string.substr(sub, i, p-1, 1) .. "-";
+        i = e;
+    }
+    assert(res == "-a-b-c-d-");
+}
+
+
+assert(reg.gsub("one (two) three (four)", "(%(%w+%))", string.toupper) ==
+            "one (TWO) three (FOUR)");
+
+{
+    local fn setglobal(n,v) __G[n] = v;
+    reg.gsub("a=roberto,roberto=a", "(%w+)=(%w%w*)", setglobal);
+    assert(__G.a=="roberto" and __G.roberto=="a");
+    __G.a = nil; __G.roberto = nil;
+}
+
+fn f(a,b) return reg.gsub(a,".",b);
+assert(reg.gsub("trocar tudo em |teste|b| é |beleza|al|", "|([^|]*)|([^|]*)|", f) ==
+            "trocar tudo em bbbbb é alalalalalal");
+
+local fn dostring(s) return load(s, "")() or "";
+assert(reg.gsub("alo $a=\"x\";$ novamente $return a;$",
+                   "$([^$]*)%$",
+                   dostring) == "alo  novamente x");
+
+local x = reg.gsub("$x=reg.gsub(\"alo\", \".\", string.toupper);$ assim vai para $return x;$",
+         "$([^$]*)%$", dostring);
+assert(x == " assim vai para ALO");
+__G.a, __G.x = nil;
+
+local l = [];
+local s = "a alo jose  joao";
+local r = reg.gsub(s, "()(%w+)()", fn(a,w,b) {
+             assert(len(w) == b-a);
+             l[a] = b-a;
+           });
+assert(s == r and l[0] == 1 and l[2] == 3 and l[6] == 4 and l[12] == 4);
+
+
+local fn isbalanced(s)
+    return !reg.find(reg.gsub(s, "%b()", ""), "[()]");
+
+assert(isbalanced("(9 ((8))(\0) 7) \0\0 a b ()(c)() a"));
+assert(!isbalanced("(9 ((8) 7) a b (\0 c) a"));
+assert(reg.gsub("alo \"oi\" alo", "%b\"\"", "\"") == "alo \" alo");
+
+
+t = {[0] = "apple", [1] = "orange", [2] = "lime"; n = -1};
+assert(reg.gsub("x and x and x", "x", fn() { t.n=t.n+1; return t[t.n]; })
+        == "apple and orange and lime");
+
+t = {n = -1};
+reg.gsub("first second word", "%w%w*", fn(w) { t.n=t.n+1; t[t.n] = w; });
+assert(t[0] == "first" and t[1] == "second" and t[2] == "word" and t.n == 2);
+
+t = {n = -1};
+assert(reg.gsub("first second word", "%w+",
+         fn(w) { t.n=t.n+1; t[t.n] = w; }, 2) == "first second word");
+assert(t[0] == "first" and t[1] == "second" and t[2] == undef);
+
+checkerror("invalid replacement value %(a table%)",
+            reg.gsub, "alo", ".", {a = {}});
+checkerror("invalid capture index %%2", reg.gsub, "alo", ".", "%2");
+checkerror("invalid capture index %%0", reg.gsub, "alo", "(%0)", "a");
+checkerror("invalid capture index %%1", reg.gsub, "alo", "(%1)", "a");
+checkerror("invalid use of '%%'", reg.gsub, "alo", ".", "%x");
+
+
+{ /// @heavy
+    print("big strings");
+    local a = string.repeat("a", 300000);
+    assert(reg.find(a, "^a*.?$"));
+    assert(!reg.find(a, "^a*.?b$"));
+    assert(reg.find(a, "^a-.?$"));
+
+    a = string.repeat("a", 10000) .. string.repeat("b", 10000);
+    assert(!pcall(reg.gsub, a, "b"));
+}
+
+/// recursive nest of gsubs
+local fn rev(s) {
+    return reg.gsub(s, "(.)(.+)", fn(c,s1) { return rev(s1)..c; });
+}
+
+x = "abcdef";
+assert(rev(rev(x)) == x);
+
+
+/// gsub with tables
+assert(reg.gsub("alo alo", ".", {}) == "alo alo");
+assert(reg.gsub("alo alo", "(.)", {a="AA", l=""}) == "AAo AAo");
+assert(reg.gsub("alo alo", "(.).", {a="AA", l="K"}) == "AAo AAo");
+assert(reg.gsub("alo alo", "((.)(.?))", {al="AA", o=false}) == "AAo AAo");
+
+assert(reg.gsub("alo alo", "().", {[0]="x",[1]="yy",[2]="zzz"}) == "xyyzzz alo");
+
+t = (class { __getidx = fn(s) { return string.toupper(s); }; })();
+assert(reg.gsub("a alo b hi", "%w%w+", t) == "a ALO b HI");
+
+
+/// tests for gmatch
+a = -1;
+foreach i in reg.gmatch("abcde", "()") {
+    assert(i == a+1); a=i;
+}
+assert(a==5);
+
+t = {n=-1};
+foreach w in reg.gmatch("first second word", "%w+") {
+    t.n=t.n+1; t[t.n] = w;
+}
+assert(t[0] == "first" and t[1] == "second" and t[2] == "word");
+
+t = [2, 5, 8];
+foreach i, s1,s2,s3,s4,s5 in reg.gmatch("xuxx uu ppar r", "()(.)%2")
+    assert(i == list.remove(t, 0));
+assert(list.len(t) == 0);
+
+///t = [];
+///for i,j in reg.gmatch("13 14 10 = 11, 15= 16, 22=23", "(%d+)%s*=%s*(%d+)")
+///  t[tonum(i)] = tonum(j)
 ///end
 ///a = 0
 ///for k,v in pairs(t) do assert(k+1 == v+0); a=a+1 end
@@ -280,27 +271,27 @@ assert(f("  \n\r*&\n\r   xuxu  \n\n", "%g%g%g+") == "xuxu");
 ///
 ///do   /// init parameter in gmatch
 ///  local s = 0
-///  for k in string.gmatch("10 20 30", "%d+", 3) do
-///    s = s + tonumber(k)
+///  for k in reg.gmatch("10 20 30", "%d+", 3) do
+///    s = s + tonum(k)
 ///  end
 ///  assert(s == 50)
 ///
 ///  s = 0
-///  for k in string.gmatch("11 21 31", "%d+", -4) do
-///    s = s + tonumber(k)
+///  for k in reg.gmatch("11 21 31", "%d+", -4) do
+///    s = s + tonum(k)
 ///  end
 ///  assert(s == 32)
 ///
 ///  /// there is an empty string at the end of the subject
 ///  s = 0
-///  for k in string.gmatch("11 21 31", "%w*", 9) do
+///  for k in reg.gmatch("11 21 31", "%w*", 9) do
 ///    s = s + 1
 ///  end
 ///  assert(s == 1)
 ///
 ///  /// there are no empty strings after the end of the subject
 ///  s = 0
-///  for k in string.gmatch("11 21 31", "%w*", 10) do
+///  for k in reg.gmatch("11 21 31", "%w*", 10) do
 ///    s = s + 1
 ///  end
 ///  assert(s == 0)
