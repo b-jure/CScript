@@ -349,9 +349,9 @@ static int get_field(cs_State *C, const char *key, int dfl, int delta) {
 
 
 static const char *check_option(cs_State *C, const char *conv,
-                                ptrdiff_t convlen, char *buff) {
+                                size_t convlen, char *buff) {
     const char *option = CS_STRFTIMEOPTIONS;
-    int oplen = 1; /* length of options being checked */
+    c_uint oplen = 1; /* length of options being checked */
     for (; *option && oplen <= convlen; option += oplen) {
         if (*option == '|')  /* next block? */
             oplen++; /* will check options with next length (+1) */
@@ -408,7 +408,7 @@ static int os_date(cs_State *C) {
                 char *buff = csL_buff_ensure(&b, SIZETIMEFMT);
                 s++; /* skip '%' */
                 /* copy specifier to 'cc' */
-                s = check_option(C, s, send - s, cc + 1);
+                s = check_option(C, s, cast_sizet(send - s), cc + 1);
                 reslen = strftime(buff, SIZETIMEFMT, cc, stm);
                 csL_buffadd(&b, reslen);
             }
