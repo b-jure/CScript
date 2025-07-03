@@ -57,7 +57,7 @@ static cs_Integer posrel(cs_Integer pos, size_t len) {
 ** entry forces an error for non-ascii bytes with no continuation
 ** bytes (count == 0).
 */
-static const char *utf8_decode(const char *s, c_uint32 *val, int strict) {
+static const char *utf8decode(const char *s, c_uint32 *val, int strict) {
     static const c_uint32 limits[] =
     {~(c_uint32)0, 0x80, 0x800, 0x10000u, 0x200000u, 0x4000000u};
     c_uint c = uchar(s[0]);
@@ -92,19 +92,19 @@ static const char *utf8_decode(const char *s, c_uint32 *val, int strict) {
 ** start in the range [i,j], or nil + current position if 's' is not
 ** well formed in that interval.
 */
-static int utf_len(cs_State *C) {
+static int utf8_len(cs_State *C) {
     cs_Integer n = 0; /* counter for the number of characters */
     size_t len; /* string length in bytes */
     const char *s = csL_check_lstring(C, 0, &len);
     cs_Integer posi = posrel(csL_opt_integer(C, 1, 0), len);
     cs_Integer posj = posrel(csL_opt_integer(C, 2, -1), len);
     int lax = cs_to_bool(C, 3);
-    csL_check_arg(C, 0 <= posi && posi < (cs_Integer)len, 1,
+    csL_check_arg(C, 0 <= posi && posi <= (cs_Integer)len, 1,
             "initial position out of bounds");
     csL_check_arg(C, posj < (cs_Integer)len, 2,
             "final position out of bounds");
     while (posi <= posj) {
-        const char *s1 = utf8_decode(s + posi, NULL, !lax);
+        const char *s1 = utf8decode(s + posi, NULL, !lax);
         if (s1 == NULL) { /* conversion error? */
             csL_push_fail(C); /* return fail ... */
             cs_push_integer(C, posi); /* ... and current position */
@@ -119,10 +119,10 @@ static int utf_len(cs_State *C) {
 
 
 /*
-** utf_codepoint(s, [i, [j [, lax]]]) -> returns codepoints for all
+** utf8_codepoint(s, [i, [j [, lax]]]) -> returns codepoints for all
 ** characters that start in the range [i,j]
 */
-static int utf_codepoint(cs_State *C) {
+static int utf8_codepoint(cs_State *C) {
     size_t len;
     const char *s = csL_check_lstring(C, 0, &len);
     cs_Integer posi = posrel(csL_opt_integer(C, 1, 0), len);
@@ -130,19 +130,19 @@ static int utf_codepoint(cs_State *C) {
     int lax = cs_to_bool(C, 3);
     int n;
     const char *se;
-    csL_check_arg(C, 0 <= posi, 1, stroob);
-    csL_check_arg(C, posj < (cs_Integer)len, 2, stroob);
-    if (posj < posi) return 0; /* empty interval */
+    csL_check_arg(C, 0 <= posi && posi < (cs_Integer)len+!len, 1, stroob);
+    csL_check_arg(C, posj < (cs_Integer)len+!len, 2, stroob);
+    if (posj < posi || len == 0) return 0; /* empty interval or empty string */
     if (c_unlikely(cast_sizet(posj-posi) + 1u <= cast_sizet(posj-posi) ||
-                   posj - posi >= MAXINT)) /* overflow? */
+                   MAXINT <= cast_sizet(posj-posi) + 1u)) /* overflow? */
         return csL_error(C, strtoolong);
-    n = cast_int(posj - posi) + 1; /* upper bound for number of returns */
+    n = cast_int(posj-posi) + 1; /* upper bound for number of returns */
     csL_check_stack(C, n, strtoolong);
     n = 0; /* count the number of returns */
     se = s + posj + 1; /* string end */
     for (s += posi; s < se;) {
         c_uint32 code;
-        s = utf8_decode(s, &code, !lax);
+        s = utf8decode(s, &code, !lax);
         if (s == NULL)
             return csL_error(C, strinvalid);
         cs_push_integer(C, c_castU2S(code));
@@ -160,9 +160,9 @@ static void push_utf8char(cs_State *C, int arg) {
 
 
 /*
-** utf_char(n1, n2, ...)  -> char(n1)..char(n2)...
+** utf8_char(n1, n2, ...)  -> char(n1)..char(n2)...
 */
-static int utf_char(cs_State *C) {
+static int utf8_char(cs_State *C) {
     int n = cs_getntop(C); /* number of arguments */
     if (n == 1) /* optimize common case of single char */
         push_utf8char(C, 0);
@@ -183,13 +183,13 @@ static int utf_char(cs_State *C) {
 ** offset(s, n, [i])  -> indices where n-th character counting from
 ** position 'i' starts and ends; 0 means character at 'i'.
 */
-static int utf_byteoffset(cs_State *C) {
+static int utf8_byteoffset(cs_State *C) {
     size_t len;
     const char *s = csL_check_lstring(C, 0, &len);
     cs_Integer n  = csL_check_integer(C, 1);
-    cs_Integer posi = (0 <= n) ? 0 : (cs_Integer)len;
+    cs_Integer posi = (n >= 0) ? 0 : (cs_Integer)len;
     posi = posrel(csL_opt_integer(C, 2, posi), len);
-    csL_check_arg(C, 0 <= posi && posi < (cs_Integer)len, 2,
+    csL_check_arg(C, 0 <= posi && posi <= (cs_Integer)len, 2,
                      "position out of bounds");
     if (n == 0) { /* special case? */
         /* find beginning of current byte sequence */
@@ -199,22 +199,22 @@ static int utf_byteoffset(cs_State *C) {
             return csL_error(C, "initial position is a continuation byte");
         if (n < 0) { /* find back from 'posi'? */
             while (n < 0 && 0 < posi) { /* move back */
-                do { /* find beginning of previous character */
-                    posi--;
-                } while (posi > 0 && iscontp(s + posi));
+                do {
+                    posi--; /* find beginning of previous character */
+                } while (0 < posi && iscontp(s + posi));
                 n++;
             }
         } else { /* otherwise find forward from 'posi' */
             n--; /* do not move for 1st character */
-            while (n > 0 && posi < (cs_Integer)len) {
-                do { /* find beginning of next character */
-                    posi++;
-                } while (iscontp(s + posi)); /* (cannot pass final '\0') */
+            while (0 < n && posi < (cs_Integer)len) {
+                do {
+                    posi++; /* find beginning of next character */
+                } while (iscontp(s + posi)); /* cannot pass final '\0' */
                 n--;
             }
         }
     }
-    if (n != 0) { /* did not find given character? */
+    if (n != 0) { /* did not find given character */
         csL_push_fail(C);
         return 1;
     } else { /* otherwise push start and final position of utf8 char */
@@ -222,7 +222,7 @@ static int utf_byteoffset(cs_State *C) {
         if ((s[posi] & 0x80) != 0) { /* multi-byte character? */
             do {
                 posi++;
-            } while (iscontp(s + posi)); /* skip to final byte */
+            } while (iscontp(s + posi + 1)); /* skip to final byte */
         }
         /* else one-byte character: final position is the initial one */
         cs_push_integer(C, posi); /* 'posi' now is the final position */
@@ -234,15 +234,15 @@ static int utf_byteoffset(cs_State *C) {
 static int iter_aux(cs_State *C, int strict) {
     size_t len;
     const char *s = csL_check_lstring(C, 0, &len);
-    cs_Unsigned n = (cs_Unsigned)cs_to_integer(C, 1);
+    cs_Unsigned n = c_castS2U(cs_to_integer(C, 1) + 1);
     if (n < len) {
         while (iscontp(s + n)) n++; /* go to next character */
     }
-    if (n >= len) /* (also handles original 'n' being negative) */
+    if (n >= len) /* (also handles original 'n' being less than -1) */
         return 0; /* no more codepoints */
     else {
         c_uint32 code;
-        const char *next = utf8_decode(s + n, &code, strict);
+        const char *next = utf8decode(s + n, &code, strict);
         if (next == NULL || iscontp(next))
             return csL_error(C, strinvalid);
         cs_push_integer(C, c_castU2S(n));
@@ -261,14 +261,14 @@ static int iter_auxlax(cs_State *C) {
 }
 
 
-static int utf_itercodes(cs_State *C) {
+static int utf8_itercodes(cs_State *C) {
     int lax = cs_to_bool(C, 1);
     const char *s = csL_check_string(C, 0);
     csL_check_arg(C, !iscontp(s), 0, strinvalid);
     cs_push_cfunction(C, lax ? iter_auxlax : iter_auxstrict);
     cs_push(C, 0);
-    cs_push_integer(C, 0);
-    return 3; /* return iterator, string and initial position */
+    cs_push_integer(C, -1);
+    return 3;
 }
 
 
@@ -277,11 +277,11 @@ static int utf_itercodes(cs_State *C) {
 
 
 static const cs_Entry funcs[] = {
-    {"offset", utf_byteoffset},
-    {"codepoint", utf_codepoint},
-    {"char", utf_char},
-    {"len", utf_len},
-    {"codes", utf_itercodes},
+    {"offset", utf8_byteoffset},
+    {"codepoint", utf8_codepoint},
+    {"char", utf8_char},
+    {"len", utf8_len},
+    {"codes", utf8_itercodes},
     /* placeholders */
     {"charpattern", NULL},
     {NULL, NULL}

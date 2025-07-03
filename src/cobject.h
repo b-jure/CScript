@@ -366,7 +366,7 @@ typedef union Node {
 
 typedef struct Table {
     ObjectHeader; /* internal only object */
-    c_ubyte size; /* 2^size */
+    c_ubyte size; /* log2 of array size */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
     GCObject *gclist;

@@ -187,7 +187,7 @@ syn match cscriptFunc /\<utf8\.offset\>/
 syn match cscriptFunc /\<utf8\.codepoint\>/
 syn match cscriptFunc /\<utf8\.char\>/
 syn match cscriptFunc /\<utf8\.len\>/
-syn match cscriptFunc /\<utf8\.itercodes\>/
+syn match cscriptFunc /\<utf8\.codes\>/
 syn match cscriptFunc /\<utf8\.charpattern\>/
 "-----------------}}
 
@@ -269,21 +269,17 @@ syn keyword cscriptConstant true false nil inf infinity
 "-----------------}
 
 "-Blocks----------{
-if exists("c_curly_error")
-    syn match cscriptCurlyError /}/
-    syn region cscriptBlock start=/{/ end=/}/ contains=TOP,cscriptCurlyError,cscriptSpecialError,@Spell fold
-else
-    syn region cscriptBlock start=/{/ end=/}/ transparent fold
-endif
+syn region cscriptBlock transparent fold start=/{/ end=/}/ contains=TOP,cscriptCurlyError
+syn match cscriptCurlyError /}/
 "-----------------}
 
 "-Parens---------{
-syn region cscriptParen transparent start=/(/ end=/)/ contains=TOP,cscriptErrorInParen,cscriptLabel,cscriptRepeat,@Spell
+syn region cscriptParen transparent start=/(/ end=/)/ contains=TOP,cscriptErrorInParen
 syn match cscriptErrorInParen /)/
 "---------------}
 
 "-Bracket-------{
-syn region cscriptBracket transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptErrorInBracket,cscriptLabel,cscriptRepeat,@Spell
+syn region cscriptBracket transparent matchgroup=cscriptBracket start="\[" end="]" contains=TOP,cscriptErrorInBracket
 syn match cscriptErrorInBracket /]/
 "---------------}
 
@@ -293,13 +289,13 @@ syn region cscriptLongString start=/\[\z(=\+\)\[/ end=/\]\z1\]/ contains=@Spell
 "-----------------}
 
 "-Foreach---------{
-syn region cscriptForEach transparent matchgroup=cscriptRepeat start=/\<foreach\>\ze\_s\+\%(\h\w*\%(,\_s*\h\w*\)*\)\_s\<in\>/ end=/\h\w*\_s\+\zs\<in\>/me=e-2 contains=TOP,cscriptInError skipwhite skipempty
+syn region cscriptForEach transparent matchgroup=cscriptRepeat start=/\<foreach\>/ end=/\<in\>/ contains=TOP,cscriptInError
 syn keyword cscriptForEach contained containedin=cscriptForEach in
 syn match cscriptInError /\<in\>/
 "-----------------}
 
 "-Classes---------{
-syn region cscriptClassDefinition transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=cscriptClass skipwhite skipempty
+syn region cscriptClassDefinition transparent matchgroup=cscriptStatement start=/\<class\>/ end=/{/me=e-1 contains=cscriptClass
 syn keyword cscriptClass class inherits
 syn keyword cscriptSuper super
 "-----------------}

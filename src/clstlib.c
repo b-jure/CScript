@@ -27,11 +27,6 @@
         (csL_check_type(C, n, CS_T_LIST), auxlen(C,n,p,b))
 
 
-
-/* list Length TO Index */
-#define ltoi(l)         ((l) - ((l) > 0))
-
-
 static int auxlen(cs_State *C, int index, int push, int border) {
     int i;
     switch (border) {
@@ -122,7 +117,7 @@ static int lst_move(cs_State *C) {
     if (e >= f) { /* otherwise, nothing to move */
         int n;
         csL_check_arg(C, bcheck(d), 3, "destination index out of bounds");
-        n = (int)e - (int)f + 1; /* number of elements to move */
+        n = cast_int(e) - cast_int(f) + 1; /* number of elements to move */
         if (d > e || d <= f || (dl != 0 && !cs_compare(C, 0, dl, CS_ORD_EQ))) {
             for (int i = 0; i < n; i++) { /* lists are not overlapping */
                 cs_get_index(C, 0, f + i);
@@ -150,19 +145,17 @@ static int lst_new(cs_State *C) {
 
 static int lst_flatten(cs_State *C) {
     cs_Unsigned n;
-    cs_Integer e, i, last;
-    last = ltoi(checklist(C, 0, 0, 0));
-    i = csL_opt_integer(C, 1, 0);
-    e = csL_opt(C, csL_check_integer, 2, last);
+    cs_Integer l = checklist(C, 0, 0, 0);
+    cs_Integer i = csL_opt_integer(C, 1, 0);
+    cs_Integer e = csL_opt(C, csL_check_integer, 2, l-(l>0));
     check_bounds(C, 1, i, 2, e);
-    e = (e > last) ? last : e; /* flatten up to last index */
-    if (i > e) return 0; /* empty range */
+    e = (e >= l) ? l-1 : e; /* clamp */
+    if (e < i) return 0; /* empty range or empty list */
     n = c_castS2U(e) - c_castS2U(i); /* number of elements minus 1 */
-    cs_assert(n < cast_uint(MAXINT)); /* bounds are already checked */
-    if (c_unlikely(!cs_checkstack(C, (int)(++n))))
+    if (c_unlikely(!cs_checkstack(C, cast_int(++n))))
         return csL_error(C, "too many results");
-    for (; i < e; i++) /* push l[i..e - 1] (to avoid overflows in 'i') */
-        cs_get_index(C, 0, i);
+    while (i < e) /* push l[i..e - 1] (to avoid overflows in 'i') */
+        cs_get_index(C, 0, i++);
     cs_get_index(C, 0, e); /* push last element */
     return n;
 }
@@ -194,10 +187,10 @@ static int lst_concat(cs_State *C) {
     cs_Integer l = checklist(C, 0, 0, 0);
     const char *sep = csL_opt_lstring(C, 1, "", &lsep);
     cs_Integer i = csL_opt_integer(C, 2, 0);
-    cs_Integer e = csL_opt_integer(C, 3, ltoi(l));
+    cs_Integer e = csL_opt_integer(C, 3, l - (l>0));
     int skipnil = csL_opt_bool(C, 4, 1);
     check_bounds(C, 2, i, 3, e);
-    if (e >= i) { /* otherwise, nothing to concat */
+    if (i <= e && l > 0) { /* non-empty range and list has elements? */
         csL_buff_init(C, &b);
         next = getnexti(C, (i - !skipnil), e, skipnil);
         while (next >= 0 && next < e) { /* l[next .. (next < e)] */
@@ -209,6 +202,7 @@ static int lst_concat(cs_State *C) {
             addvalue(C, &b, cast_int(e)); /* add last value */
         csL_buff_end(&b);
     }
+    /* else: nothing to concatenate */
     return 1;
 }
 
@@ -396,8 +390,8 @@ static int lst_isordered(cs_State *C) {
     if (e > i) {
         cs_setntop(C, 2); /* make sure there are two arguments */
         while (sorted && i < e) {
-            cs_get_index(C, 0, (int)i);
-            cs_get_index(C, 0, (int)i+1);
+            cs_get_index(C, 0, cast_int(i));
+            cs_get_index(C, 0, cast_int(i)+1);
             sorted = sort_cmp(C, -2, -1);
             cs_pop(C, 2);
             i++;
