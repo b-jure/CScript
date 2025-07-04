@@ -49,6 +49,8 @@ cscript_testsuite_paths = {
     "os": rootpath("stdlibs/os"),
     "debug": rootpath("stdlibs/debug"),
     "list": rootpath("stdlibs/list"),
+    "utf8": rootpath("stdlibs/utf8"),
+    "reg": rootpath("stdlibs/reg"),
 }
 
 

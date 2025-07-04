@@ -221,7 +221,7 @@ __G.x = nil;
 }
 
 
-if (__POSIX or __WINDOWS) {
+if !_port {
     /// test the pace of the collector
     gc(); gc();
     local x = gcinfo();
@@ -236,11 +236,11 @@ if (__POSIX or __WINDOWS) {
         local a = {};
         if (gcinfo() <= x*2) break;
     }
-}
+} else
+    (Message or print)("skipped testing the pace of the collector");
 
 
 {
-    print("clearing tables");
     local lim = 15;
     local a = {};
     /// fill a with `collectable' indices
@@ -261,14 +261,14 @@ if (__POSIX or __WINDOWS) {
 }
 
 
-if (__POSIX or __WINDOWS) {
-    print("long list");
+if !_port {
     local a = {};
     foreach i in range(0,200000)
         a = {nextfield = a};
     a = nil;
     gc();
-}
+} else
+    (Message or print)("skipped testing long tables");
 
 
 {
@@ -289,7 +289,7 @@ if (__POSIX or __WINDOWS) {
 
 { /// create an object to be collected when state is closed
     local setmetalist,assert,typeof,print,getmetalist =
-        setmetalist,assert,typeof,print,getmetalist;
+          setmetalist,assert,typeof,print,getmetalist;
     local ml = [];
     ml[__MT.gc] = fn (o) {
         assert(getmetalist(self) == ml);

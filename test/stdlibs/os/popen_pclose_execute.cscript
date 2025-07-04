@@ -1,5 +1,9 @@
-if (!__POSIX and !__WINDOWS)
-    return; /* not portable */
+if _port {
+    (Message or print)("skipped pclose/popen/execute tests");
+    return; /* these tests requre either posix or windows environment */
+}
+
+local cliargs = __G.cliargs or __G.CLIARGS;
 
 local fn testerr(msg, f, ...) {
     local stat, err = pcall(f, ...);
@@ -10,7 +14,7 @@ local fn checkerr(msg, f, ...) {
     assert(testerr(msg, f, ...));
 }
 
-local progname = "\"" .. args[0] .. "\"";
+local progname = "\"" .. cliargs[0] .. "\"";
 # invalid mode for popen
 checkerr("invalid mode", io.popen, "cat", "");
 checkerr("invalid mode", io.popen, "cat", "r+");
@@ -26,19 +30,19 @@ checkerr("invalid mode", io.popen, "cat", "rw");
     assert(os.remove(file));
 }
 
-local exit_or_signal = __POSIX and "signal" or "exit";
+local portwhat = __POSIX and "signal" or "exit";
 local tests = [
-    /* command,   what,  code */
+    /* command,   portwhat,  code */
     ["ls > /dev/null", "ok"],
     ["not-to-be-found-command", "exit"],
     ["exit 3", "exit", 3],
     ["exit 129", "exit", 129],
-    ["kill -s HUP $$", exit_or_signal, 1],
-    ["kill -s KILL $$", exit_or_signal, 9],
-    ["sh -c 'kill -s HUP $$'", exit_or_signal],
-    [progname .. " -s \" \"", "ok"],
-    [progname .. " -s \"os.exit(0, true);\"", "ok"],
-    [progname .. " -s \"os.exit(20, true);\"", "exit", 20],
+    ["kill -s HUP $$", portwhat, 1],
+    ["kill -s KILL $$", portwhat, 9],
+    ["sh -c 'kill -s HUP $$'", portwhat],
+    [progname .. " -e \" \"", "ok"],
+    [progname .. " -e \"os.exit(0, true);\"", "ok"],
+    [progname .. " -e \"os.exit(20, true);\"", "exit", 20],
 ];
 foreach i, v in ipairs(tests) {
     local f = io.popen(v[0]);

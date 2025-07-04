@@ -73,6 +73,8 @@ fn manylines() {
 /// Note: on Linux and possibly on other UNIX operating systems,
 /// the "out of memory" case will never trigger as the OOM
 /// killer will be triggered and it will send SIGKILL.
+/// The recommended way is to limit how much memory specific process can
+/// obtain, use this: "ulimit -Sv 5000000", this sets ~5 gb limit.
 fn hugeid() {
     print("loading chunk with huge identifier");
     local st, msg = loadrep("a", "chars");
@@ -146,10 +148,28 @@ fn toomanyidx() {
   
 
 
-#teststring();
-#controlstruct();
-#manylines();
-#hugeid();
-#toomanyinst();
-#toomanyconst();
-#toomanyidx();
+if _heavy {
+    local cmd = "ulimit -Sv "; /// use 'ulimit'
+    local vmem = 5_000_000; /// ~5 million kb == ~5 gb
+    if (!os.execute(cmd)) {
+        (Message or print)("skipping heavy tests '" .. cmd .. "' not available");
+        return;
+    } else {
+        if (!os.execute(cmd .. tostr(vmem))) {
+            vmem = 1_000_000; /// ~1 gb
+            if (!os.execute(cmd .. tostr(vmem))) {
+                (Message or print)("skipping heavy tests, not enough virtual memory (" .. tostr(vmem) .. ")");
+                return;
+            }
+        } /* else... */
+        /* fall through */
+        teststring();
+        controlstruct();
+        manylines();
+        hugeid();
+        toomanyinst();
+        toomanyconst();
+        toomanyidx();
+    }
+} else
+    (Message or print)("skipping heavy tests");

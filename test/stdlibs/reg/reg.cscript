@@ -1,5 +1,3 @@
-print("testing pattern matching");
-
 local fn checkerror(msg, f, ...) {
     local s, err = pcall(f, ...);
     assert(!s and reg.find(err, msg));
@@ -210,8 +208,7 @@ checkerror("invalid capture index %%1", reg.gsub, "alo", "(%1)", "a");
 checkerror("invalid use of '%%'", reg.gsub, "alo", ".", "%x");
 
 
-{ /// @heavy
-    print("big strings");
+if _heavy {
     local a = string.repeat("a", 300000);
     assert(reg.find(a, "^a*.?$"));
     assert(!reg.find(a, "^a*.?b$"));

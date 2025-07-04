@@ -19,6 +19,7 @@
 #define togglebits(x,m,t)	((x) ^ (((x) ^ -((t) != 0)) & (m)))
 #define bitmask(b)		(1 << (b))
 #define bit2mask(b1,b2)		(bitmask(b1) | bitmask(b2)) 
+#define resetbit(x,b)		resetbits(x, bitmask(b))
 #define setbit(x,b)		setbits(x, bitmask(b))
 #define clearbit(x,b)		resetbits(x, bitmask(b))
 #define testbit(x,b)		testbits(x, bitmask(b))

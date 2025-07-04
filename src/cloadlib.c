@@ -629,7 +629,7 @@ static void create_searchers_array(cs_State *C) {
 */
 static int noenv(cs_State *C) {
     int b;
-    cs_get_global(C, "CS_NOENV");
+    cs_get_cfieldstr(C, "CS_NOENV");
     b = cs_to_bool(C, -1);
     cs_pop(C, 1); /* remove value */
     return b;

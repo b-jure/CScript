@@ -1,0 +1,538 @@
+/// most (all?) tests here assume a reasonable "Unix-like" shell
+if _port return;
+
+/// use only "double quotes" inside shell scripts (better change to
+/// run on Windows)
+
+assert(os.execute()); /// machine has a system command
+
+local cliargs = cliargs or __G.CLIARGS;
+local args = args or __G.ARGS;
+
+local prog = os.tmpname();
+local otherprog = os.tmpname();
+local out = os.tmpname();
+
+local progname = cliargs[0];
+print("progname: "..progname);
+
+local prepfile = fn(s, mod, p) {
+    mod = mod and "wb" or "w";  /// mod true means binary files
+    p = p or prog;              /// file to write the program
+    local f = io.open(p, mod);
+    f.write(s);
+    assert(f.close());
+};
+
+local fn getoutput() {
+    local f = io.open(out);
+    local t = f.read("a");
+    f.close();
+    assert(os.remove(out));
+    return t;
+}
+
+local fn checkprogout(s) {
+    /// expected result must end with new line
+    assert(string.substr(s, -1) == "\n");
+    local t = getoutput();
+    foreach line in reg.gmatch(s, ".-\n")
+        assert(reg.find(t, line, 0, true));
+}
+
+local fn checkout(s) {
+    local t = getoutput();
+    if s != t printf("'%' - '%'\n", s, t);
+    assert(s <= t);
+    return t;
+}
+
+
+local fn RUN(p, ...) {
+    p = reg.gsub(p, "cscript", "\""..progname.."\"", 1);
+    local s = string.fmt(p, ...);
+    assert(os.execute(s));
+}
+
+
+local fn NoRun(msg, p, ...) {
+  p = reg.gsub(p, "cscript", "\""..progname.."\"", 1);
+  local s = string.fmt(p, ...);
+  s = string.fmt("%s >%s 2>&1", s, out);  /// send output and error to 'out'
+  assert(!os.execute(s));
+  assert(reg.find(getoutput(), msg, 0, true));  /// check error message
+}
+
+RUN("cscript -v");
+
+printf("(temporary program file used in these tests: %)", prog);
+
+/// running stdin as a file
+prepfile("");
+RUN("cscript - < %s > %s", prog, out);
+checkout("");
+
+prepfile([=[
+  print(
+1, a
+);
+]=]);
+RUN("cscript - < %s > %s", prog, out);
+checkout("1\tnil\n");
+
+RUN("echo \"print(10);\nprint(2);\n\" | cscript > %s", out);
+checkout("10\n2\n");
+
+
+/// test option '-'
+RUN("echo \"print(args[1]);\" | cscript - -x > %s", out);
+checkout("-x\n");
+
+/// test environment variables used by cscript
+
+prepfile("print(package.path);");
+
+/// test CS_PATH
+RUN("env CS_INIT= CS_PATH=x cscript %s > %s", prog, out);
+checkout("x\n");
+
+/// test CS_PATH_version
+RUN("env CS_INIT= CS_PATH_1_0=y CS_PATH=x cscript %s > %s", prog, out);
+checkout("y\n");
+
+/// test CS_CPATH
+prepfile("print(package.cpath);");
+RUN("env CS_INIT= CS_CPATH=xuxu cscript %s > %s", prog, out);
+checkout("xuxu\n");
+
+/// test CS_CPATH_version
+RUN("env CS_INIT= CS_CPATH_1_0=yacc CS_CPATH=x cscript %s > %s", prog, out);
+checkout("yacc\n");
+
+/// test CS_INIT (and its access to 'args' list)
+prepfile("print(X);");
+RUN("env CS_INIT=\"X=tonum(args[1]);\" cscript %s 3.2 > %s", prog, out);
+checkout("3.2\n");
+
+/// test CS_INIT_version
+prepfile("print(X);");
+RUN("env CS_INIT_1_0=\"X=10;\" CS_INIT=\"X=3;\" cscript %s > %s", prog, out);
+checkout("10\n");
+
+/// test CS_INIT for files
+prepfile("x = x or 10; print(x); x = x + 1;");
+RUN("env CS_INIT=\"@%s\" cscript %s > %s", prog, prog, out);
+checkout("10\n11\n");
+
+/// test errors in CS_INIT
+NoRun("CS_INIT:1: msg", "env CS_INIT='error(\"msg\");' cscript");
+
+/// test option '-E'
+local defaultpath, defaultCpath;
+
+{
+    prepfile("print(package.path, package.cpath);");
+    RUN("env CS_INIT=\"error(10);\" CS_PATH=xxx CS_CPATH=xxx cscript -E %s > %s",
+         prog, out);
+    local output = getoutput();
+    defaultpath = reg.match(output, "^(.-)\t");
+    defaultCpath = reg.match(output, "\t(.-)$");
+
+    /// running with an empty environment
+    RUN("env -i cscript %s > %s", prog, out);
+    local out = getoutput();
+    assert(defaultpath == reg.match(output, "^(.-)\t"));
+    assert(defaultCpath == reg.match(output, "\t(.-)$"));
+}
+
+/// paths did not change
+assert(!reg.find(defaultpath, "xxx") and
+       reg.find(defaultpath, "cscript") and
+       !reg.find(defaultCpath, "xxx") and
+       reg.find(defaultCpath, "cscript"));
+
+
+/// test replacement of ';;' to default path
+local fn convert(p) {
+    prepfile("print(package.path);");
+    RUN("env CS_PATH=\"%s\" cscript %s > %s", p, prog, out);
+    local expected = getoutput();
+    expected = string.substr(expected, 0, -2); /// cut final end of line
+    if reg.find(p, ";;") {
+        p = reg.gsub(p, ";;", ";"..defaultpath..";");
+        p = reg.gsub(p, "^;", "");  /// remove ';' at the beginning
+        p = reg.gsub(p, ";$", "");  /// remove ';' at the end
+    }
+    assert(p == expected);
+}
+
+convert(";");
+convert(";;");
+convert("a;;b");
+convert(";;b");
+convert("a;;");
+convert("a;b;;c");
+
+
+/// test -l over multiple libraries
+prepfile("print(1); a=2; return {x=15};");
+prepfile(string.fmt("print(a); print(__G[\"%s\"].x);", prog), false, otherprog);
+RUN("env CS_PATH=\"?;;\" cscript -l %s -l%s -lstring -l io %s > %s", prog, otherprog, otherprog, out);
+checkout("1\n2\n15\n2\n15\n");
+
+/// test explicit global names in -l
+prepfile("print(str.toupper(\"alo alo\"), m.max(10, 20));");
+RUN("cscript -l 'str=string' '-lm=math' -e 'print(m.sin(0));' %s > %s", prog, out);
+checkout("0.0\nALO ALO\t20\n");
+
+
+/// test module names with version suffix ("libs/lib2-v2")
+RUN("env CS_CPATH='./libs/?.so' cscript -l lib2-v2 -e 'print(lib2.id());' > %s", out);
+checkout("true\n");
+
+
+/// test 'cliargs and 'args' lists
+local a = [=[
+    assert(args.len == 4 and args[1] == "a" and
+           args[2] == "b" and args[3] == "c");
+    assert(cliargs.len == 3 and cliargs[0] == "%s" and
+           cliargs[1] == "-e "and cliargs[2] == "--");
+    assert(args[4] == undef and cliargs[3] == undef);
+    local _, a, b, c = ...;
+    assert(... != "a" and a == "a" and b == "b" and c == "c");
+]=];
+a = string.fmt(a, progname);
+prepfile(a);
+RUN("cscript \"-e \" -- %s a b c", prog); /// "-e " runs an empty command
+
+/// test 'args' availability in libraries
+prepfile("assert(args);");
+prepfile("assert(args);", false, otherprog);
+RUN("env CS_PATH=\"?;;\" cscript -l%s - < %s", prog, otherprog);
+
+/// test messing up the 'args' and 'cliargs' lists
+RUN("echo \"print(...);\" | cscript -e \"args[0] = 100;\" - > %s", out);
+checkout("100\n");
+NoRun("'args' is not a list", "echo \"\" | cscript -e \"args = 1;\" -");
+RUN("echo \"print(...);\" | cscript -e \"args[0] = 100;\" - > %s", out);
+checkout("100\n");
+NoRun("'cliargs' is not a list", "echo \"\" | cscript -e \"cliargs = 1;\" -");
+
+/// test error in 'print'
+RUN("echo 10 | cscript -e \"print=nil;\" -i > /dev/null 2> %s", out);
+assert(reg.find(getoutput(), "error calling 'print'"));
+
+/// test 'debug.debug'
+RUN("echo \"io.stderr.write(1000);\ncont\" | cscript -e \"import(\\\"debug\\\").debug();\" 2> %s", out);
+checkout("cscript_debug> 1000cscript_debug> ");
+
+{ /// test warning for locals
+    RUN("echo \"  		local x;\" | cscript -i > %s 2>&1", out);
+    assert(string.find(getoutput(), "warning: "));
+
+    RUN("echo \"local1 = 10;\nlocal1 + 3\" | cscript -i > %s 2>&1", out);
+    local t = getoutput();
+    assert(!string.find(t, "warning"));
+    assert(string.find(t, "13"));
+}
+
+print("testing warnings");
+
+/// no warnings by default
+RUN("echo \"io.stderr.write(1); warn([=[XXX]=]);\" | cscript 2> %s", out);
+checkout("1");
+
+prepfile([=[
+warn("@allow");               /// unknown control, ignored
+warn("@off", "XXX", "@off");  /// these are not control messages
+warn("@off");                 /// this one is
+warn("@on", "YYY", "@on");    /// not control, but warn is off
+warn("@off");                 /// keep it off
+warn("@on");                  /// restart warnings
+warn("", "@on");              /// again, no control, real warning
+warn("@on");                  /// keep it "started"
+warn("Z", "Z", "Z");          /// common warning
+]=]);
+RUN("cscript -W %s 2> %s", prog, out);
+checkout([=[
+CScript warning: @offXXX@off
+CScript warning: @on
+CScript warning: ZZZ
+]=]);
+
+prepfile([=[
+warn("@allow");
+/// create two objects to be finalized when closing state
+/// the errors in the finalizers must generate warnings
+local ml = [];
+ml[__MT.gc] = fn() { error("XYZ"); };
+u1 = setmetalist((class{})(), ml);
+ml = [];
+ml[__MT.gc] = fn() { error("ZYX"); };
+u2 = setmetalist((class{})(), ml);
+ml = nil;
+]=]);
+RUN("cscript -W %s 2> %s", prog, out);
+checkprogout("ZYX)\nXYZ)\n");
+
+/// finalizer called when closing a state could
+/// subvert finalization order
+prepfile([=[
+    /// ensure instances will be collected only at the end of the program
+    gc("stop");
+
+    print("creating 1");
+    /// this finalizer should be called last
+    local ml = [];
+    ml[__MT.gc] = fn() { print(1); };
+    setmetalist((class{})(), ml);
+    ml = []; /// new list
+    print("creating 2");
+    ml[__MT.gc] = fn() {
+        print("2");
+        print("creating 3");
+        local ml = [];
+        /// this finalizer should not be called, as object will be
+        /// created after 'cs_close' has been called
+        ml[__MT.gc] = fn() { print(3); };
+        setmetalist((class{})(), ml);
+        ml = nil;
+        print(gc() or false); /// cannot call collector here
+        os.exit(0, true);
+    };
+    setmetalist((class{})(), ml);
+    ml = nil;
+]=]);
+RUN("cscript -W %s > %s", prog, out);
+checkout([=[
+creating 1
+creating 2
+2
+creating 3
+false
+1
+]=]);
+
+
+/// test many arguments
+prepfile([=[print(([...])[29]);]=]);
+RUN("cscript %s %s > %s", prog, string.repeat(" a", 30), out);
+checkout("a\n");
+
+RUN([=[cscript "-eprint(1);" "-ea=3;" -e "print(a);" > %s]=], out);
+checkout("1\n3\n");
+
+/// test interactive mode
+prepfile([=[
+(6*2-6); /// ===
+a =
+10;
+print(a);
+a]=]);
+RUN([=[cscript -e"__PROMPT=\"\"; __PROMPT2=\"\";" -i < %s > %s]=], prog, out);
+checkprogout("6\n10\n10\n\n");
+
+prepfile("a = [=[b\nc\nd\ne]=];\na");
+RUN([=[cscript -e"__PROMPT=\"\"; __PROMPT2=\"\";" -i < %s > %s]=], prog, out);
+checkprogout("b\nc\nd\ne\n\n");
+
+/// input interrupted in continuation line
+prepfile("a.\n");
+RUN([=[cscript -i < %s > /dev/null 2> %s]=], prog, out);
+checkprogout("near <eof>\n");
+
+local prompt = "alo";
+prepfile([=[ ///
+a = 2;
+]=]);
+RUN([=[cscript "-e__PROMPT=\"%s\";" -i < %s > %s]=], prompt, prog, out);
+local t = getoutput();
+assert(reg.find(t, prompt .. ".*" .. prompt .. ".*" .. prompt));
+
+/// using the prompt default
+prepfile([=[ ///
+a = 2;
+]=]);
+RUN([=[cscript -i < %s > %s]=], prog, out);
+t = getoutput();
+prompt = "> "; /// the default
+assert(reg.find(t, prompt .. ".*" .. prompt .. ".*" .. prompt));
+
+
+/// non-string prompt
+prompt = [=[
+    local C = \"X\";
+    local ml = [];
+    ml[__MT.tostring] = fn() {
+        C = C .. \"X\";
+        return C;
+    };
+    __PROMPT=setmetalist((class{})(), ml);
+    ml = nil;
+]=];
+prepfile([=[ ///
+a = 2;
+]=]);
+RUN([=[cscript -e "%s" -i < %s > %s]=], prompt, prog, out);
+t = getoutput();
+/// skip version line and then check the presence of the three prompts
+assert(reg.find(t, "^.-\nXX[^\nX]*\n?XXX[^\nX]*\n?XXXX\n?$"));
+
+
+/// test for error objects
+prepfile([=[
+debug = import("debug");
+m = class {
+    __init = fn() { self.x = 0; return self; };
+};
+m = m();
+local ml = getmetalist(m);
+ml[__MT.tostring] = fn(x) { return tostr(debug.getinfo(4).currline + x.x); };
+setmetalist(m, ml);
+ml = nil;
+error(m);
+]=]);
+NoRun(progname .. ": 10\n", [=[cscript %s]=], prog);
+
+prepfile("error({});");
+NoRun("error object is a table value", [=[cscript %s]=], prog);
+
+
+/// chunk broken in many lines
+local s = [=[ ///
+fn f( x ) {
+  local a = [==[
+xuxu
+]==];
+  local b = "\
+xuxu\n";
+  if x == 11 return 1 + 12 , 2 + 20; /* test multiple returns */
+  return x + 1;
+  ///\\
+}
+return( f( 100 ) );
+assert( a == b );
+{ return f( 11 ); }  ]=];
+s = reg.gsub(s, " ", "\n\n"); /// change all spaces for newlines
+prepfile(s);
+RUN([=[cscript -e"__PROMPT=\"\"; __PROMPT2=\"\";" -i < %s > %s]=], prog, out);
+checkprogout("101\n13\t22\n\n");
+
+prepfile([=[#comment in 1st line without \n at the end]=]);
+RUN("cscript %s", prog);
+
+/// close cscript with an open file
+prepfile(string.fmt([=[io.output(%q); io.write("alo");]=], out));
+RUN("cscript %s", prog);
+checkout("alo");
+
+/// bug in 5.2 beta (extra \0 after version line)
+RUN([=[cscript -v  -e"print(\"hello\");" > %s]=], out);
+t = getoutput();
+local pat = "PUC%-Rio\n.*Jure Bagi"..utf8.charpattern.."\nhello";
+assert(reg.find(t, pat));
+
+
+/// testing os.exit
+prepfile("os.exit(nil, true);");
+RUN("cscript %s", prog);
+prepfile("os.exit(0, true);");
+RUN("cscript %s", prog);
+prepfile("os.exit(true, true);");
+RUN("cscript %s", prog);
+prepfile("os.exit(1, true);");
+NoRun("", "cscript %s", prog);  /// no message
+prepfile("os.exit(false, true);");
+NoRun("", "cscript %s", prog);  /// no message
+
+
+/// to-be-closed variables in main chunk
+prepfile([=[
+    local ml = [];
+    ml[__MT.close] = fn(_, err) {
+        assert(err == nil);
+        print("Ok");
+    };
+    local x <close> = setmetalist((class{})(), ml);
+    ml = []; /// new list
+    ml[__MT.close] = fn(_, _) { print(120); };
+    local e1 <close> = setmetalist((class{})(), ml);
+    ml = nil;
+    os.exit(true, true);
+]=]);
+RUN("cscript %s > %s", prog, out);
+checkprogout("120\nOk\n");
+
+
+/// remove temporary files
+assert(os.remove(prog));
+assert(os.remove(otherprog));
+assert(!os.remove(out));
+
+/// invalid options
+NoRun("unknown option '-g'", "cscript -g");
+NoRun("unknown option '---'", "cscript ---");
+NoRun("unknown option '-Ex'", "cscript -Ex");
+NoRun("unknown option '-vv'", "cscript -vv");
+NoRun("unknown option '-iv'", "cscript -iv");
+NoRun("'-e' needs argument", "cscript -e");
+NoRun("syntax error", "cscript -e a");
+NoRun("'-l' needs argument", "cscript -l");
+
+
+{
+    /// 'warn' must get at least one argument
+    local st, msg = pcall(warn);
+    assert(string.find(msg, "string expected"));
+
+    /// 'warn' does not leave unfinished warning in case of errors
+    /// (message would appear in next warning)
+    st, msg = pcall(warn, "SHOULD NOT APPEAR", {});
+    assert(string.find(msg, "string expected"));
+}
+
+{ /// testing Ctrl-C
+    /// interrupt a script
+    local fn kill(pid) {
+        return os.execute(string.fmt("kill -INT %s 2> /dev/null", pid));
+    }
+
+    /// function to run a script in background, returning its output file
+    /// descriptor and its pid
+    local fn runback(cscriptprog) {
+        /// shell script to run 'cscriptprog' in background and echo its pid
+        local shellprg = string.fmt("%s -e \"%s\" & echo $!", progname, cscriptprog);
+        local f = io.popen(shellprg, "r");  /// run shell script
+        local pid = f.read(); /// get pid for CScript script
+        print("(if test fails now, it may leave a CScript script running in background, pid " .. pid .. ")");
+        return f, pid;
+    }
+
+    /// CScript script that runs protected infinite loop and then prints '42'
+    local f, pid = runback([=[
+        pcall(fn() { print(12); while true; }); print(42);]=]);
+    /// wait until script is inside 'pcall'
+    assert(f.read() == "12");
+    kill(pid); /// send INT signal to CScript script
+    /// check that 'pcall' captured the exception and script continued running
+    assert(f.read() == "42"); /// expected output
+    assert(f.close());
+
+    /// CScript script in a long unbreakable search
+    f, pid = runback([=[
+        print(15); reg.find(string.repeat(\"a\", 100000), \".*b\");]=]);
+    /// wait (so script can reach the loop)
+    assert(f.read() == "15");
+    assert(os.execute("sleep 1"));
+    /// must send at least two INT signals to stop this CScript script
+    local n = 100;
+    foreach i in range(100) { /// keep sending signals
+        if !kill(pid) { /// until it fails
+            n = i+1; /// number of non-failed kills
+            break;
+        }
+    }
+    assert(f.close());
+    assert(n >= 2);
+    print(string.fmt("done (with %d kills)", n));
+}

@@ -1,0 +1,39 @@
+#!../cscript
+
+local version = "CScript 1.0"
+if __VERSION != version {
+    io.stderr.write("This test suite is for ", version, ", not for ",
+                     __VERSION, "\nStopping testing...");
+    return;
+}
+
+__G.ARGS = args; /* save command-line args for interpreter test */
+
+_heavy = __G._heavy or true; /* by default run heavy tests */
+_port = __G._port or false; /* by default run non-portable tests */
+_skipmsg = __G._skipmsg or true; /* by default report messages of tests not performed */
+
+/*
+** Users can define their tests inside of a table
+** under global name '__U'.
+*/
+local usertests = __G.__U;
+
+if usertests { /* have usertests? */
+    _heavy = false; /* avoid tests that take too long */
+    _port = true; /* avoid non-portable tests */
+}
+
+/* tests should import debug library when needed */
+debug = nil;
+
+
+print("\n\tRunning Tests")
+printf("current path:\n>>>>%<<<<\n", package.path);
+
+local initclock = os.clock();
+local lastclock = initclock;
+local walltime = os.time();
+
+
+/// TODO: finish

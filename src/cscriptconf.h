@@ -43,12 +43,14 @@
 #if defined(CS_USE_LINUX)
 #define CS_USE_POSIX
 #define CS_USE_DLOPEN
+#define CS_READLINELIB	        "libreadline.so"
 #endif
 
 
 #if defined(CS_USE_MACOSX)
 #define CS_USE_POSIX
 #define CS_USE_DLOPEN
+#define CS_READLINELIB	        "libedit.dylib"
 #endif
 
 

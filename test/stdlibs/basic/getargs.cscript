@@ -1,39 +1,31 @@
-if (args) { /* have global 'args' ? */
-    assert(typeof(args) == "list");
-    assert(len(args) == 2);
-}
-
-args2 = [ ... ];
-assert(args2);
-assert(typeof(args2) == "list");
-assert(len(args2) == 2);
-
-local bin_name, script_name = getargs(0, ...);
+local cliargs = __G.cliargs or __G.CLIARGS;
+assert(cliargs and typeof(cliargs) == "list" and cliargs.len >= 1); /* at least binary name */
+local bin_name = getargs(0, list.flatten(cliargs));
 assert(bin_name);
 assert(typeof(bin_name) == "string");
-assert(bin_name == getargs(0, ...));
+assert(bin_name == getargs(0, list.flatten(cliargs)));
+
+local args = __G.args or __G.ARGS;
+assert(args and typeof(args) == "list" and args.len >= 1); /* at least script name */
+local script_name = getargs(0, list.flatten(args));
 assert(script_name);
 assert(typeof(script_name) == "string");
-assert(script_name == getargs(1, ...));
+assert(script_name == getargs(0, list.flatten(args)));
 
-local x = getargs("list", ...);
+local x = getargs("list", list.flatten(cliargs));
 assert(x);
 assert(typeof(x) == "list");
-assert(len(x) == 2);
+assert(len(x) >= 1 and x[0] == bin_name);
 
-x = getargs("table", ...);
+x = getargs("table", list.flatten(cliargs));
 assert(x);
 assert(typeof(x) == "table");
-assert(len(x) == 2);
-assert(x[args[0]] == true);
-assert(x[args[1]] == true);
-assert(x[args[2]] == nil);
+assert(len(x) >= 1);
+assert(x[cliargs[0]] == true);
 
-local y;
-assert(getargs("len", ...) == 2);
-x, y = getargs(-1, ...);
-assert(x and typeof(x) == "string");
-assert(!y);
-x, y = getargs(-2, ...);
-assert(x and typeof(x) == "string");
-assert(y and typeof(y) == "string");
+local y, st;
+assert(getargs("len", list.flatten(cliargs)) >= 1);
+x, y = getargs(-1, list.flatten(cliargs));
+assert(!y and x and typeof(x) == "string");
+st, x = pcall(getargs, -cliargs.len, list.flatten(cliargs));
+assert(st and x and typeof(x) == "string" and x == bin_name);

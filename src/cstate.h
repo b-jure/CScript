@@ -68,7 +68,6 @@ typedef struct cs_longjmp cs_longjmp; /* defined in 'cprotected.c' */
 #define CFST_FRESH      (1<<1) /* call is on fresh "csV_execute" frame */
 #define CFST_HOOKED     (1<<2) /* call is running a debug hook */
 #define CFST_FIN        (1<<3) /* function "called" a finalizer */
-#define CFST_TRAN       (1<<4) /* 'cf' has transfer information */
 
 
 typedef struct CallFrame {
@@ -81,8 +80,6 @@ typedef struct CallFrame {
         volatile c_signal trap; /* hooks or stack reallocation flag */
         int nvarargs; /* number of optional arguments */
     } cs;
-    int ftransfer; /* offset of first value transferred */
-    int ntransfer; /* number of values transferred */
     int nresults; /* number of expected results from this function */
     c_ubyte status; /* call status */
 } CallFrame;
@@ -103,9 +100,9 @@ typedef struct CallFrame {
 ** Collision resolution is resolved by chain.
 */
 typedef struct StringTable {
-    OString **hash;
-    int nuse;
-    int size;
+    OString **hash; /* array of buckets (linked lists of strings) */
+    int nuse; /* number of elements */
+    int size; /* number of buckets */
 } StringTable;
 
 
@@ -177,6 +174,10 @@ struct cs_State {
     int basehookcount;
     int hookcount;
     volatile c_signal hookmask;
+    struct { /* info about transferred values (for call/return hooks) */
+        int ftransfer; /* offset of first value transferred */
+        int ntransfer; /* number of values transferred */
+    } transferinfo;
 };
 
 

@@ -1,3 +1,8 @@
+if _port or !_heavy {
+    (Message or print)("skipping \"verybig\" tests");
+    return;
+}
+
 /// testing opcodes with K arguments larger than short K (255)
 local fn foo() {
     local dummy = [

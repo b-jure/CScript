@@ -434,9 +434,8 @@ static int markopenupvalues(GState *gs) {
                     markvalue(gs, uv->v.p);
                 }
             }
-        } else { /* thread is marked and has upvalues */
+        } else /* thread is marked and has upvalues */
             pp = &th->twups; /* keep it in the list */
-        }
     }
     return work;
 }
@@ -629,13 +628,14 @@ static void checksizes(cs_State *C, GState *gs) {
 ** to the 'objects' list.
 */
 static GCObject *gettobefin(GState *gs) {
-    GCObject *o = gs->tobefin;
+    GCObject *o = gs->tobefin; /* get first element */
     cs_assert(o && isfin(o));
-    gs->tobefin = o->next;
-    o->next = gs->objects;
+    gs->tobefin = o->next; /* remove it from 'tobefin' list */
+    o->next = gs->objects; /* return it to 'objects' list */
     gs->objects = o;
+    resetbit(o->mark, FINBIT); /* object is "normal" again */
     if (issweepstate(gs))
-        markwhite(gs, o);
+        markwhite(gs, o); /* "sweep" object */
     return o;
 }
 
@@ -650,17 +650,18 @@ static void pgc(cs_State *C, void *userdata) {
 /* call a finalizer "__gc" */
 static void callgc(cs_State *C) {
     TValue v;
-    const TValue *m;
+    const TValue *fmm;
     GState *gs = G(C);
     cs_assert(!gs->gcemergency);
     setgcoval(C, &v, gettobefin(gs));
-    if (!ttisnil(m = csMM_get(C, &v, CS_MT_GC))) { /* have __gc? */
+    fmm = csMM_get(C, &v, CS_MT_GC);
+    if (!ttisnil(fmm)) { /* is there a finalizer? */
         int status;
         int old_allowhook = C->allowhook;
         int old_gcstop = gs->gcstop;
         gs->gcstop |= GCSTP; /* avoid GC steps */
         C->allowhook = 0; /* stop debug hooks during GC metamethod */
-        setobj2s(C, C->sp.p++, m); /* push finalizer... */
+        setobj2s(C, C->sp.p++, fmm); /* push finalizer... */
         setobj2s(C, C->sp.p++, &v); /* ...and its argument */
         C->cf->status |= CFST_FIN; /* will run a finalizer */
         status = csPR_call(C, pgc, NULL, savestack(C,C->sp.p-2), C->errfunc);
@@ -690,6 +691,7 @@ static int runNfinalizers(cs_State *C, int n) {
 ** list but only if it wasn't moved already indicated by
 ** 'FINBIT' being set, additionally don't move it in case
 ** state is closing.
+** TODO: finalizers are called incorrectly (wrong order)
 */
 void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     GCObject **pp;
@@ -716,7 +718,9 @@ void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
 /* }===================================================================== */
 
 
-/* get the last 'next' object in list 'l' */
+/*
+** Get the last 'next' object in list 'l'.
+*/
 c_sinline GCObject **findlastnext(GCObject **l) {
     while (*l)
         l = &(*l)->next;
@@ -735,9 +739,9 @@ static void separatetobefin(GState *gs, int force) {
     GCObject **lastnext = findlastnext(&gs->tobefin);
     while ((curr = *finp) != NULL) {
         cs_assert(isfin(curr));
-        if (!(iswhite(curr) || force)) { /* not being collected? */
+        if (!(iswhite(curr) || force)) /* not being collected? */
             finp = &curr->next; /* ignore it and advance the 'fin' list */
-        } else { /* otherwise move it into 'tobefin' */
+        else { /* otherwise move it into 'tobefin' */
             *finp = curr->next; /* remove 'curr' from 'fin' */
             curr->next = *lastnext; /* link is at the end of 'tobefin' list */
             *lastnext = curr; /* link 'curr' into 'tobefin' */
@@ -782,7 +786,7 @@ static c_umem atomic(cs_State *C) {
     gs->whitebit = whitexor(gs); /* flip current white bit */
     cs_assert(gs->graylist == NULL); /* all must be propagated */
     cs_assert(gs->weak == NULL); /* 'weak' unused */
-    return work; /* estimate number of slots marked by 'atomic' */
+    return work; /* estimate number of values marked by 'atomic' */
 }
 
 
@@ -898,7 +902,7 @@ c_sinline void freelist(cs_State *C, GCObject *l, GCObject *limit) {
 }
 
 
-static void runallfinalizers(cs_State *C) {
+static void callpendingfinalizers(cs_State *C) {
     GState *gs = G(C);
     while (gs->tobefin)
         callgc(C);
@@ -912,9 +916,9 @@ static void runallfinalizers(cs_State *C) {
 void csG_freeallobjects(cs_State *C) {
     GState *gs = G(C);
     gs->gcstop = GCSTPCLS; /* paused by state closing */
-    separatetobefin(gs, 1); /* seperate all objects with a finalizer... */
+    separatetobefin(gs, 1); /* seperate all objects with a finalizer */
     cs_assert(gs->fin == NULL);
-    runallfinalizers(C); /* ...and run them */
+    callpendingfinalizers(C);
     freelist(C, gs->objects, obj2gco(gs->mainthread));
     cs_assert(gs->fin == NULL); /* no new finalizers */
     freelist(C, gs->fixed, NULL); /* collect fixed objects */

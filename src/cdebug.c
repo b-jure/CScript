@@ -344,7 +344,6 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
 static const char *upvalname(const Proto *p, int uv) {
     OString *s = check_exp(uv < p->sizeupvals, p->upvals[uv].name);
     cs_assert(s != NULL); /* must have debug information */
-    //printf("upvalue '%s'\n", getstr(s));
     return getstr(s);
 }
 
@@ -356,10 +355,8 @@ static const char *kname(const Proto *p, int index, const char **name) {
     TValue *kval = &p->k[index];
     if (ttisstring(kval)) {
         *name = getstr(strval(kval));
-        //printf("constant string '%s'\n", *name);
         return "constant";
     } else {
-        //printf("non-string constant '?'\n");
         *name = "?";
         return NULL;
     }
@@ -379,8 +376,6 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
     *ppc = pc = symbexec(p, pc, sp);
     if (pc != -1) { /* could find instruction? */
         Instruction *i = &p->code[pc];
-        //printf("Final instruction %s at pc %d that modifies sp %d\n",
-                //getopName(*i), pc, sp);
         switch (*i) {
             case OP_GETLOCAL: {
                 int stk = GET_ARG_L(i, 0);
@@ -437,14 +432,11 @@ static const char *getobjname(const Proto *p, int lastpc, int sp,
                               const char **name) {
     //printf("%s lastpc=%d sp=%d\n", __func__, lastpc, sp);
     const char *kind = basicgetobjname(p, &lastpc, sp, name);
-    if (kind != NULL) {
-        //printf("Kind = %s\n", kind);
+    if (kind != NULL)
         return kind;
-    }
     else if (lastpc != -1) { /* could find instruction? */
         Instruction *i = &p->code[lastpc];
-        //printf(">>> %s at pc %d modified stack slot %d <<<\n",
-                //getopName(*i), lastpc, sp);
+        //printf(">>> %s at pc %d modified stack slot %d <<<\n", getopName(*i), lastpc, sp);
         switch (*i) {
             case OP_GETPROPERTY: case OP_GETINDEXSTR: {
                 kname(p, GET_ARG_L(i, 0), name);
@@ -575,11 +567,11 @@ static int auxgetinfo(cs_State *C, const char *options, Closure *cl,
                 break;
             }
             case 'r': {
-                if (cf == NULL || !(cf->status & CFST_TRAN))
+                if (cf == NULL || !(cf->status & CFST_HOOKED))
                     ar->ftransfer = ar->ntransfer = 0;
                 else {
-                    ar->ftransfer = cf->ftransfer;
-                    ar->ntransfer = cf->ntransfer;
+                    ar->ftransfer = C->transferinfo.ftransfer;
+                    ar->ntransfer = C->transferinfo.ntransfer;
                 }
                 break;
             }
@@ -686,8 +678,7 @@ static void settraps(CallFrame *cf) {
 
 
 /*
-** This function can be called during a signal, under "reasonable"
-** assumptions.
+** This function can be called during a signal, under "reasonable" assumptions.
 ** Fields 'basehookcount' and 'hookcount' (set by 'resethookcount')
 ** are for debug only, and it is no problem if they get arbitrary
 ** values (causes at most one wrong hook call). 'hookmask' is an atomic
@@ -1002,17 +993,13 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
         ptrdiff_t sp = savestack(C, C->sp.p); /* preserve original 'sp' */
         ptrdiff_t cf_top = savestack(C, cf->top.p); /* idem for 'cf->top' */
         cs_Debug ar = { .event = event, .currline = line, .cf = cf };
-        int mask = CFST_HOOKED;
-        if (ntransfer != 0) {
-            mask |= CFST_TRAN; /* 'cf' has transfer information */
-            cf->ftransfer = ftransfer;
-            cf->ntransfer = ntransfer;
-        }
+        C->transferinfo.ftransfer = ftransfer;
+        C->transferinfo.ntransfer = ntransfer;
         csPR_checkstack(C, CS_MINSTACK); /* ensure minimum stack size */
         if (cf->top.p < C->sp.p + CS_MINSTACK)
             cf->top.p = C->sp.p + CS_MINSTACK;
         C->allowhook = 0; /* cannot call hooks inside a hook */
-        cf->status |= mask;
+        cf->status |= CFST_HOOKED;
         cs_unlock(C);
         (*hook)(C, &ar); /* call hook function */
         cs_lock(C);
@@ -1020,7 +1007,7 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
         C->allowhook = 1; /* hook finished; once again enable hooks */
         cf->top.p = restorestack(C, cf_top);
         C->sp.p = restorestack(C, sp);
-        cf->status &= ~mask;
+        cf->status &= ~CFST_HOOKED;
     }
 }
 
@@ -1033,10 +1020,8 @@ void csD_hook(cs_State *C, int event, int line, int ftransfer, int ntransfer) {
 void csD_hookcall(cs_State *C, CallFrame *cf, int delta) {
     C->oldpc = 0; /* set 'oldpc' for new function */
     if (C->hookmask & CS_MASK_CALL) { /* is call hook on? */
-        //printf("Doing call hook (delta=%d)\n", delta);
         cs_assert(delta > 0);
         cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
-        //printf("Corrected pc = %ld\n", cf->cs.pc - cf_func(cf)->p->code);
         csD_hook(C, CS_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
         cf->cs.pc -= delta; /* correct 'pc' */
     }

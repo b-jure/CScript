@@ -50,6 +50,23 @@ static void preinit_thread(cs_State *C, GState *gs) {
     C->cf = NULL;
     C->openupval = NULL;
     C->tbclist.p = NULL;
+    C->basecf.prev = C->basecf.next = NULL;
+    C->transferinfo.ftransfer = C->transferinfo.ntransfer = 0;
+}
+
+
+static void resetCF(cs_State *C) {
+    CallFrame *cf = C->cf = &C->basecf;
+    cf->func.p = C->stack.p;
+    setnilval(s2v(cf->func.p)); /* 'function' entry for basic 'cf' */
+    cf->top.p = cf->func.p + 1 + CS_MINSTACK; /* +1 for 'function' entry */
+    cf->status = CFST_CCALL;
+    cf->cs.pc = cf->cs.pcret = NULL;
+    cf->cs.trap = 0;
+    cf->cs.nvarargs = 0;
+    cf->nresults = 0;
+    C->status = CS_STATUS_OK;
+    C->errfunc = 0; /* stack unwind can "throw away" the error function */
 }
 
 
@@ -58,26 +75,15 @@ static void preinit_thread(cs_State *C, GState *gs) {
 ** 'C' is a main thread state ('C1' == 'C' only when creating new
 ** state).
 */
-static void init_stack(cs_State *C1, cs_State *C) {
-    CallFrame *cf;
+static void stackinit(cs_State *C1, cs_State *C) {
     cs_assert(!statefullybuilt(G(C1)) == (C1 == C));
     C1->stack.p = csM_newarray(C, INIT_STACKSIZE + EXTRA_STACK, SValue);
     C1->tbclist.p = C1->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
         setnilval(s2v(C1->stack.p + i));
-    C1->sp.p = C1->stack.p;
     C1->stackend.p = C1->stack.p + INIT_STACKSIZE;
-    cf = &C1->basecf;
-    cf->next = cf->prev = NULL;
-    cf->func.p = C1->sp.p;
-    cf->cs.pc = NULL;
-    cf->cs.nvarargs = 0;
-    cf->nresults = 0;
-    cf->status = CFST_CCALL;
-    setnilval(s2v(C->sp.p)); /* 'cf' entry function */
-    C->sp.p++;
-    cf->top.p = C->stack.p + CS_MINSTACK;
-    C->cf = cf;
+    resetCF(C1);
+    C1->sp.p = C1->stack.p + 1; /* +1 for function */
 }
 
 
@@ -101,7 +107,7 @@ static void init_cstorage(cs_State *C, GState *gs) {
 static void f_newstate(cs_State *C, void *ud) {
     GState *gs = G(C);
     UNUSED(ud);
-    init_stack(C, C);
+    stackinit(C, C);
     init_cstorage(C, gs);
     csS_init(C); /* keep this init first */
     csY_init(C);
@@ -113,8 +119,10 @@ static void f_newstate(cs_State *C, void *ud) {
 }
 
 
-/* free all 'CallFrame' structures NOT in use by thread */
-static void free_frames(cs_State *C) {
+/*
+** Free all 'CallFrame' structures NOT in use by a thread.
+*/
+static void freeCF(cs_State *C) {
     CallFrame *cf = C->cf;
     CallFrame *next = cf->next;
     cf->next = NULL;
@@ -126,13 +134,15 @@ static void free_frames(cs_State *C) {
 }
 
 
-/* free thread stack and call frames */
-static void free_stack(cs_State *C) {
+/*
+** Free thread stack and the call frames.
+*/
+static void freestack(cs_State *C) {
     if (C->stack.p != NULL) { /* stack fully built? */
-        C->cf = &C->basecf; /* free all of the call frames */
-        free_frames(C);
+        C->cf = &C->basecf; /* free the entire 'cf' list */
+        freeCF(C);
         cs_assert(C->ncf == 0 && C->basecf.next == NULL);
-        csM_freearray(C, C->stack.p, stacksize(C) + EXTRA_STACK);
+        csM_freearray(C, C->stack.p, cast_sizet(stacksize(C) + EXTRA_STACK));
     }
 }
 
@@ -140,22 +150,26 @@ static void free_stack(cs_State *C) {
 static void freestate(cs_State *C) {
     GState *gs = G(C);
     cs_assert(C == G(C)->mainthread);
-    if (!statefullybuilt(gs)) { /* partially built state? */
-        csG_freeallobjects(C);
-    } else { /* freeing fully built state */
-        C->cf = &C->basecf; /* undwind call frames */
-        csPR_close(C, 1, CS_STATUS_OK);
-        csG_freeallobjects(C);
+    if (!statefullybuilt(gs)) /* closing partially built state? */
+        csG_freeallobjects(C); /* collect only objects */
+    else { /* otherwise closing a fully built state */
+        resetCF(C); /* undwind call stack */
+        csPR_close(C, 1, CS_STATUS_OK); /* close all upvalues */
+        C->sp.p = C->stack.p + 1; /* empty the stack to run finalizers */
+        csG_freeallobjects(C); /* collect all objects */
         csi_userstateclose(C);
     }
-    csM_freearray(C, gs->strtab.hash, gs->strtab.size);
-    free_stack(C);
+    csM_freearray(C, G(C)->strtab.hash, cast_sizet(G(C)->strtab.size));
+    freestack(C);
     cs_assert(gettotalbytes(gs) == sizeof(XSG));
     gs->falloc(fromstate(C), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
 
 
-static void init_gcparams(GState *gs) {
+/*
+** Initialize garbage collection parameters.
+*/
+static void initGCparams(GState *gs) {
     setgcparam(gs->gcparams[CS_GCP_PAUSE], CSI_GCP_PAUSE);
     setgcparam(gs->gcparams[CS_GCP_STEPMUL], CSI_GCP_STEPMUL);
     gs->gcparams[CS_GCP_STEPSIZE] = CSI_GCP_STEPSIZE;
@@ -189,7 +203,7 @@ CS_API cs_State *cs_newstate(cs_Alloc falloc, void *ud, unsigned seed) {
     gs->gcdebt = 0;
     gs->gcstate = GCSpause;
     gs->gcstopem = 0;
-    init_gcparams(gs);
+    initGCparams(gs);
     gs->gcstop = GCSTP; /* no GC while creating state */
     gs->gcemergency = 0;
     gs->gccheck = 0;
@@ -244,7 +258,7 @@ CS_API cs_State *cs_newthread(cs_State *C) {
     memcpy(cs_getextraspace(C1), cs_getextraspace(gs->mainthread),
            CS_EXTRASPACE);
     csi_userstatethread(C, C1);
-    init_stack(C1, C);
+    stackinit(C1, C);
     cs_unlock(C);
     return C1;
 }
@@ -476,6 +490,6 @@ void csT_free(cs_State *C, cs_State *C1) {
     csF_closeupval(C1, C1->stack.p);  /* close all upvalues */
     cs_assert(C1->openupval == NULL);
     csi_userstatefree(C, C1);
-    free_stack(C1);
+    freestack(C1);
     csM_free(C, xs);
 }

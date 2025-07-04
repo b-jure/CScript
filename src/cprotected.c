@@ -185,7 +185,9 @@ int csPR_close(cs_State *C, ptrdiff_t level, int status) {
     CallFrame *old_cf = C->cf;
     c_ubyte old_allowhook = C->allowhook;
     for (;;) { /* keep closing upvalues until no more errors */
-        struct PCloseData pcd = { restorestack(C, level), status };
+        struct PCloseData pcd = {
+            .level = restorestack(C, level),
+            .status = status };
         status = csPR_rawcall(C, closep, &pcd);
         if (c_likely(status == CS_STATUS_OK))
             return pcd.status;

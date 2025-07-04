@@ -1166,7 +1166,7 @@ CS_API int cs_get_metalist(cs_State *C, int index) {
             ml = NULL;
             break;
     }
-    if (ml != NULL) {
+    if (ml) { /* have metalist? */
         setlistval2s(C, C->sp.p, ml);
         api_inctop(C);
         res = 1;

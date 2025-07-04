@@ -343,8 +343,8 @@ lineerror([=[
 }
 
 
-{ /// @heavy
-    /// several tests that exhaust the Lua stack
+if _heavy {
+    /// several tests that exhaust the CScript stack
     gc();
     print("testing stack overflow");
     local C = 0;
@@ -415,7 +415,8 @@ lineerror([=[
         return 15;
     });
     assert(msg == 15);
-}
+} else
+    (Message or print)("skipping stack overflow tests");
 
 
 { /// errors in error handle that not necessarily go forever
@@ -496,8 +497,7 @@ lineerror([=[
     assert(__G.aaa==3 and !__G.I);
     __G.I,__G.aaa = nil;
 
-    /// @heavy
-    local lim = 1000;
+    local lim = _heavy and 1000 or 100;
     for (local i=1; i<=lim; i=i+1) {
         doit("a = ");
         doit("a = 4+nil");

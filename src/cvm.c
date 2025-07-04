@@ -689,7 +689,7 @@ c_sinline void poscall(cs_State *C, CallFrame *cf, int nres) {
     /* move results to proper place */
     moveresults(C, cf->func.p, nres, cf->nresults);
     /* function cannot be in any of these cases when returning */
-    cs_assert(!(cf->status & (CFST_HOOKED | CFST_FIN | CFST_TRAN)));
+    cs_assert(!(cf->status & (CFST_HOOKED | CFST_FIN)));
     C->cf = cf->prev; /* back to caller (after closing variables) */
 }
 
@@ -1415,9 +1415,11 @@ returning: /* trap already set */
                 int mt; /* metalist index */
                 savestate(C);
                 mt = fetch_s();
+                fprintf(stdout, "Setting mt = %d\n", mt);
                 cs_assert(0 <= mt && mt < CS_MT_NUM);
                 /* TODO: remove this check (see pushclass) */
                 if (c_unlikely(!ml)) { /* no metalist? */
+                    printf("making new metalist\n");
                     ml = csA_new(C);
                     classval(o)->metalist = ml;
                     checkGC(C);

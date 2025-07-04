@@ -199,7 +199,7 @@ static int b_getmetalist(cs_State *C) {
     csL_check_any(C, 0);
     if (!cs_get_metalist(C, 0))
         cs_push_nil(C);
-    return 1; /* return 'nil' or metalist */
+    return 1; /* return nil or metalist */
 }
 
 

@@ -71,8 +71,7 @@ module 'XXX' not found:
 /// The next tests for 'import' assume some specific directories and
 /// libraries.
 
-if (__POSIX or __WINDOWS) {
-
+if !_port {
     local dirsep = reg.match(package.config, "^([^\n]+)\n");
     /// auxiliary directory with C modules and temporary files
     local DIR = "libs" .. dirsep;
@@ -328,4 +327,5 @@ return AA;]=];
         package = p;
         assert(typeof(package.path) == "string");
     }
-}
+} else
+    (Message or print)("skipped library loading");

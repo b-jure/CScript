@@ -64,8 +64,6 @@ fact = nil;
         a.b.c.f2("k", 12);
         assert(a.b.c.k == 12);
     }
-
-    print("+");
 }
 
 t = nil; /// 'declare' t
@@ -97,7 +95,6 @@ a = load("return fat(5), 3;");
     assert(a == 120 and b == 3);
 }
 fat = nil;
-print("+");
 
 local fn err_on_n(n) {
     if (n==0) { error(); exit(1); }
@@ -204,7 +201,6 @@ assert(a.deep(30000) == 101);
     }
 
     assert((fn() { return foo(); })() == 1023);
-    print("+");
 }
 
 
@@ -279,7 +275,6 @@ local fn g(z) {
 f = g(10);
 assert(f(9, 16) == 10+11+12+13+10+9+16+10);
 
-print("+");
 
 
 /// testing multiple returns
@@ -435,7 +430,7 @@ assert((fn() { local a; return a; })(4) == nil);
 assert((fn(a) { return a; })() == nil);
 
 
-if (__POSIX or __WINDOWS) { /// test stack/bytecode limit
+if !_heavy { /// test stack/bytecode limit
     local blim <final> = 16_777_215;
     local inuse = debug.stackinuse();
     if (debug.maxstack - inuse - 10 > blim) { /// test bytecode limit 
@@ -455,6 +450,5 @@ if (__POSIX or __WINDOWS) { /// test stack/bytecode limit
         res, msg = pcall(foverflow, res);
         assert(!res and string.find(msg, "stack overflow"));
     }
-}
-
-print("+");
+} else
+    (Message or print)("skipped stack/bytecode limit test");
