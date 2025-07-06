@@ -400,7 +400,7 @@ static void addquoted(csL_Buffer *b, const char *s, size_t len) {
 
 /*
 ** Serialize a floating-point number in such a way that it can be
-** scanned back by Lua. Use hexadecimal format for "common" numbers
+** scanned back by CScript. Use hexadecimal format for "common" numbers
 ** (to preserve precision); inf, -inf, and NaN are handled separately.
 ** (NaN cannot be expressed as a numeral, so we write '(0/0)' for it.)
 */

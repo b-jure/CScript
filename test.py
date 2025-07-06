@@ -28,6 +28,8 @@ excluded_testsuites = {};
 # testsuites which are to be run, provided explicitly via cli
 explicit_testsuites = {};
 
+cli_options = {"-e": "excludes a testsuite"}
+
 # Return path relative to root test directory
 def rootpath(path):
     return Path(f"{cscript_root}/{path}");
@@ -126,26 +128,20 @@ def get_testsuite_path(tsuite):
                          .format(tsuite, list(cscript_testsuite_paths.keys())));
 
 
-# Errors
 class MissingArgError(Exception):
     def __init__(self, extra):
-        super().__init__("Missing command line argument. {extra}");
-
-class MissingOptError(Exception):
-    def __init__(self):
-        super().__init__("Missing command line option.");
+        super().__init__(f"Missing command line argument. {extra}");
 
 class InvalidOptError(Exception):
     def __init__(self, option):
-        super().__init__("Invalid command line option '{option}'.");
+        super().__init__(f"Invalid command line option '{option}', available options are {cli_options}.");
 
 
 # Handle CLI option
-def handle_option(argv, argc, i):
-    i += 1;
-    if i >= argc:
-        raise MissingOptError(option);
-    option = argv[i];
+def handleoption(argv, argc, i):
+    if len(argv[i]) <= 1:
+        raise InvalidOptError("-");
+    option = argv[i][1:];
     if option == "e":
         if i >= argc:
             raise MissingArgError("Option 'e' requires a testsuite.");
@@ -162,7 +158,7 @@ def handle_cli_args(argv, argc):
     i = 1; # skip script name
     while (i <= argc): # while have more cli args
         arg = argv[i];
-        if arg == "-": # option?
+        if arg[0] == "-": # option?
             i = handleoption(argv, argc, i);
         else: # otherwise a testsuite
             get_testsuite_path(arg); # check if 'tsuite' is valid

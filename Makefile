@@ -95,7 +95,7 @@ linux-readline:
 	$(MAKE) $(ALL) SYSCFLAGS="-DCS_USE_LINUX -DCS_USE_READLINE" SYSLIBS="-Wl,-E -ldl -lreadline"
 
 Darwin macos macosx:
-	$(MAKE) $(ALL) SYSCFLAGS="-DLUA_USE_MACOSX -DLUA_USE_READLINE" SYSLIBS="-lreadline"
+	$(MAKE) $(ALL) SYSCFLAGS="-DCS_USE_MACOSX -DCS_USE_READLINE" SYSLIBS="-lreadline"
 
 mingw:
 	$(MAKE) "CSCRIPT_A=cscript1.dll" "CSCRIPT_T=cscript.exe" \
