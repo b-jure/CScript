@@ -71,7 +71,7 @@ module 'XXX' not found:
 /// The next tests for 'import' assume some specific directories and
 /// libraries.
 
-if !_port {
+if !__port {
     local dirsep = reg.match(package.config, "^([^\n]+)\n");
     /// auxiliary directory with C modules and temporary files
     local DIR = "libs" .. dirsep;

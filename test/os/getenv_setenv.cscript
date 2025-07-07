@@ -1,4 +1,4 @@
-if _port {
+if __port {
     (Message or print)("skipped getenv/setenv test");
     return;
 }

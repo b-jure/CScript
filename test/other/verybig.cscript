@@ -1,4 +1,4 @@
-if _port or !_heavy {
+if __port or !__heavy {
     (Message or print)("skipping \"verybig\" tests");
     return;
 }

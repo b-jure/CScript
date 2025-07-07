@@ -430,7 +430,7 @@ assert((fn() { local a; return a; })(4) == nil);
 assert((fn(a) { return a; })() == nil);
 
 
-if !_heavy { /// test stack/bytecode limit
+if !__heavy { /// test stack/bytecode limit
     local blim <final> = 16_777_215;
     local inuse = debug.stackinuse();
     if (debug.maxstack - inuse - 10 > blim) { /// test bytecode limit 

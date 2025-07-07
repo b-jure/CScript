@@ -548,9 +548,6 @@ static void enterscope(FunctionState *fs, Scope *s, int cf) {
 }
 
 
-// TODO: generic for loop, break jumps do not properly close the 4th TBC var
-// this results in that var staying in to-be-closed list and later
-// returning NULL metalist, therefore nil __close method, breaking the assert
 static void leavescope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = stacklevel(fs, s->nactlocals);
@@ -560,7 +557,7 @@ static void leavescope(FunctionState *fs) {
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
     if (s->prev) { /* not main chunk scope? */
-        // TODO: maybe there is no need to track test pc?
+        // TODO: there is no need to track test pc? right??
         if (getlasttarget(fs->lx) == currPC) /* test target is this pc? */
             fs->opbarrier |= 2; /* prevent POP merge */
         csC_pop(fs, nvalues); /* pop locals and switch expression */

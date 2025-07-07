@@ -1415,11 +1415,9 @@ returning: /* trap already set */
                 int mt; /* metalist index */
                 savestate(C);
                 mt = fetch_s();
-                fprintf(stdout, "Setting mt = %d\n", mt);
                 cs_assert(0 <= mt && mt < CS_MT_NUM);
                 /* TODO: remove this check (see pushclass) */
                 if (c_unlikely(!ml)) { /* no metalist? */
-                    printf("making new metalist\n");
                     ml = csA_new(C);
                     classval(o)->metalist = ml;
                     checkGC(C);

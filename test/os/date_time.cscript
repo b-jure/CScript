@@ -64,7 +64,7 @@ if (math.maxint > 2**31) # have larger cs_Integer?
              {year = (1 << 31) + 1900, month = 1, day = 1});
 
 
-if !_port {
+if !__port {
     if (__POSIX) { /* test Posix-specific modifiers */
         assert(typeof(os.date("%Ex")) == "string");
         assert(typeof(os.date("%Oy")) == "string");

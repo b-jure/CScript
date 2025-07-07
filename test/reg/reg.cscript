@@ -208,7 +208,7 @@ checkerror("invalid capture index %%1", reg.gsub, "alo", "(%1)", "a");
 checkerror("invalid use of '%%'", reg.gsub, "alo", ".", "%x");
 
 
-if _heavy {
+if __heavy {
     local a = string.repeat("a", 300000);
     assert(reg.find(a, "^a*.?$"));
     assert(!reg.find(a, "^a*.?b$"));

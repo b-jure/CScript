@@ -343,7 +343,7 @@ lineerror([=[
 }
 
 
-if _heavy {
+if __heavy {
     /// several tests that exhaust the CScript stack
     gc();
     print("testing stack overflow");
@@ -497,7 +497,7 @@ if _heavy {
     assert(__G.aaa==3 and !__G.I);
     __G.I,__G.aaa = nil;
 
-    local lim = _heavy and 1000 or 100;
+    local lim = __heavy and 1000 or 100;
     for (local i=1; i<=lim; i=i+1) {
         doit("a = ");
         doit("a = 4+nil");

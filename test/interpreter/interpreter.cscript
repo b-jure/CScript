@@ -1,19 +1,19 @@
 /// most (all?) tests here assume a reasonable "Unix-like" shell
-if _port return;
+if __port return;
 
 /// use only "double quotes" inside shell scripts (better change to
 /// run on Windows)
 
 assert(os.execute()); /// machine has a system command
 
-local cliargs = cliargs or __G.CLIARGS;
-local args = args or __G.ARGS;
+local cliargs = cliargs or __G.__CLIARGS;
+local args = args or __G.__ARGS;
 
 local prog = os.tmpname();
 local otherprog = os.tmpname();
 local out = os.tmpname();
 
-local progname = cliargs[0];
+local progname = cliargs[0] or __G.__PROG;
 print("progname: "..progname);
 
 local prepfile = fn(s, mod, p) {

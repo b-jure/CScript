@@ -148,7 +148,7 @@ fn toomanyidx() {
   
 
 
-if _heavy {
+if __heavy {
     local cmd = "ulimit -Sv "; /// use 'ulimit'
     local vmem = 5_000_000; /// ~5 million kb == ~5 gb
     if (!os.execute(cmd)) {

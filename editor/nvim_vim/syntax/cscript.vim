@@ -35,7 +35,7 @@ syn sync minlines=1000
 
 "-Comments--------{
 syn keyword cscriptTodo contained TODO FIXME XXX
-syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag
+syn cluster cscriptCommentGroup contains=cscriptTodo,cscriptDocTag,@Spell
 " single line
 syn region cscriptComment matchgroup=cscriptCommentStart start=/#/ skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup
 syn region cscriptComment matchgroup=cscriptCommentStart start="///" skip=/\\$/ end=/$/ keepend contains=@cscriptCommentGroup

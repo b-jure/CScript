@@ -30,15 +30,10 @@
 #define cs_seed
 
 
-static cs_Unsigned auxabs(cs_Integer v) {
-    cs_Integer const mask = v >> (sizeof(cs_Integer)*CHAR_BIT - 1);
-    return c_castS2U((v + mask) ^ mask);
-}
-
-
 static int m_abs(cs_State *C) {
     if (cs_is_integer(C, 0)) {
-        cs_Integer n = auxabs(cs_to_integer(C, 0));
+        cs_Integer n = cs_to_integer(C, 0);
+        if (n < 0) n = c_castU2S(0u - c_castS2U(n));
         cs_push_integer(C, n);
     } else
         cs_push_number(C, c_mathop(fabs)(csL_check_number(C, 0)));

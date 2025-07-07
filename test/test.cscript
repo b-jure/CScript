@@ -1,39 +1,242 @@
 #!../cscript
 
-local version = "CScript 1.0"
-if __VERSION != version {
+local version = "CScript 1.0";
+if __VERSION != version { /* test script and core version mismatch? */
     io.stderr.write("This test suite is for ", version, ", not for ",
-                     __VERSION, "\nStopping testing...");
-    return;
+                     __VERSION, "\nExiting...");
+    return; /* done */
 }
 
-__G.ARGS = args; /* save command-line args for interpreter test */
 
-_heavy = __G._heavy or true; /* by default run heavy tests */
-_port = __G._port or false; /* by default run non-portable tests */
-_skipmsg = __G._skipmsg or true; /* by default report messages of tests not performed */
+/* save command-line arguments and program name for interpreter test */
+__G.__CLIARGS = cliargs;
+__G.__ARGS = args;
+__G.__PROG = "../cscript";
 
-/*
-** Users can define their tests inside of a table
-** under global name '__U'.
-*/
-local usertests = __G.__U;
 
-if usertests { /* have usertests? */
-    _heavy = false; /* avoid tests that take too long */
-    _port = true; /* avoid non-portable tests */
-}
+/* if true print out the error message after test result */
+__G.__DEBUG = true;
+
+
+/* false if not running heavy tests */
+__heavy = __G.__heavy or true;
+/* false if runnning non-portable tests */
+__port = __G.__port or !(__POSIX or __WINDOWS);
+/* false if not reporting messages of tests not performed */
+__skipmsg = __G.__skipmsg or true;
+
 
 /* tests should import debug library when needed */
 debug = nil;
 
 
-print("\n\tRunning Tests")
-printf("current path:\n>>>>%<<<<\n", package.path);
+/* upvalues for timing execution */
+local initclock, lastclock;
 
-local initclock = os.clock();
-local lastclock = initclock;
-local walltime = os.time();
+/* file for redirecting 'stdout' and 'stderr' when running a test */
+local out = assert(os.tmpname());
+
+/* save standard files */
+local stdout = io.stdout;
+local stderr = io.stderr;
+
+/* store function as locals as tests might change global variables */
+local print,execute,fmt,assert,popen,find,runfile,typeof,error,clock,ipairs =
+      print,os.execute,string.fmt,assert,io.popen,reg.find,runfile,typeof,
+      error,os.clock,ipairs;
 
 
-/// TODO: finish
+/*
+** Colorize text if 'stdout' is terminal.
+** @s - string
+** @c - string
+*/
+local fn termcolor(s,c) {
+    if (!__port and execute("[ -t 1 ]"))
+        return (c .. s .. "\e[0m") or s;
+    return s;
+}
+
+local fn RED(s) { return termcolor(s, "\e[31m"); }
+local fn GREEN(s) { return termcolor(s, "\e[32m"); }
+local fn YELLOW(s) { return termcolor(s, "\e[33m"); }
+
+
+/*
+** Generate test string that depends on test result 'stat'.
+** @test - string
+** @stat - any
+*/
+local fn testfmt(test, stat) {
+    local C = stat and GREEN or RED;
+    local res = stat and "PASS" or "FAIL";
+    return fmt("%s  %4s  %s %-35s", C("["), C(res), C("]"), YELLOW(test));
+}
+
+
+/*
+** Builds command string for listing files/directories that works
+** in both a posix and windows environment.
+** @what - string
+** @path - ?string
+*/
+local fn lscmd(what, path) {
+    local cmd;
+    assert(__POSIX or __WINDOWS);
+    if (what == "d") { /* list directories? */
+        if (__POSIX) { /* posix environment? */
+            cmd = "ls -p "; /* use 'ls' */
+            if (path) cmd = cmd .. path .. " ";
+            cmd = cmd .. "| grep /"; /* and 'grep' */
+        } else { /* otherwise windows environment */
+            cmd = "dir /b /a:d"; /* use 'dir' */
+            if (path) cmd = cmd .. path;
+        }
+    } else { /* otherwise list non-hidden files */
+        assert(what == "f");
+        if (__POSIX) {
+            cmd = "ls -p ";
+            if (path) cmd = cmd .. path .. " ";
+            cmd = cmd .. "| grep -v /"; /* and 'grep' */
+        } else {
+            cmd = "dir /b /a:-d-h ";
+            if (path) cmd = cmd .. path;
+        }
+    }
+    return cmd;
+}
+
+
+/*
+** Finds all testsuites and their tests in the current directory.
+** First, the current directory is listed, each directory listed is
+** considered to be a testsuite, and each file ending with '.cscript'
+** in that directory is considered as a test belonging to that testsuite.
+** If we are not running in posix or windows environment, use hard-coded
+** testsuites described in 'tests.cscript'. Returned table contains
+** testsuite names as keys and values are lists containing test filepaths.
+** @filename - ?string
+*/
+local fn get_tests(filename) {
+    local tests = {};
+    if (!filename and __port) { /* discover directories and tests? */
+        local f = assert(popen(lscmd("d")), "can't list directories");
+        foreach dir in f.lines() {
+            if dir == "libs/" continue; /* ignore 'libs' (used for testing) */
+            local tsuite = string.substr(dir, 0, -2); /* no '/' or '\\' */
+            local ltests = []; /* list of testsuite tests */
+            local n = 0; /* number of tests */
+            f = assert(popen(lscmd("f", dir)), "can't list files");
+            foreach file in f.lines() {
+                if (!find(file, "%.cscript$"))
+                    continue; /* skip files without '.cscript' suffix */
+                ltests[n] = dir .. file; /* store test path */
+                n = n + 1; /* inc. test count */
+            }
+            tests[tsuite] = ltests; /* store the testsuite */
+        }
+    } else { /* otherwise try get 'tests' table from a file */
+        tests = runfile(filename or "tests.cscript");
+        if typeof(tests) != "table"
+            error(filename .. " script must return a table");
+    }
+    __G.__tests = tests; /* cache it into global table */
+    return tests;
+}
+
+
+/*
+** Lists all testsuites in 'tests' and the tests they contain.
+** If 'tests' is not provided or is nil, then global '__tests' is checked,
+** lastly the 'tests' table is re-generated.
+** @tests - ?table
+*/
+local fn list_tests(tests) {
+    tests = tests or __tests or get_tests();
+    foreach tsuite, tlist in pairs(tests) {
+        print(tsuite .. ":");
+        foreach _, test in ipairs(tlist)
+            print("\t" .. test);
+    }
+}
+
+
+/*
+** Returns formatted elapsed time depending on the time 'c'.
+** @c - number
+*/
+local fn gettime(c) {
+    return fmt("[time: %g (+%g)]", c - initclock, c - lastclock);
+}
+
+
+local fn redirect_stdfiles() {
+    io.output(out);
+    io.stderr = out;
+    io.stdout = out;
+}
+
+
+local fn restore_stdfiles() {
+    io.output(stdout);
+    io.stderr = stderr;
+    io.stdout = stdout;
+}
+
+
+/*
+** Runs individual test and outputs the result to 'io.stdout'.
+** @filepath - string
+*/
+local fn run_test(filepath) {
+    redirect_stdfiles();
+    lastclock = clock();
+    local stat, msg = pcall(runfile, filepath);
+    restore_stdfiles();
+    printf("%  %", testfmt(filepath, stat), gettime(lastclock));
+    if (__DEBUG and !stat) print(msg);
+}
+
+
+/*
+** Runs all the tests located in 'tlist' for testsuite 'tsuite'.
+** @tsuite - string
+** @tlist - list
+*/
+local fn run_tests(tsuite, tlist) {
+    print(YELLOW("> BEGIN (") .. tsuite .. YELLOW(")"));
+    initclock = clock();
+    foreach _, filepath in ipairs(tlist)
+        run_test(filepath);
+    print(YELLOW("> END (") .. tsuite .. YELLOW(")"));
+}
+
+
+/*
+** Runs specific testsuites provided as extra arguments.
+** These must map to testsuites located in 'tests' table.
+** If 'tests' is not provided, '__tests' global is checked,
+** and if global is nil the 'tests' table is re-generated.
+** @tests - ?table
+*/
+local fn run_testsuites(tests, ...) {
+    assert(nil, "TODO");
+}
+
+
+/*
+** Runs all testsuites located in 'tests' table.
+** If 'tests' is not provided, then the global '__tests' is checked,
+** and if global is nil the 'tests' table is re-generated.
+** @tests - ?table
+*/
+local fn run_all_testsuites(tests) {
+    tests = tests or __tests or get_tests();
+    foreach tsuite, tlist in pairs(tests)
+        run_tests(tsuite, tlist);
+}
+
+
+#list_tests();
+run_all_testsuites();
+os.remove(out); /* remove temporary file */

@@ -402,7 +402,7 @@ static int b_getargs(cs_State *C) {
                 cs_set_field(C, 0);
             }
         } else if (strcmp(what, "last") == 0) { /* last? */
-            i = nres - (nres>0); /* get last argument */
+            i = (nres > 0) ? nres-1 : 0; /* get last argument */
             goto l_getargs;
         } else if (strcmp(what, "len") == 0) /* len? */
             cs_push_integer(C, nres); 

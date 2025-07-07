@@ -449,11 +449,21 @@ static int read_digits(NumBuff *nb, int dtype, int rad) {
                 break; /* buffer overflow */
         } else {
             switch (dtype) {
-                case DIGDEC: if (!isdigit(nb->c)) return count; break;
-                case DIGHEX: if (!isxdigit(nb->c)) return count; break;
-                case DIGOCT:
-                    if (!isdigit(nb->c) || nb->c > '7') return count;
+                case DIGDEC: {
+                    if (!isdigit(nb->c))
+                        return count;
                     break;
+                }
+                case DIGHEX: {
+                    if (!isxdigit(nb->c))
+                        return count;
+                    break;
+                }
+                case DIGOCT: {
+                    if (!isdigit(nb->c) || nb->c > '7')
+                        return count;
+                    break;
+                }
                 default: cs_assert(0); /* invalid digit type */
             }
             if (!nextchar(nb))
