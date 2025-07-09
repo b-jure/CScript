@@ -190,10 +190,16 @@ local fn ERASELINE() { return termcode(ESC("[2K")); }
 
 
 if __skipmsg {
+
+    /*
+    ** Stores the message 'msg' into 'skip_msgs'.
+    ** @msg - string
+    */
     fn Message(msg) {
         local t = getinfo(2, "s");
         skip_msgs[skip_msgs.len] = msg .. " in '" .. YELLOW(t.source) .. "'";
     }
+
 }
 
 
@@ -248,7 +254,7 @@ local fn lscmd(what, path) {
 ** considered to be a testsuite, and each file ending with '.cscript'
 ** in that directory is considered as a test belonging to that testsuite.
 ** If we are not running in posix or windows environment, use hard-coded
-** testsuites described in 'tests.cscript'. Returned table contains
+** testsuites defined in '__opts.tests_script' file. Returned table contains
 ** testsuite names as keys and values are lists containing test filepaths.
 ** @filename - ?string
 */
@@ -358,7 +364,7 @@ local fn run_test(filepath) {
     local stat, msg, code;
     if (!__port and __opts.run_isolated) {
         local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
-        stat, msg, code = execute("../cscript " .. filepath .. devnull);
+        stat, msg, code = execute(__PROG .. " " .. filepath .. devnull);
     } else
         stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
