@@ -11,7 +11,7 @@
 ** "warnings" - if true, print warnings the test throws.
 ** "noprint" - if true, replace 'print' and 'printf' with CScript functions
 **             that print to temporary file (not portable).
-** "memory" - if true, print memory after test is finished executing.
+** "memory" - if true, print memory before test is executed.
 ** "errors" - if true, display error message in case test fails.
 ** "timed" - if true, time the test execution and display it
 ** "reprint_failed" - if true, after all tests are finished, re-prints failed
@@ -22,11 +22,12 @@
 **                  this is not portable and execution timing won't be as
 **                  reliable information to look at, additionally all warnings
 **                  and errors won't be reachable, only the exit status.
-**                  Finally the skip messages won't get registered.
+**                  Finally the skip messages won't get registered, however
+**                  this provides complete isolation for precise testing.
 ** "testsuites_to_skip" - list of testsuite names, which are skipped.
 ** "tests_script" - filename of the script that generates tests table, can
-**                  be nil, in which case script will try to discover the
-**                  testsuites and the tests (not portable).
+**                  be nil, in which case, script will try to discover the
+**                  testsuites and their tests (not portable).
 */
 __opts = __G.__opts or {
     termcodes = true,
@@ -94,7 +95,7 @@ local skip_msgs = [];
 /* save standard files */
 local stdout, stderr, stdin = io.stdout, io.stderr, io.stdin;
 
-/* store function as locals as tests might change them */
+/* store these as locals as tests might change them if they are not ran in isolation */
 local traceback,print,printf,execute = debug.traceback,print,printf,os.execute;
 local fmt,assert,popen,write,flush = string.fmt,assert,io.popen,io.write,io.flush;
 local find,runfile,typeof,error,ipairs = reg.find,runfile,typeof,error,ipairs;
@@ -106,6 +107,10 @@ local exit,getinfo = os.exit,debug.getinfo;
 
 /* tests should import debug library when needed */
 debug = nil;
+
+
+/* storage for print functions and temporary file (otherwise empty) */
+__C = {};
 
 
 if __opts.noprint and !__port {
@@ -274,7 +279,7 @@ local fn get_tests(filename) {
     if (!filename and !__port) { /* discover directories and tests? */
         local f = assert(popen(lscmd("d")), "can't list directories");
         foreach dir in f.lines() {
-            if string.startswith(dir, "_") /* file starts with '_'? */
+            if byte(dir, 0) == '_' /* file starts with '_'? */
                 continue; /* ignore it */
             local tsuite = substr(dir, 0, -2); /* no '/' or '\\' */
             local ltests = []; /* list of testsuite tests */
@@ -292,7 +297,7 @@ local fn get_tests(filename) {
         filename = filename or __opts.tests_script;
         tests = runfile(filename);
         if typeof(tests) != "table"
-            error(filename .. " script must return a table");
+            error("'" .. filename .. "' script must return a table");
     }
     __tests = tests; /* cache it into global tests table */
     return tests;
@@ -362,32 +367,34 @@ local fn showmem() {
 
 
 /*
-** Runs individual test and outputs the result to 'io.stdout'.
+** Runs individual test and outputs the result to 'stdout'.
 ** @filepath - string
 */
 local fn run_test(filepath) {
     if (__opts.memory)
         showmem();
-    if (__opts.termcodes) {
+    local termcodes = !__port and __opts.termcodes and execute("[ -t 1 ]");
+    local isorun = !__port and __opts.run_isolated;
+    if (termcodes) {
         output(stdout);
         write(fmt("%sCurrently executing '%s'...", SAVEPOS(), YELLOW(filepath)));
         flush();
     }
     local stat, msg, code;
-    if (!__port and __opts.run_isolated) {
+    if (isorun) {
         local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
         stat, msg, code = execute(__PROG .. " " .. filepath .. devnull);
     } else
         stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
-    if (__opts.termcodes) {
+    if (termcodes) {
         output(stdout);
         write(LOADPOS() .. ERASELINE());
         flush();
     }
     printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
     if (!stat) {
-        if (!_port and __opts.run_isolated and msg and code)
+        if (isorun and msg and code)
             msg = msg .. " (code " .. tostr(code) .. ")";
         failed_tests[filepath] = msg;
         if (__opts.errors)
@@ -415,6 +422,18 @@ local fn testsuite_headerfmt(tsuite, what) {
 
 
 /*
+** Checks if test list entry 'filepath' is a string.
+** @tsuite - string
+** @filepath - string
+*/
+local fn check_tlist_entry(tsuite, filepath) {
+    if (typeof(filepath) != "string")
+        error("expected filepath in test list (in testsuite '"..tsuite.."'), "
+                .. "instead got " .. typeof(filepath));
+}
+
+
+/*
 ** Runs all the tests located in 'tlist' for testsuite 'tsuite'.
 ** @tsuite - string
 ** @tlist - list
@@ -425,8 +444,10 @@ local fn run_tests(tsuite, tlist) {
         initclock = clock();
         lastclock = initclock;
     }
-    foreach _, filepath in ipairs(tlist)
+    foreach _, filepath in ipairs(tlist) {
+        check_tlist_entry(tsuite, filepath);
         run_test(filepath);
+    }
     testsuite_headerfmt(tsuite, "END");
 }
 
@@ -467,8 +488,10 @@ local fn run_testsuites(tests, ...) {
     local filter = [...];
     tests = teststable(tests);
     foreach i,name in ipairs(filter) {
-        assert(typeof(filter[i]) == "string"); /* these are arguments */
-        if shouldskip(name) continue;
+        if typeof(filter[i]) != "string"
+            error("expect testsuite name");
+        if shouldskip(name)
+            continue; /* skip */
         local tlist = tests[name];
         if (tlist)
             run_tests(name, tlist);
@@ -488,7 +511,8 @@ local fn run_all_testsuites(tests) {
     tests = teststable(tests);
     foreach name,tlist in pairs(tests) {
         assert(typeof(name) == "string"); /* must be testsuite name */
-        if shouldskip(name) continue;
+        if shouldskip(name)
+            continue; /* skip */
         run_tests(name, tlist);
     }
 }
