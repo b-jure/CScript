@@ -85,21 +85,18 @@ local fn setloclist(f, l, el, ...) {
     assert(l[0].name == "x" and l[0].val == nil);
     assert(l[1].name == "y" and l[1].val == nil);
     assert(l[2].name == "z" and l[2].val == nil);
-    print("+active x inactive CScript function x foreach vars (getlocal)");
 }
 
 
 {
     l = getloclist(print); assert(len(l) == 0);
     l = getloclist(range); assert(len(l) == 0);
-    print("+inactive C function (getlocal)");
 }
 
 
 {
     foreach _,v in ipairs(l)
         assert(v == "(C auto)");
-    print("+active C function (getlocal)");
 }
 
 
@@ -110,7 +107,6 @@ local fn setloclist(f, l, el, ...) {
     assert(!getlocal(checkerr, 3)); /// there are only 2 params
     checkerr("out of range", getlocal, 100, 3);
     assert(!getlocal(2, 100)); /// no such local
-    print("+getlocal error (getlocal)");
 }
 #}
 
@@ -144,7 +140,6 @@ local fn setloclist(f, l, el, ...) {
     /// varargs are stored after auto vars
     assert(l[lim+6].name == "(vararg)" and l[lim+6].val == extra[0]);
     assert(l[lim+7].name == "(vararg)" and l[lim+7].val == extra[1]);
-    print("+active CScript function (setlocal)");
 }
 
 
@@ -153,9 +148,8 @@ local fn setloclist(f, l, el, ...) {
         local env = {};
         a = 5; b = 6;
         debug.setlocal(2, 3, env);
-    ]=], "", { debug = debug })();
+    ]=], "", { debug = db })();
     assert(a == nil and b == nil);
-    print("+active C function (setlocal)");
 }
 
 
@@ -166,5 +160,4 @@ local fn setloclist(f, l, el, ...) {
     checkerr("out of range", setlocal, 100, 0, 0);
     assert(!setlocal(0, 50, 0)); /// no local found
     assert(!setlocal(0, -50, 0)); /// no vararg found
-    print("+setlocal errors");
 }

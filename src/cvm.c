@@ -64,10 +64,10 @@
 	>> (NBM - (3 * (NBM / 4))))  >  0
 
 /* limit for integers that fit in a float */
-#define MAXINTFITSF	((cs_Unsigned)1 << NBM)
+#define CS_MAXINTFITSF	((cs_Unsigned)1 << NBM)
 
-/* check whether 'i' is in the interval [-MAXINTFITSF, MAXINTFITSF] */
-#define c_intfitsf(i)	((MAXINTFITSF + c_castS2U(i)) <= (2 * MAXINTFITSF))
+/* check whether 'i' is in the interval [-CS_MAXINTFITSF, CS_MAXINTFITSF] */
+#define c_intfitsf(i)	((CS_MAXINTFITSF + c_castS2U(i)) <= (2 * CS_MAXINTFITSF))
 
 #else /* all integers fit in a float precisely */
 
@@ -860,7 +860,7 @@ void csV_concat(cs_State *C, int total) {
             /* collect total length and number of strings */
             for (n = 1; n < total && ttisstring(s2v(top - n - 1)); n++) {
                 size_t len = getstrlen(strval(s2v(top - n - 1)));
-                if (c_unlikely(len >= MAXSIZE - sizeof(OString) - ltotal)) {
+                if (c_unlikely(len >= CS_MAXSIZE - sizeof(OString) - ltotal)) {
                     C->sp.p = top - total; /* pop strings */
                     csD_runerror(C, "string length overflow");
                 }

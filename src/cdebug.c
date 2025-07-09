@@ -263,7 +263,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 if (*i == OP_VARARG) {
                     if (--n == CS_MULRET) n = 1;
                 }
-                change = (symsp <= sp && sp <= symsp + n);
+                change = (symsp < sp && sp <= symsp + n);
                 symsp += n;
                 break;
             }

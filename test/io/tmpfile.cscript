@@ -3,3 +3,4 @@ assert(io.type(f) == "file");
 f.write("alo");
 f.seek("set");
 assert(f.read("a") == "alo");
+f.close();

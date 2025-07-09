@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript varargs.
-*/
-
 local fn f(a, ...) {
     local n = getargs("len", ...);
     local y = [...];

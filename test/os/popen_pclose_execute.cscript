@@ -30,11 +30,12 @@ checkerr("invalid mode", io.popen, "cat", "rw");
     assert(os.remove(file));
 }
 
+local devnull = __POSIX and "2> /dev/null" or "2> nul";
 local portwhat = __POSIX and "signal" or "exit";
 local tests = [
     /* command,   portwhat,  code */
     ["ls > /dev/null", "ok"],
-    ["not-to-be-found-command", "exit"],
+    ["not-to-be-found-command " .. devnull, "exit"],
     ["exit 3", "exit", 3],
     ["exit 129", "exit", 129],
     ["kill -s HUP $$", portwhat, 1],

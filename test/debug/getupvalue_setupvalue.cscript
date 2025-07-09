@@ -8,7 +8,6 @@ local f = assert(load("a = 1; b = 2; c = 3;", nil, env));
 f();
 assert(a == nil and b == nil and c == nil);
 assert(env.a == 1 and env.b == 2 and env.c == 3);
-print("+");
 
 /// 'f' upvalues are closed, it won't affect main function
 local env2 = {};
@@ -29,7 +28,6 @@ pcall(!setupvalue(f, 1, "bla")); /// too large index
 pcall(!setupvalue(f, -1, "bla")); /// too large index
 assert(!pcall(setupvalue, f, 0)); /// missing value
 assert(!pcall(setupvalue, f, "asd")); /// invalid index value
-print("+");
 
 
 /// __ENV is changed both for main function and the nested functions,

@@ -256,14 +256,14 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     cs_assert(pc < currPC); /* must of emitted instruction */
     if (c_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
         csM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
-                      fs->nabslineinfo, MAXINT, "lines", AbsLineInfo);
+                      fs->nabslineinfo, CS_MAXINT, "lines", AbsLineInfo);
         p->abslineinfo[fs->nabslineinfo].pc = pc;
         p->abslineinfo[fs->nabslineinfo++].line = line;
         linedif = ABSLINEINFO; /* signal the absolute line info entry */
         fs->iwthabs = 1; /* reset counter */
     }
     csM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
-                    MAXINT, "opcodes", c_byte);
+                    CS_MAXINT, "opcodes", c_byte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
         p->lineinfo[++pc] = ABSLINEINFO; /* set as invalid entry */
@@ -338,7 +338,7 @@ void csC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, MAXINT,
+    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, CS_MAXINT,
                   "instructions", Instruction);
     p->code[currPC++] = cast_byte(code);
 }
@@ -346,7 +346,7 @@ static void emitbyte(FunctionState *fs, int code) {
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, MAXINT,
+    csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, CS_MAXINT,
                     "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZE_ARG_L;
@@ -355,7 +355,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, MAXINT,
+    csM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, CS_MAXINT,
                   "instructions", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }

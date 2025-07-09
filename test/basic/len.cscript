@@ -1,7 +1,7 @@
 assert(len([69, 420, 1337]) == 3);
 assert(len({ a = 69, b = 420, c = "1337"}) == 3);
 assert(len("69,420,1337") == 11);
-a = class {
+local a = class {
     __init = fn() {
         self.x = 69;
         self.y = 420;

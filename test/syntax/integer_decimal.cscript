@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript decimal integers.
-*/
-
 assert(1);
 assert(1____ == 1);
 assert(120);

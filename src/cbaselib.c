@@ -17,7 +17,10 @@
 #include "cscriptlib.h"
 #include "cscriptlimits.h"
 
-#include "ctrace.h"
+
+// TODO: add docs
+static int b_clone(cs_State *C) {
+}
 
 
 static int b_error(cs_State *C) {
@@ -71,11 +74,11 @@ static int b_gc(cs_State *C) {
             int kb = cs_gc(C, opt); /* Kbytes */
             int b = cs_gc(C, CS_GC_COUNTBYTES); /* leftover bytes */
             checkres(kb);
-            cs_push_number(C, (cs_Number)kb + ((cs_Number)b/1024));
+            cs_push_number(C, cast_num(kb) + (cast_num(b)/1024));
             return 1;
         }
         case CS_GC_STEP: {
-            int nstep = (int)csL_opt_integer(C, 1, 0);
+            int nstep = cast_int(csL_opt_integer(C, 1, 0));
             int completecycle = cs_gc(C, opt, nstep);
             checkres(completecycle);
             cs_push_bool(C, completecycle);
@@ -85,7 +88,7 @@ static int b_gc(cs_State *C) {
             static const char *const params[] = {
                 "pause", "stepmul", "stepsize", NULL};
             int param = csL_check_option(C, 1, NULL, params);
-            int value = (int)csL_opt_integer(C, 2, -1);
+            int value = cast_int(csL_opt_integer(C, 2, -1));
             cs_push_integer(C, cs_gc(C, opt, param, value));
             return 1;
         }
@@ -96,9 +99,9 @@ static int b_gc(cs_State *C) {
             return 1;
         }
         case CS_GC_INC: {
-            int pause = (int)csL_opt_integer(C, 1, -1);
-            int stepmul = (int)csL_opt_integer(C, 2, -1);
-            int stepsize = (int)csL_opt_integer(C, 3, -1);
+            int pause = cast_int(csL_opt_integer(C, 1, -1));
+            int stepmul = cast_int(csL_opt_integer(C, 2, -1));
+            int stepsize = cast_int(csL_opt_integer(C, 3, -1));
             int oldmode = cs_gc(C, opt, pause, stepmul, stepsize);
             checkres(oldmode);
             cs_assert(oldmode == CS_GC_INC);
@@ -416,7 +419,7 @@ static int b_getargs(cs_State *C) {
         if (i < 0) i = nres + i;
         else if (i > nres) i = nres - 1;
         csL_check_arg(C, 0 <= i, 0, "index out of range");
-        return nres - (int)i; /* return 'nres-i' results */
+        return nres - cast_int(i); /* return 'nres-i' results */
     }
 }
 
@@ -650,6 +653,7 @@ static int b_range(cs_State *C) {
 
 
 static const cs_Entry basic_funcs[] = {
+    {"clone", b_clone},
     {"error", b_error},
     {"assert", b_assert},
     {"gc", b_gc},

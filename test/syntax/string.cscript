@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript strings.
-*/
-
 assert("test");                 # string
 assert("test");                 # (check reuse of interned strings)
 assert("");                     # empty string

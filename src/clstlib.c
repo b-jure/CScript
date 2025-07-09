@@ -17,7 +17,7 @@
 
 
 #define lbcheck(idx)        (0 <= (cs_Integer)(idx))
-#define ubcheck(idx)        ((cs_Integer)(idx) < MAXINT)
+#define ubcheck(idx)        ((cs_Integer)(idx) < CS_MAXINT)
 
 /* check if 'idx' is in bounds */
 #define bcheck(idx)         (lbcheck(idx) && ubcheck(idx))
@@ -137,7 +137,7 @@ static int lst_move(cs_State *C) {
 
 static int lst_new(cs_State *C) {
     cs_Unsigned size = (cs_Unsigned)csL_check_integer(C, 0);
-    csL_check_arg(C, size <= cast_uint(MAXINT), 0, "out of range");
+    csL_check_arg(C, size <= cast_uint(CS_MAXINT), 0, "out of range");
     cs_push_list(C, cast_int(size));
     return 1;
 }
@@ -366,7 +366,7 @@ static void auxsort(cs_State *C, Idx lo, Idx hi, unsigned rnd) {
 static int lst_sort(cs_State *C) {
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
     if (size > 1) { /* non trivial? */
-        csL_check_arg(C, size <= MAXINT, 0, "list too big");
+        csL_check_arg(C, size <= CS_MAXINT, 0, "list too big");
         if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
             csL_check_type(C, 1, CS_T_FUNCTION); /* it must be a function */
         cs_setntop(C, 2); /* make sure there are two arguments */
@@ -424,7 +424,7 @@ static cs_Entry lstlib[] = {
 
 CSMOD_API int csopen_list(cs_State *C) {
     csL_push_lib(C, lstlib);
-    cs_push_integer(C, MAXLISTINDEX);
+    cs_push_integer(C, CS_MAXLISTINDEX);
     cs_set_fieldstr(C, -2, "maxindex");
     return 1;
 }

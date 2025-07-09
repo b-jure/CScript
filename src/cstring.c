@@ -29,7 +29,7 @@
 
 
 /* maximum size for string table */
-#define MAXSTRTABLE     MAXINT
+#define MAXSTRTABLE     CS_MAXINT
 
 
 /* string equality */
@@ -46,8 +46,8 @@ int csS_eqlngstr(const OString *s1, const OString *s2) {
 ** a non-collectable string.)
 */
 void csS_clearcache(GState *gs) {
-    for (int i = 0; i < STRCACHE_N; i++) {
-        for (int j = 0; j < STRCACHE_M; j++) {
+    for (int i = 0; i < CSI_STRCACHE_N; i++) {
+        for (int j = 0; j < CSI_STRCACHE_M; j++) {
             if (iswhite(gs->strcache[i][j])) /* will entry be collected? */
                 gs->strcache[i][j] = gs->memerror;
         }
@@ -120,15 +120,15 @@ void csS_init(cs_State *C) {
     GState *gs = G(C);
     StringTable *tab = &gs->strtab;
     /* first initialize string table... */
-    tab->hash = csM_newarray(C, MINSTRTABSIZE, OString*);
-    rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
-    tab->size = MINSTRTABSIZE;
+    tab->hash = csM_newarray(C, CSI_MINSTRTABSIZE, OString*);
+    rehashtable(tab->hash, 0, CSI_MINSTRTABSIZE); /* clear array */
+    tab->size = CSI_MINSTRTABSIZE;
     cs_assert(tab->nuse == 0);
     /* allocate the memory-error message */
     gs->memerror = csS_newlit(C, MEMERRMSG);
     csG_fix(C, obj2gco(gs->memerror)); /* fix it */
-    for (int i = 0; i < STRCACHE_N; i++) /* fill cache with valid strings */
-        for (int j = 0; j < STRCACHE_M; j++)
+    for (int i = 0; i < CSI_STRCACHE_N; i++) /* fill cache with valid strings */
+        for (int j = 0; j < CSI_STRCACHE_M; j++)
             gs->strcache[i][j] = gs->memerror;
 }
 
@@ -163,9 +163,9 @@ void csS_remove(cs_State *C, OString *s) {
 
 /* grow string table */
 static void growtable(cs_State *C, StringTable *tab) {
-    if (c_unlikely(tab->nuse == MAXINT)) {
-        csG_full(C, 1); /* try to reclaim memory */
-        if (tab->nuse == MAXINT) /* still too many strings? */
+    if (c_unlikely(tab->nuse == CS_MAXINT)) {
+        csG_fullinc(C, 1); /* try to reclaim memory */
+        if (tab->nuse == CS_MAXINT) /* still too many strings? */
             csM_error(C);
     }
     if (tab->size <= MAXSTRTABLE / 2) /* can grow string table? */
@@ -208,7 +208,7 @@ OString *csS_newl(cs_State *C, const char *str, size_t l) {
         return internshrstr(C, str, l);
     } else { /* otherwise long string */
         OString *s;
-        if (c_unlikely(l*sizeof(char) >= (MAXSIZE-sizeof(OString))))
+        if (c_unlikely(l*sizeof(char) >= (CS_MAXSIZE-sizeof(OString))))
             csM_toobig(C);
         s = csS_newlngstrobj(C, l);
         memcpy(getlngstr(s), str, l*sizeof(char));
@@ -223,15 +223,15 @@ OString *csS_newl(cs_State *C, const char *str, size_t l) {
 ** only zero-terminated strings, so it is safe to use 'strcmp'.
 */
 OString *csS_new(cs_State *C, const char *str) {
-    c_uint i = pointer2uint(str) % STRCACHE_N; /* hash */
+    c_uint i = pointer2uint(str) % CSI_STRCACHE_N; /* hash */
     OString **p = G(C)->strcache[i]; /* address as key */
     int j;
-    for (j = 0; j < STRCACHE_M; j++) {
+    for (j = 0; j < CSI_STRCACHE_M; j++) {
         if (strcmp(str, getstr(p[j])) == 0) /* hit? */
             return p[j]; /* done */
     }
     /* normal route */
-    for (j = STRCACHE_M - 1; j > 0; j--) /* make space for new string */
+    for (j = CSI_STRCACHE_M - 1; j > 0; j--) /* make space for new string */
         p[j] = p[j - 1]; /* move out last element */
     /* new string is first in the list */
     p[0] = csS_newl(C, str, strlen(str));

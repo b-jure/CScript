@@ -16,8 +16,8 @@
 #include <math.h>
 
 
-#if SIZE_MAX < UMAXINT
-#error SIZE_MAX must be greater or equal UMAXINT
+#if SIZE_MAX < UCS_MAXINT
+#error SIZE_MAX must be greater or equal UCS_MAXINT
 #endif
 
 #if ((UINT_MAX >> 30) < 3)

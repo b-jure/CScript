@@ -124,12 +124,15 @@ void csG_fix(cs_State *C, GCObject *o) {
 }
 
 
-/* set collector gcdebt */
+/*
+** Set gcdebt to a new value keeping the value (totalbytes + gcdebt)
+** invariant (and avoiding underflows in 'totalbytes').
+*/
 void csG_setgcdebt(GState *gs, c_mem debt) {
     c_mem total = gettotalbytes(gs);
     cs_assert(total > 0);
-    if (debt < total - MAXMEM) /* 'totalbytes' would underflow ? */
-        debt = total - MAXMEM; /* set maximum relative debt possible */
+    if (debt < total - CS_MAXMEM) /* 'totalbytes' would underflow ? */
+        debt = total - CS_MAXMEM; /* set maximum relative debt possible */
     gs->totalbytes = total - debt;
     gs->gcdebt = debt;
 }
@@ -790,20 +793,20 @@ static c_umem atomic(cs_State *C) {
 }
 
 
-/* 
-** Set collector pause; the new threshold is calculated as
-** 'gcestimate' / 'pause'. 'PAUSEADJ' is there to provide more
-** precise control over when collection occurs (the value is chosen
-** by testing from the side of Lua developers).
+/*
+** Set the "time" to wait before starting a new GC cycle; cycle will
+** start when memory use hits the threshold of ('estimate' * pause /
+** PAUSEADJ). (Division by 'estimate' should be OK: it cannot be zero,
+** because CScript cannot even start with less than PAUSEADJ bytes).
 */
 static void setpause(GState *gs) {
     c_mem threshold, debt;
     int pause = getgcparam(gs->gcparams[CS_GCP_PAUSE]);
     c_mem estimate = gs->gcestimate / PAUSEADJ; /* adjust estimate */
     cs_assert(estimate > 0);
-    threshold = (pause < MAXMEM / estimate) /* can fit ? */
+    threshold = (pause < CS_MAXMEM / estimate) /* can fit ? */
               ? estimate * pause /* yes */
-              : MAXMEM; /* no, overflows; truncate to maximum */
+              : CS_MAXMEM; /* overflow; truncate to maximum */
     /* debt = totalbytes - ((gcestimate/100)*pause) */
     debt = gettotalbytes(gs) - threshold;
     if (debt > 0) debt = 0;
@@ -830,7 +833,8 @@ static void restartgc(GState *gs) {
 ** sweeps all the objects in 'objects'. GCSsweepfin sweeps all the objects
 ** in 'fin'. GCSsweeptofin sweeps all the objects in 'tobefin'. GCSsweepend
 ** indicates end of the sweep phase. GCScallfin calls finalizers of all the
-** objects in 'tobefin' and puts them back into 'objects' list after the call.
+** objects in 'tobefin' and puts them back into 'objects' list, before the
+** call to finalizer.
 */
 static c_umem singlestep(cs_State *C) {
     c_umem work;
@@ -947,8 +951,8 @@ static void step(cs_State *C, GState *gs) {
     c_ubyte nbits = gs->gcparams[CS_GCP_STEPSIZE];
     c_mem debt = (gs->gcdebt / WORK2MEM) * stepmul;
     c_mem stepsize = (nbits <= sizeof(c_mem) * 8 - 2) /* fits ? */
-                    ? ((cast_smem(1) << nbits) / WORK2MEM) * stepmul
-                    : MAXMEM; /* overflows; keep maximum value */
+                    ? ((cast_mem(1) << nbits) / WORK2MEM) * stepmul
+                    : CS_MAXMEM; /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
         c_umem work = singlestep(C); /* perform one single step */
         debt -= work;
@@ -971,13 +975,11 @@ void csG_step(cs_State *C) {
 }
 
 
-static void fullcycle(cs_State *C, GState *gs) {
-    if (keepinvariant(gs)) /* already have black objects? */
-        entersweep(C); /* if so sweep them first to turn them back to white */
+static void fullinc(cs_State *C, GState *gs) {
+    if (keepinvariant(gs)) /* have black objects? */
+        entersweep(C); /* sweep all tto turn them back to white */
     /* finish any pending sweep phase to start a new cycle */
     csG_rununtilstate(C, bitmask(GCSpause));
-    csG_rununtilstate(C, bitmask(GCSpropagate)); /* start a new cycle */
-    gs->gcstate = GCSenteratomic; /* go straight to atomic phase */
     csG_rununtilstate(C, bitmask(GCScallfin)); /* run up to finalizers */
     /* estimate must be correct after full GC cycle */
     cs_assert(gs->gcestimate == gettotalbytes(gs));
@@ -986,11 +988,11 @@ static void fullcycle(cs_State *C, GState *gs) {
 }
 
 
-void csG_full(cs_State *C, int isemergency) {
+void csG_fullinc(cs_State *C, int isemergency) {
     GState *gs = G(C);
     cs_assert(!gs->gcemergency);
     gs->gcemergency = isemergency;
-    fullcycle(C, G(C));
+    fullinc(C, G(C));
     gs->gcemergency = 0;
 }
 

@@ -1,8 +1,4 @@
-/*
-** Test script file for CScript classes and instances.
-*/
-
-a = {};
+local a = {};
 assert(typeof(a) == "table");
 a.b = class {
     fn name() {

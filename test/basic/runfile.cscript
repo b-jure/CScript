@@ -1,7 +1,8 @@
-local x, y, z = runfile("test/stdlibs/basic/loadfile_script");
+local x, y, z = runfile("basic/loadfile_script");
 assert(a == 69);
 assert(b == 420);
 assert(c == 1337);
 assert(x == a);
 assert(y == b);
 assert(z == c);
+__G.a, __G.b, __G.c = nil, nil, nil;

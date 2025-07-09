@@ -238,7 +238,7 @@ static int s_repeat(cs_State *C) {
     const char *sep = csL_opt_lstring(C, 2, "", &lsep);
     if (c_unlikely(n <= 0))
         cs_push_literal(C, "");
-    else if (l+lsep < l || l+lsep > STR_MAXSIZE/n)
+    else if (l+lsep < l || l+lsep > STR_CS_MAXSIZE/n)
         csL_error(C, "resulting string too large");
     else {
         csL_Buffer b;
@@ -946,7 +946,7 @@ static int auxgetbytes(cs_State *C, int pack) {
             size_t posj = posrelEnd(j, l);
             if (posj >= posi) { /* non-empty interval? */
                 if (c_unlikely((posj-posi)+1 <= (posj-posi) ||
-                            cast_sizet(MAXINT) <= (posj-posi)+1))
+                            cast_sizet(CS_MAXINT) <= (posj-posi)+1))
                     return csL_error(C, strtoolong);
                 else if (pack) /* pack bytes into a list? */
                     return getbytes_list(C, s, posi, posj);

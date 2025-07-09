@@ -59,7 +59,7 @@ static c_uint hashflt(cs_Number n) {
     n = c_mathop(frexp(n, &exp)) * -cast_num(INT_MIN);
     if (c_likely(cs_number2integer(n, &ni))) {
         c_uint ui = cast_uint(exp) + cast_uint(ni);
-        return (ui <= cast_uint(MAXINT) ? ui : cast_uint(~ui));
+        return (ui <= cast_uint(CS_MAXINT) ? ui : cast_uint(~ui));
     }
     /* nan or -inf/+inf */
     cs_assert(c_numisnan(n) || c_mathop(fabs)(n) == cast_num(HUGE_VAL));
@@ -69,7 +69,7 @@ static c_uint hashflt(cs_Number n) {
 
 static Node *hashint(const Table *t, cs_Integer i) {
     cs_Unsigned ui = c_castS2U(i);
-    if (ui <= cast_uint(MAXINT))
+    if (ui <= cast_uint(CS_MAXINT))
         return hashpow2(t, cast_int(ui));
     else
         return hashpow2(t, ui);

@@ -1534,15 +1534,15 @@ CS_API int cs_gc(cs_State *C, int option, ...) {
             break;
         }
 	case CS_GC_COLLECT: { /* start GC cycle */
-            csG_full(C, 0);
+            csG_fullinc(C, 0);
             break;
         }
-	case CS_GC_COUNT: { /* total GC memory count in Kibibytes */
-            res = gettotalbytes(gs) >> 10;
+	case CS_GC_COUNT: { /* total GC memory count (in Kbytes) */
+            res = cast_int(gettotalbytes(gs) >> 10);
             break;
         }
-	case CS_GC_COUNTBYTES: { /* remainder bytes of total memory / 1024 */
-            res = gettotalbytes(gs) & 0x3FF; /* all bits before 10th bit */
+	case CS_GC_COUNTBYTES: { /* remainder bytes of totalbytes/1024 */
+            res = cast_int(gettotalbytes(gs) & 0x3FF); /* all before bit 10 */
             break;
         }
 	case CS_GC_STEP: { /* perform GC step */
@@ -1785,7 +1785,7 @@ CS_API int cs_getstack(cs_State *C, int level, cs_Debug *ar) {
 
 // TODO: add docs
 CS_API int cs_stackinuse(cs_State *C) {
-    cs_assert(MAXINT >= savestack(C, C->sp.p));
+    cs_assert(CS_MAXINT >= savestack(C, C->sp.p));
     return cast_int(savestack(C, C->sp.p));
 }
 

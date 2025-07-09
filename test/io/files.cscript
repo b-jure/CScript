@@ -1,4 +1,5 @@
 local maxint = math.maxint;
+local oldout = io.output();
 
 
 local fn testerr(msg, f, ...) {
@@ -96,6 +97,7 @@ assert(!os.rename(fname, otherfname));
 io.output(io.open(otherfname, "ab"));
 assert(io.write("\n\n\t\t  ", 3450, "\n"));
 io.close();
+io.output(oldout);
 
 {
     /* closing file by scope */
@@ -230,6 +232,7 @@ foreach l in io.lines(fname) {
     n = n + 1;
 }
 io.close();
+io.output(oldout);
 assert(n == 6);
 /* copy from otherfname back to fname */
 f = assert(io.open(otherfname));
@@ -242,7 +245,7 @@ foreach l in f.lines() {
     n = n + 1;
 }
 assert(string.substr(tostr(f), 0, 4) == "file ");
-assert(f.close()); io.close();
+assert(f.close()); io.close(); io.output(oldout);
 assert(n == 6);
 checkerr("closed file", io.close, f);
 assert(tostr(f) == "file (closed)");
@@ -262,7 +265,7 @@ assert(os.remove(otherfname));
 { /* test with lots of arguments */
     io.output(otherfname);
     io.write(string.repeat("a", 300), "\n");
-    io.close();
+    io.close(); io.output(oldout);
     local a = [];
     for (local i = 0; i < 300; i = i + 1) a[i] = 1;
     a = [io.lines(otherfname, list.flatten(a))()];
@@ -325,6 +328,7 @@ assert(io.write(";", "end of file\n"));
 f.flush();
 io.flush();
 f.close();
+io.output(oldout);
 
 io.input(fname);
 assert(io.read() == "alo");
@@ -372,6 +376,7 @@ assert(io.read("L") == "line\n");
 assert(io.read("L") == "other");
 assert(!io.read("L"));
 io.input().close();
+io.output(oldout);
 
 f = assert(io.open(fname));
 s = "";
@@ -399,8 +404,10 @@ assert(s == "lineother");
 
 io.output(fname);
 io.write("a = 10 + 34;\na = 2*a;\na = -a;\n").close();
+io.output(oldout);
 assert(load((io.lines(fname, "L"))))();
 assert(__G.a == -((10 + 34) * 2));
+__G.a = nil;
 
 
 
@@ -468,12 +475,12 @@ assert(!os.remove(otherfname));
 
 /* testing loadfile */
 local fn testloadfile(s, expres) {
-  io.output(fname);
-  if (s) io.write(s);
-  io.close();
-  local res = assert(loadfile(fname))();
-  assert(os.remove(fname));
-  assert(res == expres);
+    io.output(fname);
+    if (s) io.write(s);
+    io.close();
+    local res = assert(loadfile(fname))();
+    assert(os.remove(fname));
+    assert(res == expres);
 }
 
 /* loading empty file */
@@ -533,8 +540,8 @@ and the rest of the file]=]).close();
 }
 
 
-# testing buffers
-{
+
+{ /// testing buffers
     local f = assert(io.open(fname, "w"));
     local fr = assert(io.open(fname, "r"));
     assert(f.setvbuf("full", 2000));
@@ -579,3 +586,5 @@ and the rest of the file]=]).close();
     assert(os.remove(fname));
     x = nil; y = nil;
 }
+
+io.output(oldout);

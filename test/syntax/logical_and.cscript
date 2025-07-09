@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript logical AND operator.
-*/
-
 assert((nil and 5) == nil);
 assert((5 and 6) == 6);
 assert((true and 420 and false) == false);
@@ -9,7 +5,7 @@ assert((true and 420 and 69) == 69);
 assert((true and false and 420) == false);
 assert((nil and false and 420) == nil);
 assert((nil and true and 420) == nil);
-a = true;
+local a = true;
 assert((a and true and false) == false);
 assert((a and true and 420) == 420);
 assert((a and false and true) == false);

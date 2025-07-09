@@ -1,8 +1,4 @@
-/*
-** Test script file for CScript tables.
-*/
-
-a = {};
+local a = {};
 assert(a);
 # set some fields
 a.x = 1;

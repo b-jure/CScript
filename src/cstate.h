@@ -138,7 +138,7 @@ typedef struct GState {
     OString *listfields[LFNUM]; /* array with names of list fields */
     OString *memerror; /* preallocated message for memory errors */
     OString *mmnames[CS_MT_NUM]; /* array with metamethod names */
-    OString *strcache[STRCACHE_N][STRCACHE_M]; /* cache for strings in API */
+    OString *strcache[CSI_STRCACHE_N][CSI_STRCACHE_M]; /* cache for strings in API */
     cs_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
 } GState;

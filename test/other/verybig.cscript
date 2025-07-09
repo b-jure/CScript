@@ -131,6 +131,7 @@ local F = [
 ];
 
 local file = os.tmpname();
+local oldout = io.output();
 io.output(file);
 foreach s in reg.gmatch(prog, "$([^$]+)") {
     local n = tonum(s);
@@ -138,6 +139,6 @@ foreach s in reg.gmatch(prog, "$([^$]+)") {
     else F[n]();
 }
 io.close();
-local result = runfile(file);
+runfile(file);
 assert(os.remove(file));
-return result;
+io.output(oldout);

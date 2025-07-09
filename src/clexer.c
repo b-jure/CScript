@@ -76,7 +76,7 @@ void csY_init(cs_State *C) {
     OString *e = csS_newlit(C, CS_ENV); /* create env name */
     csG_fix(C, obj2gco(e)); /* never collect this name */
     /* create keyword names and never collect them */
-    cs_assert(NUM_KEYWORDS <= MAXUBYTE);
+    cs_assert(NUM_KEYWORDS <= CS_MAXUBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = csS_new(C, tkstr[i]);
         s->extra = cast_byte(i + 1);
@@ -93,7 +93,7 @@ static c_noret lexerror(Lexer *lx, const char *err, int token);
 c_sinline void savec(Lexer *lx, int c) {
     if (csR_bufflen(lx->buff) >= csR_buffsize(lx->buff)) {
         size_t newsize;
-        if (csR_buffsize(lx->buff) >= MAXSIZE / 2)
+        if (csR_buffsize(lx->buff) >= CS_MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
         newsize = csR_buffsize(lx->buff) * 2;
         csR_buffresize(lx->C, lx->buff, newsize);
@@ -175,7 +175,7 @@ static void inclinenr(Lexer *lx) {
     advance(lx); /* skip '\n' or '\r' */
     if (currIsNewline(lx) && lx->c != old_c) /* have "\r\n" or "\n\r"? */
         advance(lx); /* skip it */
-    if (c_unlikely(++lx->line >= MAXINT))
+    if (c_unlikely(++lx->line >= CS_MAXINT))
         lexerror(lx, "too many lines in a chunk", 0);
 }
 

@@ -12,15 +12,15 @@
 
 
 typedef size_t          c_umem;
-#define MAXUMEM         ((c_umem)(~(c_umem)(0)))
+#define CS_MAXUMEM      ((c_umem)(~(c_umem)(0)))
 typedef ptrdiff_t       c_mem;
-#define MAXMEM          ((c_mem)(MAXUMEM >> 1))
+#define CS_MAXMEM       ((c_mem)(CS_MAXUMEM >> 1))
 
 
 typedef unsigned char   c_ubyte;
-#define MAXUBYTE        ((c_ubyte)(~(c_ubyte)(0)))
+#define CS_MAXUBYTE     ((c_ubyte)(~(c_ubyte)(0)))
 typedef signed char     c_byte;
-#define MAXBYTE         ((c_ubyte)(MAXUBYTE >> 1))
+#define MAXBYTE         ((c_ubyte)(CS_MAXUBYTE >> 1))
 
 
 /* 
@@ -36,14 +36,14 @@ typedef unsigned long   c_ulong;
 
 
 /* maximum value that fits in 'int' type */
-#define MAXINT      INT_MAX
+#define CS_MAXINT       INT_MAX
 
 
 /*
 ** Maximum size visible for CScript.
 ** It must be less than what is representable by 'cs_Integer'.
 */
-#define MAXSIZE \
+#define CS_MAXSIZE \
         (sizeof(size_t) < sizeof(cs_Integer) \
             ? (SIZE_MAX) \
             : (size_t)(CS_INTEGER_MAX))
@@ -126,8 +126,8 @@ typedef c_ubyte Instruction;
 
 
 
-#if !defined(MAXLISTINDEX)
-#define MAXLISTINDEX        (MAXINT - 1)
+#if !defined(CS_MAXLISTINDEX)
+#define CS_MAXLISTINDEX         (CS_MAXINT - 1)
 #endif
 
 
@@ -139,7 +139,7 @@ typedef c_ubyte Instruction;
 ** strlen("continue") = 8, strlen("__getidx") = 8.)
 */
 #if !defined(CSI_MAXSHORTLEN)
-#define CSI_MAXSHORTLEN	    40
+#define CSI_MAXSHORTLEN	        40
 #endif
 
 
@@ -150,8 +150,8 @@ typedef c_ubyte Instruction;
 ** metamethod keys + a few others). Libraries would typically add
 ** a few dozens more.
 */
-#if !defined(MINSTRTABSIZE)
-#define MINSTRTABSIZE	    128
+#if !defined(CSI_MINSTRTABSIZE)
+#define CSI_MINSTRTABSIZE	128
 #endif
 
 
@@ -161,9 +161,9 @@ typedef c_ubyte Instruction;
 ** sets (better be a prime) and "M" is the size of each set (M == 1
 ** makes a direct cache.)
 */
-#if !defined(STRCACHE_N)
-#define STRCACHE_N	    53  /* cache lines */
-#define STRCACHE_M	    2   /* cache line size * sizeof(OString*) */
+#if !defined(CSI_STRCACHE_N)
+#define CSI_STRCACHE_N	        53  /* cache lines */
+#define CSI_STRCACHE_M	        2   /* cache line size * sizeof(OString*) */
 #endif
 
 
@@ -227,86 +227,70 @@ typedef c_ubyte Instruction;
 ** @UNUSED - marks variable unused to avoid compiler
 ** warnings.
 */
-#ifndef UNUSED
+#if !defined(UNUSED)
 #define UNUSED(x)   ((void)(x))
 #endif
 
 
 
-/* @cast - cast expression 'e' as type 't'. */
+#if !defined(cast)
+
 #define cast(t, e)          ((t)(e))
 
-#define cast_node(e)        cast(Node*,(e))
+#define cast_void(e)        cast(void,(e))
+#define cast_voidp(e)       cast(void *,(e))
+#define cast_num(e)         cast(cs_Number,(e))
 #define cast_byte(e)        cast(c_ubyte,(e))
 #define cast_bytep(e)       cast(c_ubyte*,(e))
 #define cast_sbyte(e)       cast(c_byte,(e))
-#define cast_num(e)         cast(cs_Number,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(c_uint,(e))
-#define cast_mem(e)         cast(c_umem,(e))
-#define cast_smem(e)        cast(c_mem,(e))
+#define cast_umem(e)        cast(c_umem,(e))
+#define cast_mem(e)         cast(c_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_char(e)        cast(char,(e))
 #define cast_uchar(e)       cast(unsigned char,(e))
 #define cast_sizet(e)       cast(size_t,(e))
-#define cast_voidp(e)       cast(void *,(e))
-#define cast_void(e)        cast(void,(e))
 
-/* cast 'cs_Integer' to 'cs_Unsigned' */
 #define c_castS2U(i)        ((cs_Unsigned)(i))
 
-/* cast 'cs_Unsigned' to 'cs_Integer' */
 #define c_castU2S(i)        ((cs_Integer)(i))
+
+#endif
 
 
 /* literal length */
-#define LL(sl)     (sizeof(sl) - 1)
+#if !defined(LL)
+#define LL(sl)      (sizeof(sl) - 1)
+#endif
 
 
+#if !defined(c_nummod)
 
-/* @c_nummod - modulo 'a - floor(a/b)*b'. */
+/* modulo 'a - floor(a/b)*b' */
 #define c_nummod(C,a,b,m) \
         { (void)(C); (m) = c_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b) < 0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
-/* @c_numdiv - float division. */
-#ifndef c_numdiv
 #define c_numdiv(C, a, b)       ((void)(C), (a)/(b))
-#endif
 
-/* @c_numidiv - float floor division. */
-#ifndef c_numidiv
 #define c_numidiv(C, a, b)      ((void)(C), c_floor(c_numdiv(C,a,b)))
-#endif
 
-/* @c_numpow - exponentiation. */
-#ifndef c_numpow
 #define c_numpow(C, a, b) \
         ((void)(C), (b) == 2 ? (a)*(a) : c_mathop(pow)(a, b))
+
 #endif
 
-/*
-** @c_numadd - addition.
-** @c_numsub - subtraction.
-** @c_nummul - multiplication.
-** @c_numunm - negation.
-*/
-#ifndef c_numadd
+
+#if !defined(c_numadd)
 #define c_numadd(C, a, b)       ((void)(C), (a) + (b))
 #define c_numsub(C, a, b)       ((void)(C), (a) - (b))
 #define c_nummul(C, a, b)       (void)(C), ((a) * (b))
 #define c_numunm(C, a)          ((void)(C), -(a))
 #endif
 
-/*
-** @c_numeq - ordering equal.
-** @c_numne - ordering not equal.
-** @c_numlt - ordering less than.
-** @c_numle - ordering less equal.
-** @c_numgt - ordering greater than.
-** @c_numge - ordering greater equal.
-*/
-#ifndef c_numeq
+
+#if !defined(c_numeq)
 #define c_numeq(a, b)       ((a) == (b))
 #define c_numne(a, b)       (!c_numeq(a, b))
 #define c_numlt(a, b)       ((a) < (b))
@@ -315,8 +299,8 @@ typedef c_ubyte Instruction;
 #define c_numge(a, b)       ((a) >= (b))
 #endif
 
-/* @c_numisnan - check if number is 'NaN'. */
-#ifndef c_numisnan
+
+#if !defined(c_numisnan)
 #define c_numisnan(a)       (!c_numeq(a, a))
 #endif
 
@@ -324,7 +308,7 @@ typedef c_ubyte Instruction;
 /*
 ** Macro to control inclusion of some hard tests on stack reallocation.
 */
-#if !defined(HARDSTACKTESTS)
+#if !defined(CSI_HARDSTACKTESTS)
 #define condmovestack(C,pre,pos)    ((void)0)
 #else
 /* realloc stack keeping its size */
@@ -333,33 +317,20 @@ typedef c_ubyte Instruction;
 #endif
 
 
-#if !defined(HARDMEMTESTS)
+#if !defined(CSI_HARDMEMTESTS)
 #define condchangemem(C,pre,pos)    ((void)0)
 #else
 #define condchangemem(C,pre,pos)  \
-    { if (gcrunning(G(C))) { pre; csG_full(C, 0); pos; } }
+    { if (gcrunning(G(C))) { pre; csG_fullinc(C, 0); pos; } }
 #endif
-
 
 
 /* write a message to 'fp' stream */
 #if !defined(cs_writelen)
-#define cs_writelen(fp,s,l)    fwrite((s), sizeof(char), (l), fp)
-#endif
-
-/* write a newline to 'fp' and flush it */
-#if !defined(cs_writeline)
-#define cs_writeline(fp)       (cs_writelen(fp, "\n", 1), fflush(fp))
-#endif
-
-/* write formatted message to 'fp' and flush it */
-#if !defined(cs_writefmt)
-#define cs_writefmt(fp, msg, ...)  (fprintf(fp, msg, __VA_ARGS__), fflush(fp))
-#endif
-
-/* write formatted message to 'fp' ('ap' is va_list) and flush it */
-#if !defined(cs_writevfmt)
-#define cs_writevfmt(fp,msg,ap)    (vfprintf(fp, msg, ap), fflush(fp))
+#define cs_writelen(fp,s,l)         fwrite((s), sizeof(char), (l), fp)
+#define cs_writeline(fp)            (cs_writelen(fp, "\n", 1), fflush(fp))
+#define cs_writefmt(fp, msg, ...)   (fprintf(fp, msg, __VA_ARGS__), fflush(fp))
+#define cs_writevfmt(fp,msg,ap)     (vfprintf(fp, msg, ap), fflush(fp))
 #endif
 
 

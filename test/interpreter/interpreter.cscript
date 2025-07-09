@@ -63,7 +63,7 @@ local fn NoRun(msg, p, ...) {
   assert(reg.find(getoutput(), msg, 0, true));  /// check error message
 }
 
-RUN("cscript -v");
+RUN("cscript -v > /dev/null 2>&1");
 
 printf("(temporary program file used in these tests: %)", prog);
 
@@ -481,13 +481,14 @@ NoRun("'-l' needs argument", "cscript -l");
 
 
 {
+    local Cwarn = (__C and __C.warn) or warn;
     /// 'warn' must get at least one argument
-    local st, msg = pcall(warn);
+    local st, msg = pcall(Cwarn);
     assert(string.find(msg, "string expected"));
 
     /// 'warn' does not leave unfinished warning in case of errors
     /// (message would appear in next warning)
-    st, msg = pcall(warn, "SHOULD NOT APPEAR", {});
+    st, msg = pcall(Cwarn, "SHOULD NOT APPEAR", {});
     assert(string.find(msg, "string expected"));
 }
 

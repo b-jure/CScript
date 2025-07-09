@@ -9,8 +9,10 @@ local fn checkerror(msg, f, ...) {
 
 {
     print("testing 'list.new'");
+    assert(gc("isrunning"));
     local N = 10000;
     gc();
+    gc(); /* again in case of finalizers (if called from 'test.cscript' */
     local m = gc("count") * 1024;
     local l = list.new(N);
     local memdiff = gc("count") * 1024 - m;
@@ -138,7 +140,7 @@ local fn checkerror(msg, f, ...) {
         foreach n in range(a.len-1, 0, -1)
             assert(!f(a[n], a[n-1]));
     }
-    a = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+    local a = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
          "Oct", "Nov", "Dec"];
     list.sort(a);
     check(a);

@@ -1,8 +1,4 @@
-/*
-** Test script file for CScript unary bitwise not operator.
-*/
-
-a = ~0;                     # (folded)
+local a = ~0;                     # (folded)
 assert(a == -1);
 a = ~~0;                    # (folded)
 assert(a == 0);

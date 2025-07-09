@@ -41,3 +41,5 @@ func, err = load(chunk);
 assert(func == nil);
 assert(err != nil);
 assert(typeof(err) == "string");
+
+__G.a = nil;

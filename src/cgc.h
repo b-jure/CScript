@@ -166,7 +166,7 @@
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */
-#define gettotalbytes(gs)       cast_mem((gs)->totalbytes + (gs)->gcdebt)
+#define gettotalbytes(gs)       cast_umem((gs)->totalbytes + (gs)->gcdebt)
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a
@@ -179,7 +179,7 @@
 CSI_FUNC GCObject *csG_new(cs_State *C, size_t size, int tt_);
 CSI_FUNC GCObject *csG_newoff(cs_State *C, size_t sz, int tt_, size_t offset);
 CSI_FUNC void csG_step(cs_State *C);
-CSI_FUNC void csG_full(cs_State *C, int isemergency);
+CSI_FUNC void csG_fullinc(cs_State *C, int isemergency);
 CSI_FUNC void csG_rununtilstate(cs_State *C, int statemask);
 CSI_FUNC void csG_freeallobjects(cs_State *C);
 CSI_FUNC void csG_checkfin(cs_State *C, GCObject *o, List *metalist);

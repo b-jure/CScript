@@ -1,3 +1,5 @@
+local debug = import("debug");
+
 assert(typeof(1<2) == "boolean");
 assert(typeof(true) == "boolean" and typeof(false) == "boolean");
 assert(typeof(nil) == "nil"

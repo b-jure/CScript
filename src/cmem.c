@@ -55,7 +55,7 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 c_sinline void *tryagain(cs_State *C, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G(C);
     if (cantryagain(gs)) {
-        csG_full(C, 1); /* try to reclaim some memory... */
+        csG_fullinc(C, 1); /* try to reclaim some memory... */
         return callfalloc(gs, ptr, osz, nsz); /* ...and try again */
     }
     return NULL; /* cannot run an emergency collection */

@@ -1,4 +1,4 @@
-a = [];
+local a = [];
 assert(a);
 # set some indices
 a[0] = 1;

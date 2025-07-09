@@ -193,7 +193,7 @@ static int collect_args(char **argv, int *first) {
             case 'h': /* '-h' */
                 if (argv[i][2] != '\0')
                     return arg_error;
-                args |= arg_v;
+                args |= arg_h;
                 break;
             case 'e': /* '-e' */
                 args |= arg_e;

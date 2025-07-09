@@ -134,7 +134,7 @@ static int utf8_codepoint(cs_State *C) {
     csL_check_arg(C, posj < (cs_Integer)len+!len, 2, stroob);
     if (posj < posi || len == 0) return 0; /* empty interval or empty string */
     if (c_unlikely(cast_sizet(posj-posi) + 1u <= cast_sizet(posj-posi) ||
-                   MAXINT <= cast_sizet(posj-posi) + 1u)) /* overflow? */
+                   CS_MAXINT <= cast_sizet(posj-posi) + 1u)) /* overflow? */
         return csL_error(C, strtoolong);
     n = cast_int(posj-posi) + 1; /* upper bound for number of returns */
     csL_check_stack(C, n, strtoolong);

@@ -369,9 +369,9 @@ static void newttarget(Lexer *lx, int pc) {
     ParserState *ps = lx->ps;
     cs_assert(pc != NOPC);
     if (pc == getlasttarget(lx)) return; /* do not insert duplicates */
-    csP_checklimit(fs, ps->ttargets.len, MAXINT, "tests");
+    csP_checklimit(fs, ps->ttargets.len, CS_MAXINT, "tests");
     csM_growarray(lx->C, ps->ttargets.arr, ps->ttargets.size,
-                         ps->ttargets.len, MAXINT, "tests", int);
+                         ps->ttargets.len, CS_MAXINT, "tests", int);
     ps->ttargets.arr[ps->ttargets.len++] = pc;
 }
 
@@ -382,7 +382,7 @@ static void newttarget(Lexer *lx, int pc) {
 static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
     GotoList *gl = &lx->ps->gt;
     int n = gl->len;
-    csM_growarray(lx->C, gl->arr, gl->size, n, MAXINT, "pending jumps", Goto);
+    csM_growarray(lx->C, gl->arr, gl->size, n, CS_MAXINT, "pending jumps", Goto);
     gl->arr[n].pc = pc;
     gl->arr[n].nactlocals = lx->fs->nactlocals;
     gl->arr[n].close = close;
@@ -693,7 +693,7 @@ static int addlocal(Lexer *lx, OString *name) {
     LVar *local;
     csP_checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
     csM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
-                         ps->actlocals.len, MAXINT, "locals", LVar);
+                         ps->actlocals.len, CS_MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
     local->s.name = name;
@@ -963,11 +963,11 @@ static void listfield(Lexer *lx, LConstructor *c) {
 
 static void checklistlimit(FunctionState *fs, LConstructor *c) {
     int size;
-    if (c->narray <= MAXINT - c->tostore)
+    if (c->narray <= CS_MAXINT - c->tostore)
        size = c->narray + c->tostore;
     else /* otherwise overflow */
-        size = MAXINT; /* force error */
-    csP_checklimit(fs, size, MAXINT, "elements in a list constructor");
+        size = CS_MAXINT; /* force error */
+    csP_checklimit(fs, size, CS_MAXINT, "elements in a list constructor");
 }
 
 
@@ -1045,7 +1045,7 @@ static void tabfield(Lexer *lx, TConstructor *c) {
     FunctionState *fs = lx->fs;
     ExpInfo t, k, v;
     if (check(lx, TK_NAME)) {
-        csP_checklimit(fs, c->nhash, MAXINT, "records in a table constructor");
+        csP_checklimit(fs, c->nhash, CS_MAXINT, "records in a table constructor");
         expname(lx, &k);
     } else
         tabindex(lx, &k);

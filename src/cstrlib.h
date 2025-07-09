@@ -30,8 +30,8 @@
 #define MAX_SIZET	cast_sizet(~cast_sizet(0))
 
 
-#define STR_MAXSIZE \
-	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : cast_sizet(MAXINT))
+#define STR_CS_MAXSIZE \
+	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : cast_sizet(CS_MAXINT))
 
 
 /*

@@ -1,11 +1,7 @@
-/*
-** Test script file for CScript left bit shift operator.
-*/
-
 assert(1<<2 == 4);          # (folded)
 assert(2<<3 == 16);         # (folded)
 assert(8<<-3 == 1);         # (folded)
-a = 2<<2;                   # (folded)
+local a = 2<<2;                   # (folded)
 assert(a == 8);
 assert(a<<3 == 64);         # (not folded)
 assert(3<<a == 768);        # (not folded)

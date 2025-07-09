@@ -61,16 +61,17 @@ local getinfo = db.getinfo;
     /// invalid option errors
     checkerr("invalid option", getinfo, f, "Z");
     checkerr("invalid option '>'", getinfo, f, ">");
-
-    print("+inactive CScript function");
 }
 
+local extra = 0;
+if reg.find(db.traceback(nil, 0), "test%.cscript")
+    extra = 6; /* if 'cscript.test' is changed this might need update */
 
 { /// active CScript functions
     local t = getinfo(1);
     assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
     assert(t.defline == 0 and t.lastdefline == 0 and t.what == "main");
-    assert(t.currline == 70);
+    assert(t.currline == 71);
     assert(t.nupvals == 1 and t.nparams == 0 and t.isvararg == true);
     assert(t.name == nil and t.namewhat == "");
     assert(t.ftransfer == 0 and t.ntransfer == 0); 
@@ -82,22 +83,21 @@ local getinfo = db.getinfo;
     foreach k,v in pairs(t.activelines)
         max = max > k and max or k;
     assert(max >= 65); /// at least this many active lines
-    assert(getinfo(3) == nil); /// level out of range
-    print("+active CScript function");
+    assert(getinfo(3 + extra) == nil); /// level out of range
 }
 
+local Cprint = (__C and __C.print) or print;
 
 { /// inactive C function
-    local t = getinfo(print);
+    local t = getinfo(Cprint);
     assert(string.find(t.source, "[C]") and string.find(t.shortsrc, "[C]"));
     assert(t.defline == -1 and t.lastdefline == -1 and t.what == "C");
     assert(t.currline == -1);
     assert(t.nupvals == 0 and t.nparams == 0 and t.isvararg == true);
     assert(t.name == nil and t.namewhat == "");
     assert(t.ftransfer == 0 and t.ntransfer == 0); 
-    assert(t.activelines == nil and getinfo(print, "L").activelines == nil);
-    assert(t.func == print);
-    print("+inactive C function");
+    assert(t.activelines == nil and getinfo(Cprint, "L").activelines == nil);
+    assert(t.func == Cprint);
 }
 
 
@@ -109,7 +109,6 @@ local getinfo = db.getinfo;
     assert(t.nupvals == 0 and t.nparams == 0 and t.isvararg == true);
     assert(t.name == nil and t.namewhat == "");
     assert(t.ftransfer == 0 and t.ntransfer == 0); 
-    assert(t.activelines == nil and getinfo(print, "L").activelines == nil);
+    assert(t.activelines == nil and getinfo(Cprint, "L").activelines == nil);
     assert(t.func == getinfo(2, "f").func);
-    print("+inactive C function");
 }

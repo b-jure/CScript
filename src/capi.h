@@ -34,7 +34,7 @@
 
 /* checks if list index 'i' is in bounds */
 #define api_checklistidx(C,i) \
-        api_check(C, 0 <= (i) && (i) <= MAXLISTINDEX, \
+        api_check(C, 0 <= (i) && (i) <= CS_MAXLISTINDEX, \
                      "list index out of bounds");
 
 

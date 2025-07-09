@@ -46,9 +46,9 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # -DCSI_DISASSEMBLE_BYTECODE => Disassembles precompiled chunks.
 # -DEMERGENCYGCTESTS => Forces an emergency collection at every single
 # allocation.
-# -DHARDMEMTESTS => Forces a full collection at all points where the collector
+# -DCSI_HARDMEMTESTS => Forces a full collection at all points where the collector
 # can run.
-# -DHARDSTACKTESTS => forces a reallocation of the stack at every point where
+# -DCSI_HARDSTACKTESTS => forces a reallocation of the stack at every point where
 # the stack can be reallocated.
 #
 # Address Sanitizer stuff:
@@ -72,7 +72,7 @@ SYSLIBS =
 # MYOBJS =
 
 # Testing flags
-ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
+#ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
 MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DCS_USE_APICHECK -DCSI_ASSERT
 	   #-DCSI_DISASSEMBLE_BYTECODE #-DCSI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)

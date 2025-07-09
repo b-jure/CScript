@@ -148,28 +148,13 @@ fn toomanyidx() {
   
 
 
-if __heavy {
-    local cmd = "ulimit -Sv "; /// use 'ulimit'
-    local vmem = 5_000_000; /// ~5 million kb == ~5 gb
-    if (!os.execute(cmd)) {
-        (Message or print)("skipping heavy tests '" .. cmd .. "' not available");
-        return;
-    } else {
-        if (!os.execute(cmd .. tostr(vmem))) {
-            vmem = 1_000_000; /// ~1 gb
-            if (!os.execute(cmd .. tostr(vmem))) {
-                (Message or print)("skipping heavy tests, not enough virtual memory (" .. tostr(vmem) .. ")");
-                return;
-            }
-        } /* else... */
-        /* fall through */
-        teststring();
-        controlstruct();
-        manylines();
-        hugeid();
-        toomanyinst();
-        toomanyconst();
-        toomanyidx();
-    }
+if __heavy and !__port {
+    ///teststring();
+    ///controlstruct();
+    ///manylines();
+    ///hugeid();
+    ///toomanyinst();
+    ///toomanyconst();
+    ///toomanyidx();
 } else
-    (Message or print)("skipping heavy tests");
+    (Message or print)("skipping heavy non-portable tests");

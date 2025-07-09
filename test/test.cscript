@@ -1,5 +1,32 @@
 #!../cscript
 
+
+/*
+** Table containing test options.
+** "warnings" - if true, print warnings the test throws.
+** "noprint" - if true, replace 'print' and 'printf' with CScript functions
+**             that print to temporary file (not portable).
+** "memory" - if true, print memory after test is finished executing.
+** "errors" - if true, display error message in case test fails.
+** "timed" - if true, time the test execution and display it
+** "tests_script" - filename of the script that generates tests table.
+*/
+__opts = __G.__opts or {
+    warnings = false,
+    noprint = true,
+    memory = false,
+    errors = true,
+    timed = false,
+    tests_script = "tests.cscript",
+};
+
+
+/*
+** {=====================================================================
+** Test script internals
+** ======================================================================
+*/
+
 local version = "CScript 1.0";
 if __VERSION != version { /* test script and core version mismatch? */
     io.stderr.write("This test suite is for ", version, ", not for ",
@@ -8,14 +35,14 @@ if __VERSION != version { /* test script and core version mismatch? */
 }
 
 
-/* save command-line arguments and program name for interpreter test */
-__G.__CLIARGS = cliargs;
-__G.__ARGS = args;
-__G.__PROG = "../cscript";
+/* global table for caching tests table */
+__tests = nil;
 
 
-/* if true print out the error message after test result */
-__G.__DEBUG = true;
+/* save command-line arguments and program name */
+__CLIARGS = cliargs;
+__ARGS = args;
+__PROG = "../cscript";
 
 
 /* false if not running heavy tests */
@@ -33,17 +60,70 @@ debug = nil;
 /* upvalues for timing execution */
 local initclock, lastclock;
 
-/* file for redirecting 'stdout' and 'stderr' when running a test */
-local out = assert(os.tmpname());
-
-/* save standard files */
-local stdout = io.stdout;
-local stderr = io.stderr;
-
 /* store function as locals as tests might change global variables */
-local print,execute,fmt,assert,popen,find,runfile,typeof,error,clock,ipairs =
-      print,os.execute,string.fmt,assert,io.popen,reg.find,runfile,typeof,
+local print,printf,execute,fmt,assert,popen,find,runfile,typeof,error,clock,ipairs =
+      print,printf,os.execute,string.fmt,assert,io.popen,reg.find,runfile,typeof,
       error,os.clock,ipairs;
+
+
+if __opts.noprint and !__port {
+    __C = { /* store old functions */
+        print = __G.print,
+        printf = __G.printf,
+    };
+
+    /* file for redirecting 'stdout' and 'stderr' when running a test */
+    local out = assert(os.tmpname());
+    __C.out = out;
+
+    /* replace 'print' while testing */
+    __G.print = fn(...) {
+        local args = [...];
+        local oldout = io.output();
+        io.output(out);
+        foreach i,arg in ipairs(args) {
+            if i > 0
+                io.write("\t");
+            io.write(tostr(arg));
+        }
+        io.write("\n");
+        io.output(oldout);
+    };
+
+    /* replace 'printf' while testing */
+    __G.printf = fn(fmt, ...) {
+        local str = "";
+        local args = [...];
+        local oldout = io.output();
+        local i = 0;
+        local j = string.find(fmt, "%");
+        io.output(out);
+        while (j and j < len(fmt)) {
+            str = str .. string.substr(fmt, i, j - 1);
+            if string.byte(fmt, j+1) == '%' {
+                str = str .. "%";
+                i = j + 1;
+            } else {
+                if list.len(args) <= 0
+                    error("missing format value");
+                local arg = tostr(list.remove(args, 0));
+                str = str .. arg;
+                i = j + 1 + len(arg);
+            }
+            fmt = string.substr(fmt, j+1);
+            j = string.find(fmt, "%");
+        }
+        str = str .. "\n";
+        io.write(str);
+        io.output(oldout);
+    };
+}
+
+
+if !__opts.warnings { /* no warnings? */
+    __C.warn = __G.warn;
+    __G.warn = fn(...) { return; };
+}
 
 
 /*
@@ -70,7 +150,7 @@ local fn YELLOW(s) { return termcolor(s, "\e[33m"); }
 local fn testfmt(test, stat) {
     local C = stat and GREEN or RED;
     local res = stat and "PASS" or "FAIL";
-    return fmt("%s  %4s  %s %-35s", C("["), C(res), C("]"), YELLOW(test));
+    return fmt("%s  %4s  %s %-55s", C("["), C(res), C("]"), YELLOW(test));
 }
 
 
@@ -119,7 +199,7 @@ local fn lscmd(what, path) {
 */
 local fn get_tests(filename) {
     local tests = {};
-    if (!filename and __port) { /* discover directories and tests? */
+    if (!filename and !__port) { /* discover directories and tests? */
         local f = assert(popen(lscmd("d")), "can't list directories");
         foreach dir in f.lines() {
             if dir == "libs/" continue; /* ignore 'libs' (used for testing) */
@@ -136,11 +216,12 @@ local fn get_tests(filename) {
             tests[tsuite] = ltests; /* store the testsuite */
         }
     } else { /* otherwise try get 'tests' table from a file */
-        tests = runfile(filename or "tests.cscript");
+        filename = filename or __opts.tests_script;
+        tests = runfile(filename);
         if typeof(tests) != "table"
             error(filename .. " script must return a table");
     }
-    __G.__tests = tests; /* cache it into global table */
+    __tests = tests; /* cache it into global tests table */
     return tests;
 }
 
@@ -152,7 +233,7 @@ local fn get_tests(filename) {
 ** @tests - ?table
 */
 local fn list_tests(tests) {
-    tests = tests or __tests or get_tests();
+    tests = testtable(tests);
     foreach tsuite, tlist in pairs(tests) {
         print(tsuite .. ":");
         foreach _, test in ipairs(tlist)
@@ -166,22 +247,36 @@ local fn list_tests(tests) {
 ** @c - number
 */
 local fn gettime(c) {
-    return fmt("[time: %g (+%g)]", c - initclock, c - lastclock);
+    local s = fmt("%-8g (+%-g)", c - initclock, c - lastclock);
+    lastclock = c;
+    return s;
 }
 
 
-local fn redirect_stdfiles() {
-    io.output(out);
-    io.stderr = out;
-    io.stdout = out;
+/* use K for 1000 and M for 1000000 (not 2^10 -- 2^20) */
+local fn memfmt(m) {
+    local fn round(m) {
+        m = m + 0.04999;
+        return fmt("%.1f", m); /// keep one decimal digit
+    }
+    if m < 1000
+        return m;
+    else {
+        m = m / 1000;
+        if m < 1000
+            return tostr(round(m)).."K";
+        else
+            return tostr(round(m/1000)).."M";
+    }
 }
 
 
-local fn restore_stdfiles() {
-    io.output(stdout);
-    io.stderr = stderr;
-    io.stdout = stdout;
-}
+local max = 0;
+local fn showmem() {
+    local m = gc("count") * 1024;
+    max = (m > max) and m or max;
+    printf("mem_current: %  mem_max: %", YELLOW(memfmt(m)), RED(memfmt(max)));
+};
 
 
 /*
@@ -189,12 +284,23 @@ local fn restore_stdfiles() {
 ** @filepath - string
 */
 local fn run_test(filepath) {
-    redirect_stdfiles();
-    lastclock = clock();
+    if (__opts.memory)
+        showmem();
     local stat, msg = pcall(runfile, filepath);
-    restore_stdfiles();
-    printf("%  %", testfmt(filepath, stat), gettime(lastclock));
-    if (__DEBUG and !stat) print(msg);
+    local c = clock();
+    printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
+    if (__opts.errors and !stat)
+        print(msg);
+}
+
+/// utf8, syntax, io, math
+
+/*
+** @tsuite - string
+** @what - string
+*/
+local fn testsuite_headerfmt(tsuite, what) {
+    print(YELLOW("> " .. what .. "(") .. tsuite .. YELLOW(")"));
 }
 
 
@@ -204,11 +310,24 @@ local fn run_test(filepath) {
 ** @tlist - list
 */
 local fn run_tests(tsuite, tlist) {
-    print(YELLOW("> BEGIN (") .. tsuite .. YELLOW(")"));
-    initclock = clock();
+    testsuite_headerfmt(tsuite, "BEGIN");
+    if (__opts.timed) { /* timming the execution? */
+        initclock = clock();
+        lastclock = initclock;
+    }
     foreach _, filepath in ipairs(tlist)
         run_test(filepath);
-    print(YELLOW("> END (") .. tsuite .. YELLOW(")"));
+    testsuite_headerfmt(tsuite, "END");
+}
+
+
+/*
+** Return 'tests' if non-nil, or tries to fetch global '__tests" or
+** it re-generates tests from the script '__opts.tests_script'.
+** @tests - ?table
+*/
+local fn teststable(tests) {
+    return tests or __tests or get_tests();
 }
 
 
@@ -220,7 +339,16 @@ local fn run_tests(tsuite, tlist) {
 ** @tests - ?table
 */
 local fn run_testsuites(tests, ...) {
-    assert(nil, "TODO");
+    local filter = [...];
+    tests = teststable(tests);
+    foreach i,name in ipairs(filter) {
+        assert(typeof(filter[i]) == "string"); /* these are arguments */
+        local tlist = tests[name];
+        if (tlist)
+            run_tests(name, tlist);
+        else
+            error("invalid testsuite '" .. name .. "'");
+    }
 }
 
 
@@ -231,12 +359,25 @@ local fn run_testsuites(tests, ...) {
 ** @tests - ?table
 */
 local fn run_all_testsuites(tests) {
-    tests = tests or __tests or get_tests();
+    tests = teststable(tests);
     foreach tsuite, tlist in pairs(tests)
         run_tests(tsuite, tlist);
 }
 
+/* }===================================================================== */
 
-#list_tests();
-run_all_testsuites();
-os.remove(out); /* remove temporary file */
+/*
+** {====================================================================
+** Command-line
+** =====================================================================
+*/
+
+if (__ARGS.len > 1)
+    run_testsuites(nil, list.flatten(__ARGS, 1));
+else
+    run_all_testsuites();
+
+if __C.out /* have temporary file? */
+    os.remove(__C.out); /* remove it */
+
+/* }==================================================================== */

@@ -41,11 +41,11 @@ void csA_shrink(cs_State *C, List *l) {
 
 
 int csA_ensure(cs_State *C, List *l, int space) {
-    if (space < l->n) /* in bound? */
+    if (space <= l->n) /* in bound? */
         return 0; /* done */
     else {
         csM_ensurearray(C, l->b, l->sz, l->n, (space - l->n) + 1,
-                           MAXLISTINDEX, "list elements", TValue);
+                           CS_MAXLISTINDEX, "list elements", TValue);
         for (int i = l->n; i < space; i++)
             setnilval(&l->b[i]); /* clear new part */
         return 1;
@@ -72,7 +72,7 @@ List *csA_newl(cs_State *C, int n) {
 
 void csA_init(cs_State *C) {
     static const char *fields[LFNUM] = { "len", "last", "x", "y", "z" };
-    cs_assert(FIRSTLF + LFNUM <= MAXUBYTE);
+    cs_assert(FIRSTLF + LFNUM <= CS_MAXUBYTE);
     for (int i = 0; i < LFNUM; i++) {
         OString *s = csS_new(C, fields[i]);
         s->extra = cast_byte(i + FIRSTLF);
@@ -88,7 +88,7 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
             cs_Integer i;
             if (c_likely(tointeger(v, &i))) {
                 if (c_likely(i >= 0)) {
-                    i = (i <= MAXINT) ? i - 1 : MAXINT - 1;
+                    i = (i <= CS_MAXINT) ? i - 1 : CS_MAXINT - 1;
                     csA_ensureindex(C, l, i);
                     setobj(C, &l->b[i], v);
                 } else /* otherwise negative length */
@@ -172,7 +172,7 @@ void csA_setstr(cs_State *C, List *l, const TValue *k, const TValue *v) {
 */
 void csA_setint(cs_State *C, List *l, const FatValue *k, const TValue *v) {
     if (c_likely(0 <= k->i)) { /* index is 0 or positive? */
-        if (c_unlikely(MAXLISTINDEX < k->i)) /* 'index' too large? */
+        if (c_unlikely(CS_MAXLISTINDEX < k->i)) /* 'index' too large? */
             csD_listerror(C, k->v, stridx, "too large");
         else { /* ok */
             csA_ensureindex(C, l, k->i);

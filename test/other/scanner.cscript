@@ -196,7 +196,6 @@ assert(string.substr(a, 0, 39) == string.substr(b, 0, 39));
 x = 1;
 ]=];
 
-print("+");
 __G.x = nil;
 runstring(prog);
 assert(x);
@@ -255,9 +254,8 @@ if (os.setlocale("pt_BR.iso88591") or os.setlocale("ptb")) {
     assert(string.find(b, "expected ';' near '.'"));
 
     assert(os.setlocale("C"));
-} else {
-    print("\n >>> pt_BR locale not available: skipping decimal point tests <<<\n");
-}
+} else
+    (Message or print)("pt_BR locale not available: skipping decimal point tests");
 
 
 /// testing %q x line ends
@@ -272,12 +270,10 @@ assert(!load("a = \"\\345\";"));
 assert(!load("a = [=x];"));
 
 local fn malformednum(n, exp) {
-  local s, msg = load("return " .. n .. ";");
-  assert(!s and string.find(msg, exp));
+    local s, msg = load("return " .. n .. ";");
+    assert(!s and string.find(msg, exp));
 }
 
 malformednum("0xe-", "near ';'");
 malformednum("0xep-p", "malformed number");
 malformednum("1print()", "malformed number");
-
-print("OK");

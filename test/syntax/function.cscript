@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript functions.
-*/
-
 local a = fn(x, y, ...) {
     return ...;
 };

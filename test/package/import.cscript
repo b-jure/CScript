@@ -1,3 +1,5 @@
+local debug = import("debug");
+
 assert(import("string") == string);
 assert(import("math") == math);
 assert(import("io") == io);
@@ -12,6 +14,8 @@ assert(typeof(package.loaded) == "table");
 assert(typeof(package.preload) == "table");
 
 assert(typeof(package.config) == "string");
+
+local oldout = io.output();
 
 {
     /// create a path with 'max' templates,
@@ -182,7 +186,7 @@ return AA;]=];
     try("X", "XXxX", AA, "libs/XXxX");
 
     removefiles(files);
-    NAME, REQUIRED, AA, B = nil;
+    NAME, REQUIRED, AA, B, a = nil;
 
 
     /// testing import of sub-packages
@@ -327,5 +331,9 @@ return AA;]=];
         package = p;
         assert(typeof(package.path) == "string");
     }
-} else
+} else {
     (Message or print)("skipped library loading");
+    return;
+}
+
+io.output(oldout);

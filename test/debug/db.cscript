@@ -21,15 +21,16 @@ local fn test(s, l, p) {    /// this must be line 14
     assert(list.len(l) == 0);
 }
 
+local Cprint = (__C and __C.print) or print;
 
 { /// test basic cases for 'getinfo'
-    assert(!pcall(debug.getinfo, print, "X"));  /// invalid option
+    assert(!pcall(debug.getinfo, Cprint, "X"));  /// invalid option
     assert(!pcall(debug.getinfo, 0, ">"));  /// invalid option
     assert(!debug.getinfo(1000));  /// out of range level
     assert(!debug.getinfo(-1));    /// out of range level
-    local a = debug.getinfo(print);
+    local a = debug.getinfo(Cprint);
     assert(a.what == "C" and a.shortsrc == "[C]");
-    a = debug.getinfo(print, "L");
+    a = debug.getinfo(Cprint, "L");
     assert(a.activelines == nil);
     local b = debug.getinfo(test, "sfL");
     assert(b.name == nil and b.what == "CScript" and
@@ -101,7 +102,7 @@ loop {
     while (1) { local x=10; break; } f();
     local b = 1;
     if (3>4) return math.sin(1); f();
-    a = 3<4; f();
+    local a = 3<4; f();
     a = 3<4 or 1; f();
     loop { local x=20; if (4>3) f(); else break; f(); break; }
     g = {};
@@ -269,7 +270,7 @@ assert(debug.getlocal(foo, 1) == "a");
 assert(debug.getlocal(foo, 2) == "b");
 assert(!debug.getlocal(foo, 3));
 
-assert(!debug.getlocal(print, 1));
+assert(!debug.getlocal(Cprint, 1));
 
 
 fn foo() { return (debug.getlocal(1, -1)); }
@@ -295,7 +296,7 @@ fn foo(a, ...) {
 }
 
 foo();
-foo(print);
+foo(Cprint);
 foo(200, 3, 4);
 local a = [];
 foreach i in range(0, 1000) a[i] = i;
@@ -389,7 +390,7 @@ fn g(...) {
 g();
 
 
-assert(a[f] and a[g] and a[assert] and a[debug.getlocal] and !a[print]);
+assert(a[f] and a[g] and a[assert] and a[debug.getlocal] and !a[Cprint]);
 
 
 /// tests for manipulating non-registered locals (C and CScript temporaries)
@@ -602,7 +603,7 @@ local fn eqseq(l1, l2) {
     a=0; foreach i in range(0, 1000); assert(a == 0);
 
     {
-        debug.sethook(print, "", 2**24 - 1); /// count upperbound
+        debug.sethook(Cprint, "", 2**24 - 1); /// count upperbound
         local f,m,c = debug.gethook();
         assert(([debug.gethook()])[2] == 2**24 - 1);
     }
@@ -637,8 +638,8 @@ local fn eqseq(l1, l2) {
 
 
 { /// testing traceback
-    assert(debug.traceback(print) == print);
-    assert(debug.traceback(print, 4) == print);
+    assert(debug.traceback(Cprint) == Cprint);
+    assert(debug.traceback(Cprint, 4) == Cprint);
     assert(reg.find(debug.traceback("hi", 4), "^hi\n"));
     assert(reg.find(debug.traceback("hi"), "^hi\n"));
     assert(!reg.find(debug.traceback("hi"), "'debug.traceback'"));
@@ -652,7 +653,7 @@ local fn eqseq(l1, l2) {
 
 
     /// testing nparams, nupvals and isvararg
-    local t = debug.getinfo(print, "u");
+    local t = debug.getinfo(Cprint, "u");
     assert(t.isvararg == true and t.nparams == 0 and t.nupvals == 0);
 
     t = debug.getinfo(fn(a,b,c) {}, "u");
@@ -753,6 +754,10 @@ assert(typeof(debug.getclist()) == "list");
 {
     print("testing traceback sizes");
 
+    local extra = 0;
+    if reg.find(debug.traceback(nil, 0), "test%.cscript")
+        extra = 6; /* if 'test.cscript' is changed this might need update */
+
     local fn countlines(s) {
         return getargs(1, reg.gsub(s, "\n", ""));
     }
@@ -776,10 +781,10 @@ assert(typeof(debug.getclist()) == "list");
             local rest2 = string.substr(rest, brk);
             assert(countlines(rest1) == 10 and countlines(rest2) == 10);
         } else
-            assert(cl == total - start + 4);
+            assert(cl == total - start + 4 + extra);
     }
 
     foreach d in range(0, 51, 10)
-        foreach l in range(0, d+1)
+        foreach l in range(d+1)
             checkdeep(d, l);
 }

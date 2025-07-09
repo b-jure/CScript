@@ -86,8 +86,6 @@ return {
         "./basic/len.cscript",
         "./basic/load.cscript",
         "./basic/loadfile.cscript",
-        "./basic/loadfile_script",
-        "./basic/loadfile_script_error",
         "./basic/nextfield.cscript",
         "./basic/pairs.cscript",
         "./basic/pcall.cscript",

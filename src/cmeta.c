@@ -40,7 +40,7 @@ void csMM_init(cs_State *C) {
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le", "__name"
     };
-    cs_assert(FIRSTMM + CS_MT_NUM <= MAXUBYTE);
+    cs_assert(FIRSTMM + CS_MT_NUM <= CS_MAXUBYTE);
     for (int i = 0; i < CS_MT_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
         s->extra = cast_byte(i + FIRSTMM);
@@ -75,7 +75,7 @@ Instance *csMM_newinstance(cs_State *C, OClass *cls) {
 UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv) {
     GCObject *o;
     UserData *ud;
-    if (c_unlikely(size > MAXSIZE - udmemoffset(nuv)))
+    if (c_unlikely(size > CS_MAXSIZE - udmemoffset(nuv)))
         csM_toobig(C);
     o = csG_new(C, sizeofuserdata(nuv, size), CS_VUSERDATA);
     ud = gco2u(o);

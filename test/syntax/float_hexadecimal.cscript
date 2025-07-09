@@ -1,7 +1,3 @@
-/*
-** Test script file for CScript hexadecimal floats.
-*/
-
 assert(0x2.0Bp4 == 32.6875);
 assert(0xE.2p3 == 113);
 assert(0x123.ABCp0 == 291.6708984375);

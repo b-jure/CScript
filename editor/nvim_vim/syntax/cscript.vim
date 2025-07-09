@@ -85,7 +85,7 @@ syn match cscriptOctalZero contained /\<0/
 " decimal floating point number, with dot, optional exponent
 syn match cscriptFloat /\<\d[[:digit:]_]*\.\d*\%([eE][-+]\=\d[[:digit:]_]*\)\=\>/
 " decimal floating point number, starting with a dot, optional exponent
-syn match cscriptFloat /\.\d\+\%([eE][-+]\=\d[[:digit:]_]*\)\>/
+syn match cscriptFloat /\.\d\+\%([eE][-+]\=\d[[:digit:]_]*\)\=\>/
 " decimal floating point number, without dot, with exponent
 syn match cscriptFloat /\<\d[_0-9]*[eE][-+]\=\d[[:digit:]_]*\>/
 " hexadecimal foating point number, optional leading digits, with dot, with exponent
@@ -94,7 +94,7 @@ syn match cscriptFloat /\<0[xX]\x[[:xdigit:]_]*\.\x\+[pP][-+]\=\d[[:digit:]_]*\>
 syn match cscriptFloat /\<0x\x[[:digit:]_]*\.\=[pP][-+]\=\d[[:digit:]_]*\>/
 
 " flag an octal number with wrong digits
-syn match cscriptOctalError contained /0\o*[89]\d*/
+syn match cscriptOctalError /0[0-7]*[89]\d*/
 "-----------------}
 
 "-Keywords--------{
@@ -166,15 +166,17 @@ syn match cscriptSymbolOperator /|\ze\%([^|=]\|\n\)/
 " bitwise xor
 syn match cscriptSymbolOperator /\^\ze\%([^\^=]\|\n\)/
 " bitwise not
-syn match cscriptSymbolOperator /\~\ze\%([^\~=]\|\n\)/
+syn match cscriptSymbolOperator /\~\+\ze\%([^=]\|\n\)/
 " logical not
-syn match cscriptSymbolOperator /!\ze\%([^!=]\|\n\)/
+syn match cscriptSymbolOperator /!\+\ze\%([^=]\|\n\)/
 " modulo
 syn match cscriptSymbolOperator /%\ze\%([^%=]\|\n\)/
 " addition
 syn match cscriptSymbolOperator /+\ze\%([^+=]\|\n\)/
 " subtraction
 syn match cscriptSymbolOperator /-\ze\%([^-=]\|\n\)/
+" unary minus
+syn match cscriptSymbolOperator /-\+\ze\%([^=]\|\n\)/
 " assignment
 syn match cscriptSymbolOperator /=\ze\%([^=]\|\n\)/
 " equal
@@ -208,7 +210,7 @@ syn keyword cscriptMetaTag __eq __lt __le __name
 "-Basic library---{{
 syn keyword cscriptFunc error assert gc load loadfile runfile getmetalist
 syn keyword cscriptFunc setmetalist nextfield pairs ipairs pcall xpcall
-syn keyword cscriptFunc print warn len rawequal rawget rawset getargs
+syn keyword cscriptFunc print printf warn len rawequal rawget rawset getargs
 syn keyword cscriptFunc tonum tostr typeof getclass getsuper range
 syn keyword cscriptFunc __G __ENV __VERSION
 " metatag table keys

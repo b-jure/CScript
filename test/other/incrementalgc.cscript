@@ -245,7 +245,7 @@ if !__port {
     local a = {};
     /// fill a with `collectable' indices
     for (local i=0; i < lim; i=i+1) a[{}] = i;
-    b = {};
+    local b = {};
     foreach k,v in pairs(a) b[k]=v;
     /// remove all indices and collect them
     foreach n in pairs(b) {
