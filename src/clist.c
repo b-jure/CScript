@@ -75,7 +75,7 @@ void csA_init(cs_State *C) {
     cs_assert(FIRSTLF + LFNUM <= CS_MAXUBYTE);
     for (int i = 0; i < LFNUM; i++) {
         OString *s = csS_new(C, fields[i]);
-        s->extra = cast_byte(i + FIRSTLF);
+        s->extra = cast_ubyte(i + FIRSTLF);
         G(C)->listfields[i] = s;
         csG_fix(C, obj2gco(G(C)->listfields[i]));
     }

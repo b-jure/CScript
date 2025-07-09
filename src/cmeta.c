@@ -43,7 +43,7 @@ void csMM_init(cs_State *C) {
     cs_assert(FIRSTMM + CS_MT_NUM <= CS_MAXUBYTE);
     for (int i = 0; i < CS_MT_NUM; i++) {
         OString *s = csS_new(C, mmnames[i]);
-        s->extra = cast_byte(i + FIRSTMM);
+        s->extra = cast_ubyte(i + FIRSTMM);
         G(C)->mmnames[i] = s;
         csG_fix(C, obj2gco(G(C)->mmnames[i]));
     }

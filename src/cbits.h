@@ -31,15 +31,15 @@
 
 
 /* set 'src' byte at offset 'o' to 'v' */
-#define setbyte(src,o,v)      (*(cast_bytep(src) + (o)) = (v))
+#define setbyte(src,o,v)      (*(cast_ubytep(src) + (o)) = (v))
 
 
 /* 
 ** Get first 3 bytes (LE byte order) from 'p' casted to 'c_uint'.
 */
 #define get3bytes(p) \
-        cast_int(cast_uint(0) | ((*(cast_bytep(p) + 2)) << 16) | \
-                 ((*(cast_bytep(p) + 1)) << 8) | (*cast_bytep(p)))
+        cast_int(cast_uint(0) | ((*(cast_ubytep(p) + 2)) << 16) | \
+                 ((*(cast_ubytep(p) + 1)) << 8) | (*cast_ubytep(p)))
 
 
 /* 
@@ -47,7 +47,7 @@
 ** (integer type) into 'dest'.
 */
 #define set3bytes(dest,src) \
-    { c_ubyte *dest_=cast_bytep(dest); int src_=cast_int(src); \
+    { c_ubyte *dest_=cast_ubytep(dest); int src_=cast_int(src); \
       setbyte(dest_, 0, getbyte(src_, 0)); \
       setbyte(dest_, 1, getbyte(src_, 1)); \
       setbyte(dest_, 2, getbyte(src_, 2)); }

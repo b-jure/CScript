@@ -969,7 +969,7 @@ static int s_bytes(cs_State *C) {
 }
 
 
-// TODO: add docs and tests
+// TODO: add docs
 static int s_char(cs_State *C) {
     int n = cs_getntop(C); /* number of arguments */
     if (n > 0) { /* have at least 1 argument? */
@@ -987,20 +987,16 @@ static int s_char(cs_State *C) {
 }
 
 
-// TODO: add docs and tests
+// TODO: add docs
 static int s_cmp(cs_State *C) {
-    size_t l1, l2, i;
+    int res;
+    size_t l1, l2;
     const char *s1 = csL_check_lstring(C, 0, &l1);
     const char *s2 = csL_check_lstring(C, 1, &l2);
-    int res = l1 - l2;
-    if (res != 0) { /* different length? */
-        if (res < 0) i = l1 - (l1>0);
-        else i = l2 - (l2>0);
-    } else { /* otherwise equal lengths */
-        i = 0;
-        while (l1-- && uchar(s1[i]) == uchar(s2[i])) i++;
-        res = s1[i] - s2[i];
-    }
+    size_t i = 0;
+    if (l2 > l1) l1 = l2;
+    while (l1-- && uchar(s1[i]) == uchar(s2[i])) i++;
+    res = s1[i] - s2[i];
     cs_push_integer(C, res);
     if (res) /* strings are not equal? */
         cs_push_integer(C, i); /* push "that" position */

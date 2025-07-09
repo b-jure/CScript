@@ -557,7 +557,7 @@ static GCObject **sweeplist(cs_State *C, GCObject **l, int nobjects,
             *l = curr->next; /* remove 'curr' from list */
             freeobject(C, curr); /* and collect it */
         } else { /* otherwise change mark to 'white' */
-            curr->mark = cast_byte((mark & ~maskcolorbits) | white);
+            curr->mark = cast_ubyte((mark & ~maskcolorbits) | white);
             l = &curr->next; /* go to next element */
         }
     }

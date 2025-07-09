@@ -695,7 +695,7 @@ CS_API void cs_sethook(cs_State *C, cs_Hook func, int mask, int count) {
     C->hook = func;
     C->basehookcount = count;
     resethookcount(C);
-    C->hookmask = cast_byte(mask);
+    C->hookmask = cast_ubyte(mask);
     if (mask)
         settraps(C->cf); /* to trace inside 'csV_execute' */
 }

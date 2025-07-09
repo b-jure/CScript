@@ -69,7 +69,7 @@ syn match cscriptSpecialUtfError /\\u\%({[[:xdigit:]]\{1,8}}\|\[[[:xdigit:]]\{1,
 "-----------------}
 
 "-Characters-----{
-syn match cscriptCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\)'/ contains=cscriptSpecialControl,cscriptSpecialHex
+syn match cscriptCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\|\\[[:digit:]]\{1,3}\)'/
 "-----------------}
 
 "-Numbers---------{

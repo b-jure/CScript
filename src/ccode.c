@@ -340,7 +340,7 @@ static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
     csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, CS_MAXINT,
                   "instructions", Instruction);
-    p->code[currPC++] = cast_byte(code);
+    p->code[currPC++] = cast_ubyte(code);
 }
 
 

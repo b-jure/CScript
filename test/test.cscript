@@ -2,7 +2,8 @@
 
 
 /*
-** Table containing test options.
+** Test options.
+**
 ** "termcodes" - if true (and 'stdout' is terminal), output ansii codes to
 **               color and set different modes to text in terminal, this
 **               also enables additional goodies, for example showing the
@@ -23,7 +24,9 @@
 **                  and errors won't be reachable, only the exit status.
 **                  Finally the skip messages won't get registered.
 ** "testsuites_to_skip" - list of testsuite names, which are skipped.
-** "tests_script" - filename of the script that generates tests table.
+** "tests_script" - filename of the script that generates tests table, can
+**                  be nil, in which case script will try to discover the
+**                  testsuites and the tests (not portable).
 */
 __opts = __G.__opts or {
     termcodes = true,
@@ -36,8 +39,24 @@ __opts = __G.__opts or {
     stop_on_fail = false,
     run_isolated = false,
     testsuites_to_skip = [];
-    tests_script = "tests.cscript",
+    tests_script = "testsuites.cscript",
 };
+
+
+/*
+** {=====================================================================
+** Additional settings
+** ======================================================================
+*/
+
+/* false if not running heavy tests */
+__heavy = __G.__heavy or true;
+/* false if runnning non-portable tests or assumming posix/windows environment */
+__port = __G.__port or !(__POSIX or __WINDOWS);
+/* false if not reporting messages of tests not performed */
+__skipmsg = __G.__skipmsg or true;
+
+/* }===================================================================== */
 
 
 /*
@@ -62,14 +81,6 @@ __tests = nil;
 __CLIARGS = cliargs;
 __ARGS = args;
 __PROG = "../cscript";
-
-
-/* false if not running heavy tests */
-__heavy = __G.__heavy or true;
-/* false if runnning non-portable tests */
-__port = __G.__port or !(__POSIX or __WINDOWS);
-/* false if not reporting messages of tests not performed */
-__skipmsg = __G.__skipmsg or true;
 
 
 /* storage for timing execution */
@@ -263,7 +274,8 @@ local fn get_tests(filename) {
     if (!filename and !__port) { /* discover directories and tests? */
         local f = assert(popen(lscmd("d")), "can't list directories");
         foreach dir in f.lines() {
-            if dir == "libs/" continue; /* ignore 'libs' (used for testing) */
+            if string.startswith(dir, "_") /* file starts with '_'? */
+                continue; /* ignore it */
             local tsuite = substr(dir, 0, -2); /* no '/' or '\\' */
             local ltests = []; /* list of testsuite tests */
             local n = 0; /* number of tests */

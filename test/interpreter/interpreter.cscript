@@ -186,8 +186,8 @@ RUN("cscript -l 'str=string' '-lm=math' -e 'print(m.sin(0));' %s > %s", prog, ou
 checkout("0.0\nALO ALO\t20\n");
 
 
-/// test module names with version suffix ("libs/lib2-v2")
-RUN("env CS_CPATH='./libs/?.so' cscript -l lib2-v2 -e 'print(lib2.id());' > %s", out);
+/// test module names with version suffix ("_libs/lib2-v2")
+RUN("env CS_CPATH='./_libs/?.so' cscript -l lib2-v2 -e 'print(lib2.id());' > %s", out);
 checkout("true\n");
 
 

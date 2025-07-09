@@ -76,7 +76,7 @@ module 'XXX' not found:
 if !__port {
     local dirsep = reg.match(package.config, "^([^\n]+)\n");
     /// auxiliary directory with C modules and temporary files
-    local DIR = "libs" .. dirsep;
+    local DIR = "_libs" .. dirsep;
 
     /// prepend DIR to a name and correct directory separators
     local fn D(x) {
@@ -161,27 +161,27 @@ return AA;]=];
     assert(import("C") == 25);
     assert(import("C") == 25);
     AA = nil;
-    try("B", "B.cscript", true, "libs/B.cscript");
+    try("B", "B.cscript", true, "_libs/B.cscript");
     assert(package.loaded.B);
     assert(import("B") == true);
     assert(package.loaded.A);
     assert(import("C") == 25);
     package.loaded.A = nil;
     try("B", nil, true, nil);  /// should not reload package
-    try("A", "A.cscript", true, "libs/A.cscript");
+    try("A", "A.cscript", true, "_libs/A.cscript");
     package.loaded.A = nil;
     os.remove(D("A.cscript"));
     AA = {};
-    try("A", "A.lc", AA, "libs/A.lc");  /// now must find second option
+    try("A", "A.lc", AA, "_libs/A.lc");  /// now must find second option
     assert(package.searchpath("A", package.path) == D("A.lc"));
     assert(import("A") == AA);
     AA = false;
-    try("K", "L", false, "libs/L");  /// default option
-    try("K", "L", false, "libs/L");  /// default option (should reload it)
+    try("K", "L", false, "_libs/L");  /// default option
+    try("K", "L", false, "_libs/L");  /// default option (should reload it)
     assert(__G._REQUIREDNAME == nil);
 
     AA = "x";
-    try("X", "XXxX", AA, "libs/XXxX");
+    try("X", "XXxX", AA, "_libs/XXxX");
 
     removefiles(files);
     NAME, REQUIRED, AA, B, a = nil;
@@ -203,7 +203,7 @@ return AA;]=];
 
     {
         local m, ext = assert(import("P1"));
-        assert(ext == "libs/P1/init.cscript");
+        assert(ext == "_libs/P1/init.cscript");
         assert(AA == 0 and m.AA == 10);
         assert(import("P1") == m);
         assert(import("P1") == m);
@@ -211,7 +211,7 @@ return AA;]=];
         assert(package.searchpath("P1.xuxu", package.path) == D("P1/xuxu.cscript"));
         m.xuxu, ext = assert(import("P1.xuxu"));
         assert(AA == 0 and m.xuxu.AA == 20);
-        assert(ext == "libs/P1/xuxu.cscript");
+        assert(ext == "_libs/P1/xuxu.cscript");
         assert(import("P1.xuxu") == m.xuxu);
         assert(import("P1.xuxu") == m.xuxu);
         assert(import("P1") == m and m.AA == 10);
@@ -293,7 +293,7 @@ return AA;]=];
         { /// test C modules with prefixes in names
             package.cpath = DC("?");
             local lib2, ext = import("lib2-v2");
-            assert(string.find(ext, "libs/lib2-v2"));
+            assert(string.find(ext, "_libs/lib2-v2"));
             /// check correct access to global environment and correct parameters
             assert(__ENV.x == "lib2-v2" and __ENV.y == DC("lib2-v2"));
             assert(lib2.id("x") == true); /// a different "id" implementation
@@ -302,7 +302,7 @@ return AA;]=];
         { /// test C submodules
             local fs, ext = import("lib1.sub");
             assert(__ENV.x == "lib1.sub" and __ENV.y == DC("lib1"));
-            assert(string.find(ext, "libs/lib1"));
+            assert(string.find(ext, "_libs/lib1"));
             assert(fs.id(45) == 45);
             __ENV.x, __ENV.y = nil;
         }

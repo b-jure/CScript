@@ -1,0 +1,19 @@
+local fn checkerr(msg, f, ...) {
+    local st, err = pcall(f, ...);
+    assert(!st and string.find(err, msg));
+}
+
+local cmp = string.cmp;
+local s1 = "\0\0blabla,\0what Ever\0*[]";
+local s2 = "\0\0blabla,\0what Ever\0*[]";
+assert(s1 == s2);
+local res, pos = cmp(s1, s2);
+assert(res == 0 and !pos);
+res, pos = cmp(s1, "\0\0blabla,\0what Ever\0*[");
+assert(res > 0  and pos == 22);
+res, pos = cmp(s1, "A");
+assert(res < 0 and pos == 0);
+
+checkerr("string expected", cmp, 0, "asd");
+checkerr("string expected", cmp, "asd", nil);
+checkerr("string expected", cmp, "asd");

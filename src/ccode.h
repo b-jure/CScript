@@ -50,7 +50,7 @@
 
 
 /* get/set short parameter */
-#define GET_ARG_S(ip,o)         cast_byte(*GETPC_S(ip,o))
+#define GET_ARG_S(ip,o)         cast_ubyte(*GETPC_S(ip,o))
 #define SET_ARG_S(ip,o,v)       setbyte(GETPC_S(ip,0), o, v);
 #define SET_ARG_LLS(ip,v)       setbyte(GET_ARG(ip), 2*SIZE_ARG_L, v)
 

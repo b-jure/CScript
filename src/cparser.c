@@ -746,7 +746,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *v) {
     } else { /* must be upvalue */
         cs_assert(v->et == EXP_UVAL);
         uv->onstack = 0;
-        uv->idx = cast_byte(v->u.info);
+        uv->idx = cast_ubyte(v->u.info);
         uv->kind = prev->p->upvals[v->u.info].kind;
         cs_assert(eqstr(name, prev->p->upvals[v->u.info].name));
     }

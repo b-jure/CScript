@@ -58,7 +58,7 @@ void csS_clearcache(GState *gs) {
 c_uint csS_hash(const char *str, size_t l, unsigned int seed) {
     c_uint h = seed ^ cast_uint(l);
     for (; l > 0; l--)
-        h ^= ((h<<5) + (h>>2) + cast_byte(str[l - 1]));
+        h ^= ((h<<5) + (h>>2) + cast_ubyte(str[l - 1]));
     return h;
 }
 
@@ -193,7 +193,7 @@ static OString *internshrstr(cs_State *C, const char *str, size_t l) {
         list = &tab->hash[hashmod(h, tab->size)]; /* rehash with new size */
     }
     s = newstrobj(C, l, CS_VSHRSTR, h);
-    s->shrlen = cast_byte(l);
+    s->shrlen = cast_ubyte(l);
     memcpy(getshrstr(s), str, l*sizeof(char));
     s->u.next = *list;
     *list = s;

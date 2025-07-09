@@ -327,7 +327,6 @@ fn foo() {
 ]=], 2);
 
 
-/// TODO: fix this bug
 lineerror([=[
   local a = 0;
   local b = 1;

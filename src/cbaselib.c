@@ -155,7 +155,7 @@ static int auxload(cs_State *C, int status, int envidx) {
 }
 
 
-// TODO: update docs and tests
+// TODO: update docs
 static int b_load(cs_State *C) {
     int status;
     size_t l;
@@ -174,7 +174,7 @@ static int b_load(cs_State *C) {
 }
 
 
-// TODO: update docs and tests
+// TODO: update docs
 static int b_loadfile(cs_State *C) {
     const char *filename = csL_opt_string(C, 0, NULL);
     int env = (!cs_is_none(C, 1) ? 1 : 0);
@@ -201,7 +201,7 @@ static int b_getmetalist(cs_State *C) {
 }
 
 
-// TODO: update docs and tests
+// TODO: update docs
 static int b_setmetalist(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0, "class/instance");
@@ -623,7 +623,7 @@ static int aux_range(cs_State *C) {
 }
 
 
-// TODO: add docs and tests
+// TODO: add docs
 static int b_range(cs_State *C) {
     cs_Integer stop, step;
     cs_Integer start = csL_check_integer(C, 0);

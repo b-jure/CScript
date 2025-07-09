@@ -79,7 +79,7 @@ void csY_init(cs_State *C) {
     cs_assert(NUM_KEYWORDS <= CS_MAXUBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
         OString *s = csS_new(C, tkstr[i]);
-        s->extra = cast_byte(i + 1);
+        s->extra = cast_ubyte(i + 1);
         csG_fix(C, obj2gco(s));
     }
 }
@@ -446,14 +446,17 @@ static void read_string(Lexer *lx, Literal *k) {
                     case 'e': c = '\x1B'; goto read_save;
                     case 'x': c = read_hexesc(lx); goto read_save;
                     case 'u': utf8esc(lx); goto no_save;
-                    case '\n': case '\r':
-                              inclinenr(lx); c = '\n'; goto only_save;
-                    case '\"': case '\'': case '\\':
-                              c = lx->c; goto read_save;
-                    case CSEOF: goto no_save; /* raise err on next iter. */
+                    case '\n': case '\r': {
+                        inclinenr(lx); c = '\n';
+                        goto only_save;
+                    }
+                    case '\"': case '\'': case '\\': {
+                        c = lx->c;
+                        goto read_save;
+                    }
+                    case CSEOF: goto no_save; /* raise err on next iteration */
                     default: {
-                        checkcond(lx, cisdigit(lx->c),
-                                "invalid escape sequence");
+                        checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
                         c = read_decesc(lx); /* '\ddd' */
                         goto only_save;
                     }
@@ -485,6 +488,7 @@ static void read_string(Lexer *lx, Literal *k) {
 static int read_char(Lexer *lx, Literal *k) {
     int c;
     save_and_advance(lx); /* skip ' */
+repeat:
     switch (lx->c) {
         case CSEOF:
             lexerror(lx, "unterminated character constant", TK_EOS);
@@ -504,21 +508,26 @@ static int read_char(Lexer *lx, Literal *k) {
                 case 'x': c = read_hexesc(lx); break;
                 case '\"': case '\'': case '\\':
                     c = lx->c; break;
+                case CSEOF: goto repeat;
                 default: { /* error */
-                    checkcond(lx, 0, "invalid escape sequence");
-                    return 0; /* unreachable; to avoid warnings */
+                    printf("iNOTOK\n");
+                    checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
+                    printf("OK\n");
+                    c = read_decesc(lx); /* '\ddd' */
+                    goto only_save;
                 }
             }
             csR_buffpop(lx->buff);
             break;
         }
         default: {
-            c = cast_byte(lx->c);
+            c = cast_ubyte(lx->c);
             break;
         }
     }
-    savec(lx, c);
     advance(lx);
+only_save:
+    savec(lx, c);
     if (c_unlikely(lx->c != '\''))
         lexerror(lx, "malformed character constant", TK_INT);
     advance(lx);

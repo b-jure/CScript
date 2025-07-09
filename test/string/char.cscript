@@ -1,0 +1,15 @@
+local fn checkerr(msg, f, ...) {
+    st, err = pcall(f, ...);
+    assert(!st and string.find(err, msg));
+}
+
+local char = string.char;
+local s = char('H','e','l','l','o',' ','W','o','r','l','d','!');
+assert(s and s == "Hello World!");
+assert(s == char(0x48,0x65,0x6C,0x6C,0x6F,0x20,0x57,0x6F,0x72,0x6C,0x64,0x21));
+assert(char() == "");
+
+checkerr("number expected", char, "B");
+checkerr("out of range", char, 256);
+checkerr("out of range", char, 0x100);
+checkerr("out of range", char, -1);
