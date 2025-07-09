@@ -20,7 +20,7 @@ local oldout = io.output();
 {
     /// create a path with 'max' templates,
     /// each with 1-10 repetitions of '?'
-    local max = 2000;
+    local max = __heavy and 2000 or 100;
     local l = [];
     for (local i = 0; i < max; i = i+1)
         l[i] = string.repeat("?", i%10 + 1);
@@ -72,9 +72,7 @@ module 'XXX' not found:
 }
 
 
-/// The next tests for 'import' assume some specific directories and
-/// libraries.
-
+/// The next tests for 'import' assume some specific directories and libraries.
 if !__port {
     local dirsep = reg.match(package.config, "^([^\n]+)\n");
     /// auxiliary directory with C modules and temporary files
@@ -263,7 +261,6 @@ return AA;]=];
 
     /// testing import of C libraries
 
-
     local p = "";   /// On Mac OS X, redefine this to "_"
 
     /// check whether loadlib works in this system
@@ -315,6 +312,11 @@ return AA;]=];
 
     
     { /// testing preload
+        assert(!xuxu);
+        assert(!pl);
+        assert(!l);
+        assert(!package.loaded.pl and !package.preload.pl);
+
         local p = package;
         package = {};
         p.preload.pl = fn (...) {
@@ -325,12 +327,20 @@ return AA;]=];
 
         local pl, ext = import("pl");
         assert(import("pl") == pl);
-        assert(pl.xuxu(10) == 30);
+        assert(xuxu == pl.xuxu and pl.xuxu(10) == 30);
         assert(pl.l[0] == "pl" and pl.l[1] == ":preload:" and ext == ":preload:");
 
         package = p;
         assert(typeof(package.path) == "string");
+
+        package.pl = nil;
+        package.loaded.pl = nil;
+        __G.xuxu, __G.pl, __G.l = nil;
+
+        assert(!xuxu and !__G.pl and !l);
     }
+
+
 } else {
     (Message or print)("skipped library loading");
     return;

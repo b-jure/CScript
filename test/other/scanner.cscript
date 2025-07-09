@@ -255,7 +255,7 @@ if (os.setlocale("pt_BR.iso88591") or os.setlocale("ptb")) {
 
     assert(os.setlocale("C"));
 } else
-    (Message or print)("pt_BR locale not available: skipping decimal point tests");
+    (Message or print)("pt_BR locale not available: skipped decimal point tests");
 
 
 /// testing %q x line ends

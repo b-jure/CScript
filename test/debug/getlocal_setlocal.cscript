@@ -89,12 +89,8 @@ local fn setloclist(f, l, el, ...) {
 
 
 {
-    l = getloclist(print); assert(len(l) == 0);
+    local l = getloclist(print); assert(len(l) == 0);
     l = getloclist(range); assert(len(l) == 0);
-}
-
-
-{
     foreach _,v in ipairs(l)
         assert(v == "(C auto)");
 }

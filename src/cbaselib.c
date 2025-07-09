@@ -18,11 +18,6 @@
 #include "cscriptlimits.h"
 
 
-// TODO: add docs
-static int b_clone(cs_State *C) {
-}
-
-
 static int b_error(cs_State *C) {
     int level = csL_opt_integer(C, 1, 1);
     cs_setntop(C, 1); /* leave only message on top */
@@ -653,7 +648,6 @@ static int b_range(cs_State *C) {
 
 
 static const cs_Entry basic_funcs[] = {
-    {"clone", b_clone},
     {"error", b_error},
     {"assert", b_assert},
     {"gc", b_gc},

@@ -149,6 +149,8 @@ fn toomanyidx() {
 
 
 if __heavy and !__port {
+    /// skip them anyway
+    (Message or print)("skipped heavy non-portable tests");
     ///teststring();
     ///controlstruct();
     ///manylines();
@@ -157,4 +159,4 @@ if __heavy and !__port {
     ///toomanyconst();
     ///toomanyidx();
 } else
-    (Message or print)("skipping heavy non-portable tests");
+    (Message or print)("skipped heavy non-portable tests");

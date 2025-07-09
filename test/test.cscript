@@ -3,20 +3,39 @@
 
 /*
 ** Table containing test options.
+** "termcodes" - if true (and 'stdout' is terminal), output ansii codes to
+**               color and set different modes to text in terminal, this
+**               also enables additional goodies, for example showing the
+**               current test that is executing (not portable).
 ** "warnings" - if true, print warnings the test throws.
 ** "noprint" - if true, replace 'print' and 'printf' with CScript functions
 **             that print to temporary file (not portable).
 ** "memory" - if true, print memory after test is finished executing.
 ** "errors" - if true, display error message in case test fails.
 ** "timed" - if true, time the test execution and display it
+** "reprint_failed" - if true, after all tests are finished, re-prints failed
+**                    tests (and their errors if "errors" is true).
+** "stop_on_fail" - if true, stop testing after first failed test.
+** "run_isolated" - if true, run each test in different process by executing
+**                  standalone interpreter with test as its only argument,
+**                  this is not portable and execution timing won't be as
+**                  reliable information to look at, additionally all warnings
+**                  and errors won't be reachable, only the exit status.
+**                  Finally the skip messages won't get registered.
+** "testsuites_to_skip" - list of testsuite names, which are skipped.
 ** "tests_script" - filename of the script that generates tests table.
 */
 __opts = __G.__opts or {
+    termcodes = true,
     warnings = false,
     noprint = true,
     memory = false,
     errors = true,
-    timed = false,
+    timed = true,
+    reprint_failed = true,
+    stop_on_fail = false,
+    run_isolated = false,
+    testsuites_to_skip = [];
     tests_script = "tests.cscript",
 };
 
@@ -53,17 +72,29 @@ __port = __G.__port or !(__POSIX or __WINDOWS);
 __skipmsg = __G.__skipmsg or true;
 
 
-/* tests should import debug library when needed */
-debug = nil;
-
-
-/* upvalues for timing execution */
+/* storage for timing execution */
 local initclock, lastclock;
 
-/* store function as locals as tests might change global variables */
-local print,printf,execute,fmt,assert,popen,find,runfile,typeof,error,clock,ipairs =
-      print,printf,os.execute,string.fmt,assert,io.popen,reg.find,runfile,typeof,
-      error,os.clock,ipairs;
+/* table for storing failed tests */
+local failed_tests = {};
+/* list for storing messages about (parts of) skipped tests */
+local skip_msgs = [];
+
+/* save standard files */
+local stdout, stderr, stdin = io.stdout, io.stderr, io.stdin;
+
+/* store function as locals as tests might change them */
+local traceback,print,printf,execute = debug.traceback,print,printf,os.execute;
+local fmt,assert,popen,write,flush = string.fmt,assert,io.popen,io.write,io.flush;
+local find,runfile,typeof,error,ipairs = reg.find,runfile,typeof,error,ipairs;
+local output,sfind,substr,tostr = io.output,string.find,string.substr,tostr;
+local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock;
+local tmpname,pairs,gc,osremove,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
+local exit,getinfo = os.exit,debug.getinfo;
+
+
+/* tests should import debug library when needed */
+debug = nil;
 
 
 if __opts.noprint and !__port {
@@ -73,49 +104,49 @@ if __opts.noprint and !__port {
     };
 
     /* file for redirecting 'stdout' and 'stderr' when running a test */
-    local out = assert(os.tmpname());
+    local out = assert(tmpname());
     __C.out = out;
 
     /* replace 'print' while testing */
     __G.print = fn(...) {
         local args = [...];
-        local oldout = io.output();
-        io.output(out);
+        local oldout = output();
+        output(out);
         foreach i,arg in ipairs(args) {
             if i > 0
-                io.write("\t");
-            io.write(tostr(arg));
+                write("\t");
+            write(tostr(arg));
         }
-        io.write("\n");
-        io.output(oldout);
+        write("\n");
+        output(oldout);
     };
 
     /* replace 'printf' while testing */
     __G.printf = fn(fmt, ...) {
         local str = "";
         local args = [...];
-        local oldout = io.output();
+        local oldout = output();
         local i = 0;
-        local j = string.find(fmt, "%");
-        io.output(out);
+        local j = sfind(fmt, "%");
+        output(out);
         while (j and j < len(fmt)) {
-            str = str .. string.substr(fmt, i, j - 1);
-            if string.byte(fmt, j+1) == '%' {
+            str = str .. substr(fmt, i, j - 1);
+            if byte(fmt, j+1) == '%' {
                 str = str .. "%";
                 i = j + 1;
             } else {
-                if list.len(args) <= 0
+                if llen(args) <= 0
                     error("missing format value");
-                local arg = tostr(list.remove(args, 0));
+                local arg = tostr(remove(args, 0));
                 str = str .. arg;
                 i = j + 1 + len(arg);
             }
-            fmt = string.substr(fmt, j+1);
-            j = string.find(fmt, "%");
+            fmt = substr(fmt, j+1);
+            j = sfind(fmt, "%");
         }
         str = str .. "\n";
-        io.write(str);
-        io.output(oldout);
+        write(str);
+        output(oldout);
     };
 }
 
@@ -127,19 +158,43 @@ if !__opts.warnings { /* no warnings? */
 
 
 /*
-** Colorize text if 'stdout' is terminal.
+** Apply terminal code 'c' if 'stdout' is terminal.
 ** @s - string
 ** @c - string
 */
-local fn termcolor(s,c) {
-    if (!__port and execute("[ -t 1 ]"))
+local fn termcode(c, s) {
+    s = s or "";
+    if (!__port and __opts.termcodes and execute("[ -t 1 ]"))
         return (c .. s .. "\e[0m") or s;
     return s;
 }
 
-local fn RED(s) { return termcolor(s, "\e[31m"); }
-local fn GREEN(s) { return termcolor(s, "\e[32m"); }
-local fn YELLOW(s) { return termcolor(s, "\e[33m"); }
+local ESC = fn (seq) { return "\e" .. seq; };
+
+/* colors */
+local fn RED(s) { return termcode(ESC("[31m"), s); }
+local fn GREEN(s) { return termcode(ESC("[32m"), s); }
+local fn YELLOW(s) { return termcode(ESC("[33m"), s); }
+local fn MAGENTA(s) { return termcode(ESC("[35m"), s); }
+local fn CYAN(s) { return termcode(ESC("[36m"), s); }
+
+/* modes */
+local fn STRIKE(s) { return termcode(ESC("[9m"), s); }
+
+/* cursor */
+local fn SAVEPOS() { return termcode(ESC("7")); }
+local fn LOADPOS() { return termcode(ESC("8")); }
+
+/* erase */
+local fn ERASELINE() { return termcode(ESC("[2K")); }
+
+
+if __skipmsg {
+    fn Message(msg) {
+        local t = getinfo(2, "s");
+        skip_msgs[skip_msgs.len] = msg .. " in '" .. YELLOW(t.source) .. "'";
+    }
+}
 
 
 /*
@@ -203,7 +258,7 @@ local fn get_tests(filename) {
         local f = assert(popen(lscmd("d")), "can't list directories");
         foreach dir in f.lines() {
             if dir == "libs/" continue; /* ignore 'libs' (used for testing) */
-            local tsuite = string.substr(dir, 0, -2); /* no '/' or '\\' */
+            local tsuite = substr(dir, 0, -2); /* no '/' or '\\' */
             local ltests = []; /* list of testsuite tests */
             local n = 0; /* number of tests */
             f = assert(popen(lscmd("f", dir)), "can't list files");
@@ -253,7 +308,11 @@ local fn gettime(c) {
 }
 
 
-/* use K for 1000 and M for 1000000 (not 2^10 -- 2^20) */
+/*
+** Formats memory usage in bytes to use K for 1000 and M for 1000000
+** (not 2^10 -- 2^20).
+** @m - number
+*/
 local fn memfmt(m) {
     local fn round(m) {
         m = m + 0.04999;
@@ -271,11 +330,16 @@ local fn memfmt(m) {
 }
 
 
+/*
+** Displays current memory usage and the last maximum memory usage.
+** Formatting is done according to 'memfmt'.
+*/
 local max = 0;
 local fn showmem() {
     local m = gc("count") * 1024;
     max = (m > max) and m or max;
-    printf("mem_current: %  mem_max: %", YELLOW(memfmt(m)), RED(memfmt(max)));
+    printf("           mem_current: %  mem_max: %",
+           YELLOW(memfmt(m)), RED(memfmt(max)));
 };
 
 
@@ -286,21 +350,49 @@ local fn showmem() {
 local fn run_test(filepath) {
     if (__opts.memory)
         showmem();
-    local stat, msg = pcall(runfile, filepath);
+    if (__opts.termcodes) {
+        output(stdout);
+        write(fmt("%sCurrently executing '%s'...", SAVEPOS(), YELLOW(filepath)));
+        flush();
+    }
+    local stat, msg, code;
+    if (!__port and __opts.run_isolated) {
+        local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
+        stat, msg, code = execute("../cscript " .. filepath .. devnull);
+    } else
+        stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
+    if (__opts.termcodes) {
+        output(stdout);
+        write(LOADPOS() .. ERASELINE());
+        flush();
+    }
     printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
-    if (__opts.errors and !stat)
-        print(msg);
+    if (!stat) {
+        if (!_port and __opts.run_isolated and msg and code)
+            msg = msg .. " (code " .. tostr(code) .. ")";
+        failed_tests[filepath] = msg;
+        if (__opts.errors)
+            print(msg);
+        if (__opts.stop_on_fail) {
+            if (__C.out) osremove(__C.out);
+            exit(0, true);
+        }
+    }
 }
 
-/// utf8, syntax, io, math
 
 /*
 ** @tsuite - string
 ** @what - string
 */
 local fn testsuite_headerfmt(tsuite, what) {
-    print(YELLOW("> " .. what .. "(") .. tsuite .. YELLOW(")"));
+    local mode, cl = fn(x){return x;}, MAGENTA;
+    if what == "END" {
+        mode = STRIKE;
+        cl = CYAN;
+    }
+    print(cl("> " .. what .. "(") .. mode(tsuite) .. cl(")"));
 }
 
 
@@ -332,6 +424,21 @@ local fn teststable(tests) {
 
 
 /*
+** Checks if testsuite should be skipped.
+** @testsuite - string
+*/
+local fn shouldskip(testsuite) {
+    if __opts.testsuites_to_skip {
+        foreach i,name in ipairs(__opts.testsuites_to_skip) {
+            if name == testsuite
+                return true;
+        }
+    }
+    return false;
+}
+
+
+/*
 ** Runs specific testsuites provided as extra arguments.
 ** These must map to testsuites located in 'tests' table.
 ** If 'tests' is not provided, '__tests' global is checked,
@@ -343,6 +450,7 @@ local fn run_testsuites(tests, ...) {
     tests = teststable(tests);
     foreach i,name in ipairs(filter) {
         assert(typeof(filter[i]) == "string"); /* these are arguments */
+        if shouldskip(name) continue;
         local tlist = tests[name];
         if (tlist)
             run_tests(name, tlist);
@@ -360,24 +468,43 @@ local fn run_testsuites(tests, ...) {
 */
 local fn run_all_testsuites(tests) {
     tests = teststable(tests);
-    foreach tsuite, tlist in pairs(tests)
-        run_tests(tsuite, tlist);
+    foreach name,tlist in pairs(tests) {
+        assert(typeof(name) == "string"); /* must be testsuite name */
+        if shouldskip(name) continue;
+        run_tests(name, tlist);
+    }
 }
 
 /* }===================================================================== */
 
+
 /*
 ** {====================================================================
-** Command-line
+** Main
 ** =====================================================================
 */
 
 if (__ARGS.len > 1)
-    run_testsuites(nil, list.flatten(__ARGS, 1));
+    run_testsuites(nil, flatten(__ARGS, 1));
 else
     run_all_testsuites();
 
 if __C.out /* have temporary file? */
-    os.remove(__C.out); /* remove it */
+    osremove(__C.out); /* remove it */
+
+if __skipmsg and skip_msgs.len > 0 {
+    print("Skip messages:");
+    foreach _,msg in ipairs(skip_msgs)
+        print("> " .. msg);
+}
+
+if __opts.reprint_failed {
+    local n = len(failed_tests);
+    if (n > 0) {
+        printf("% failed test(s):", RED(tostr(n)));
+        foreach test,msg in pairs(failed_tests)
+            print(RED(test) .. (__opts.errors and ":\n"..msg or ""));
+    }
+}
 
 /* }==================================================================== */

@@ -57,7 +57,7 @@ local fn checkerr(msg, f, ...) {
 }
 
 { /// remove without position
-    l = [0, 1, 2, 3, 4, 5, 6, 7];
+    local l = [0, 1, 2, 3, 4, 5, 6, 7];
     assert(l.len == 8 and list.len(l) == 8 and len(l) == 8);
     assert(list.remove(l) == 7);
     assert(l[6] == 6 and list.last == nil and l.len == 8);
@@ -75,7 +75,7 @@ local fn checkerr(msg, f, ...) {
 }
 
 { /// remove with position
-    l = [0, 1, 2, 3, 4, 5, 6, 7];
+    local l = [0, 1, 2, 3, 4, 5, 6, 7];
     assert(list.remove(l, 3) == 3);
     assert(list.isordered(l));
     assert(list.remove(l, 3) == 4);

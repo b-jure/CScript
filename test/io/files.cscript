@@ -462,9 +462,9 @@ assert(__G.X == 8);
 __G.X = nil;
 
 
-local x1 = "string\n\n\\com \"\"''strange [[things]] ]]'";
+local x1 = "string\n\n\\com \"\"''strange [=[things]=] ]]'";
 io.output(fname);
-assert(io.write(string.fmt("X2 = %q;\n# comment without ending EOS", x1)));
+assert(io.write(string.fmt("X2 = %q;\n/// comment without ending EOS", x1)));
 io.close();
 assert(loadfile(fname))();
 assert(x1 == __G.X2);

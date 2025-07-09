@@ -417,7 +417,7 @@ if __heavy {
     assert(msg == 15);
     gc("restart"); /* make sure gc is running */
 } else
-    (Message or print)("skipping stack overflow tests");
+    (Message or print)("skipped stack overflow tests");
 
 
 { /// errors in error handle that not necessarily go forever
