@@ -99,7 +99,7 @@ typedef struct csL_MetaEntry {
 } csL_MetaEntry;
 
 CSLIB_API int   csL_new_metalist(cs_State *C, const char *lname);
-CSLIB_API int   csL_set_metalist(cs_State *C, const char *lname);
+CSLIB_API void  csL_set_metalist(cs_State *C, const char *lname);
 CSLIB_API int   csL_get_metaindex(cs_State *C, int index, int mm);
 CSLIB_API int   csL_callmeta(cs_State *C, int index, int mm);
 CSLIB_API int   csL_new_usermethods(cs_State *C, const char *tname, int sz);

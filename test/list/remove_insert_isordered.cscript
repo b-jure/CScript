@@ -94,3 +94,12 @@ local fn checkerr(msg, f, ...) {
     assert(list.len(l) == 0);
     assert(list.isordered(l));
 }
+
+
+{ /// test enumerate
+    local x = 0;
+    local l = list.new(20);
+    foreach i,v in list.enumerate(l)
+        x = x + 1;
+    assert(x == 0);
+}

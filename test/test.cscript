@@ -1,61 +1,47 @@
 #!../cscript
 
+/* Quick version check, keep this first! */
+local version = "CScript 1.0";
+if __VERSION != version { /* test script and core version mismatch? */
+    io.stderr.write("This test script is for ", version, ", not for ",
+                     __VERSION, "\nExiting...");
+    return; /* done */
+}
 
 /*
-** Test options.
-**
-** "termcodes" - if true (and 'stdout' is terminal), output ansii codes to
-**               color and set different modes to text in terminal, this
-**               also enables additional goodies, for example showing the
-**               current test that is executing (not portable).
-** "warnings" - if true, print warnings the test throws.
-** "noprint" - if true, replace 'print' and 'printf' with CScript functions
-**             that print to temporary file (not portable).
-** "memory" - if true, print memory before test is executed.
-** "errors" - if true, display error message in case test fails.
-** "timed" - if true, time the test execution and display it
-** "reprint_failed" - if true, after all tests are finished, re-prints failed
-**                    tests (and their errors if "errors" is true).
-** "stop_on_fail" - if true, stop testing after first failed test.
-** "run_isolated" - if true, run each test in different process by executing
-**                  standalone interpreter with test as its only argument,
-**                  this is not portable and execution timing won't be as
-**                  reliable information to look at, additionally all warnings
-**                  and errors won't be reachable, only the exit status.
-**                  Finally the skip messages won't get registered, however
-**                  this provides complete isolation for precise testing.
-** "testsuites_to_skip" - list of testsuite names, which are skipped.
-** "tests_script" - filename of the script that generates tests table, can
-**                  be nil, in which case, script will try to discover the
-**                  testsuites and their tests (not portable).
+** Default options.
+** For usage string, grep (without double-quotes) "local usage".
 */
-__opts = __G.__opts or {
-    termcodes = true,
-    warnings = false,
-    noprint = true,
-    memory = false,
-    errors = true,
-    timed = true,
-    reprint_failed = true,
-    stop_on_fail = false,
-    run_isolated = false,
-    testsuites_to_skip = [];
-    tests_script = "testsuites.cscript",
+__opts = {
+    termcodes = true, /* -c (true) | -C (false) */
+    warnings = false, /* -w (true) | -W (false) */
+    noprint = true, /* -o (true) | -O (false) */
+    memory = false, /* -m (true) | -M (false) */
+    errors = true, /* -r (true) | -R (false) */
+    timed = true, /* -z (true) | -Z (false) */
+    reprint_failed = true, /* -f (true) | -F (false) */
+    abort_on_fail = false, /* -a (true) | -A (false) */
+    run_isolated = false, /* -i (true) | -I (false) */
+    enter_debug = false, /* -d (true) | -D (false) */
+    testsuites_to_skip = [], /* -e testsuite */
+    testsuites_to_run = [], /* non-flag arguments */
+    cli_tests = [], /* -t test_file */
+    tests_script = "testsuites.cscript", /* -s tests_script */
 };
 
 
 /*
 ** {=====================================================================
-** Additional settings
+** Additional (environment specific) settings
 ** ======================================================================
 */
 
 /* false if not running heavy tests */
-__heavy = __G.__heavy or true;
-/* false if runnning non-portable tests or assumming posix/windows environment */
-__port = __G.__port or !(__POSIX or __WINDOWS);
-/* false if not reporting messages of tests not performed */
-__skipmsg = __G.__skipmsg or true;
+__heavy = __G.__heavy or true; /* default is true */
+/* false if runnning non-portable tests or assuming posix/windows environment */
+__port = __G.__port or !(__POSIX or __WINDOWS); /* default is false on windows and posix */
+/* false if not reporting messages of (parts of) tests not performed */
+__skipmsg = __G.__skipmsg or true; /* default is true */
 
 /* }===================================================================== */
 
@@ -66,12 +52,26 @@ __skipmsg = __G.__skipmsg or true;
 ** ======================================================================
 */
 
-local version = "CScript 1.0";
-if __VERSION != version { /* test script and core version mismatch? */
-    io.stderr.write("This test suite is for ", version, ", not for ",
-                     __VERSION, "\nExiting...");
-    return; /* done */
-}
+/*
+** Expected fields in '__opts' and their value types.
+** For verification in case user modifies the '__opts' table.
+*/
+local expected_opts = {
+    termcodes = "boolean",
+    warnings = "boolean",
+    noprint = "boolean",
+    memory = "boolean",
+    errors = "boolean",
+    timed = "boolean",
+    reprint_failed = "boolean",
+    abort_on_fail = "boolean",
+    run_isolated = "boolean",
+    enter_debug = "boolean",
+    testsuites_to_skip = "list",
+    testsuites_to_run = "list",
+    cli_tests = "list",
+    tests_script = "string",
+};
 
 
 /* global table for caching tests table */
@@ -84,11 +84,22 @@ __ARGS = args;
 __PROG = "../cscript";
 
 
+/* save program name */
+local prog = "../cscript";
+
+
+/* copy over command-line arguments */
+local args = list.new(__ARGS.len);
+foreach i,arg in list.enumerate(__ARGS)
+    args[i] = arg;
+
+
 /* storage for timing execution */
 local initclock, lastclock;
 
-/* table for storing failed tests */
-local failed_tests = {};
+/* list for storing failed tests (in order of failure) */
+local failed_tests = [];
+
 /* list for storing messages about (parts of) skipped tests */
 local skip_msgs = [];
 
@@ -101,8 +112,9 @@ local fmt,assert,popen,write,flush = string.fmt,assert,io.popen,io.write,io.flus
 local find,runfile,typeof,error,ipairs = reg.find,runfile,typeof,error,ipairs;
 local output,sfind,substr,tostr = io.output,string.find,string.substr,tostr;
 local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock;
-local tmpname,pairs,gc,osremove,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
-local exit,getinfo = os.exit,debug.getinfo;
+local tmpname,pairs,gc,rm,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
+local exit,getinfo,enumerate = os.exit,debug.getinfo,list.enumerate;
+local char,dbg = string.char,debug.debug;
 
 
 /* tests should import debug library when needed */
@@ -111,66 +123,6 @@ debug = nil;
 
 /* storage for print functions and temporary file (otherwise empty) */
 __C = {};
-
-
-if __opts.noprint and !__port {
-    __C = { /* store old functions */
-        print = __G.print,
-        printf = __G.printf,
-    };
-
-    /* file for redirecting 'stdout' and 'stderr' when running a test */
-    local out = assert(tmpname());
-    __C.out = out;
-
-    /* replace 'print' while testing */
-    __G.print = fn(...) {
-        local args = [...];
-        local oldout = output();
-        output(out);
-        foreach i,arg in ipairs(args) {
-            if i > 0
-                write("\t");
-            write(tostr(arg));
-        }
-        write("\n");
-        output(oldout);
-    };
-
-    /* replace 'printf' while testing */
-    __G.printf = fn(fmt, ...) {
-        local str = "";
-        local args = [...];
-        local oldout = output();
-        local i = 0;
-        local j = sfind(fmt, "%");
-        output(out);
-        while (j and j < len(fmt)) {
-            str = str .. substr(fmt, i, j - 1);
-            if byte(fmt, j+1) == '%' {
-                str = str .. "%";
-                i = j + 1;
-            } else {
-                if llen(args) <= 0
-                    error("missing format value");
-                local arg = tostr(remove(args, 0));
-                str = str .. arg;
-                i = j + 1 + len(arg);
-            }
-            fmt = substr(fmt, j+1);
-            j = sfind(fmt, "%");
-        }
-        str = str .. "\n";
-        write(str);
-        output(oldout);
-    };
-}
-
-
-if !__opts.warnings { /* no warnings? */
-    __C.warn = __G.warn;
-    __G.warn = fn(...) { return; };
-}
 
 
 /*
@@ -205,8 +157,7 @@ local fn LOADPOS() { return termcode(ESC("8")); }
 local fn ERASELINE() { return termcode(ESC("[2K")); }
 
 
-if __skipmsg {
-
+if __skipmsg { /* store skipped (parts of) tests? */
     /*
     ** Stores the message 'msg' into 'skip_msgs'.
     ** @msg - string
@@ -215,7 +166,6 @@ if __skipmsg {
         local t = getinfo(2, "s");
         skip_msgs[skip_msgs.len] = msg .. " in '" .. YELLOW(t.source) .. "'";
     }
-
 }
 
 
@@ -227,7 +177,7 @@ if __skipmsg {
 local fn testfmt(test, stat) {
     local C = stat and GREEN or RED;
     local res = stat and "PASS" or "FAIL";
-    return fmt("%s  %4s  %s %-55s", C("["), C(res), C("]"), YELLOW(test));
+    return fmt("%s  %4s  %s %-55s", C("["), C(res), C("]"), C(test));
 }
 
 
@@ -265,6 +215,23 @@ local fn lscmd(what, path) {
 
 
 /*
+** Verifies validity of tests table.
+** @tests - table
+*/
+local fn verify_tests_table(tests) {
+    foreach tsuite,tlist in pairs(tests) {
+        assert(typeof(tsuite) == "string",
+               fmt("testsuite name should be a string, instead got '%s'",
+                    typeof(tsuite)));
+        foreach _,test in ipairs(tlist)
+            assert(typeof(test) == "string",
+                   fmt("test name should be a string, instead got '%s'",
+                        typeof(test)));
+    }
+}
+
+
+/*
 ** Finds all testsuites and their tests in the current directory.
 ** First, the current directory is listed, each directory listed is
 ** considered to be a testsuite, and each file ending with '.cscript'
@@ -275,6 +242,7 @@ local fn lscmd(what, path) {
 ** @filename - ?string
 */
 local fn get_tests(filename) {
+    if __tests return __tests; /* have one already */
     local tests = {};
     if (!filename and !__port) { /* discover directories and tests? */
         local f = assert(popen(lscmd("d")), "can't list directories");
@@ -294,24 +262,27 @@ local fn get_tests(filename) {
             tests[tsuite] = ltests; /* store the testsuite */
         }
     } else { /* otherwise try get 'tests' table from a file */
-        filename = filename or __opts.tests_script;
+        if !filename /* no filename? */
+            error("can't generate tests table, missing filename");
         tests = runfile(filename);
         if typeof(tests) != "table"
-            error("'" .. filename .. "' script must return a table");
+            error(fmt("'%s' script must return a table, instead got %s",
+                      filename, typeof(tests)));
     }
-    __tests = tests; /* cache it into global tests table */
+    verify_tests_table(tests);
+    __tests = tests; /* cache it */
     return tests;
 }
 
 
 /*
-** Lists all testsuites in 'tests' and the tests they contain.
-** If 'tests' is not provided or is nil, then global '__tests' is checked,
-** lastly the 'tests' table is re-generated.
-** @tests - ?table
+** Lists all testsuites and tests in the table returned by 'tests_script'.
+** If 'tests_script' is not provided, the script will try to auto-generate
+** tests table from the current directory (not portable).
+** @tests_script - ?string
 */
-local fn list_tests(tests) {
-    tests = testtable(tests);
+local fn list_tests(tests_script) {
+    local tests = get_tests(tests_script);
     foreach tsuite, tlist in pairs(tests) {
         print(tsuite .. ":");
         foreach _, test in ipairs(tlist)
@@ -324,8 +295,19 @@ local fn list_tests(tests) {
 ** Returns formatted elapsed time depending on the time 'c'.
 ** @c - number
 */
+local prevtest_time = math.maxint;
 local fn gettime(c) {
-    local s = fmt("%-8g (+%-g)", c - initclock, c - lastclock);
+    local elapsed = c - lastclock;
+    local total_time = fmt("%-8g", c - initclock);
+    local test_time = fmt("+%-8g", elapsed);
+    if (prevtest_time < elapsed)
+        test_time = RED(test_time);
+    else if (elapsed < prevtest_time)
+        test_time = CYAN(test_time);
+    else
+        test_time = YELLOW(test_time);
+    local s = fmt("%s (%s)", YELLOW(total_time), test_time);
+    prevtest_time = elapsed;
     lastclock = c;
     return s;
 }
@@ -358,12 +340,35 @@ local fn memfmt(m) {
 ** Formatting is done according to 'memfmt'.
 */
 local max = 0;
+local mprev = 0;
 local fn showmem() {
+    local currfmt;
     local m = gc("count") * 1024;
     max = (m > max) and m or max;
-    printf("           mem_current: %  mem_max: %",
-           YELLOW(memfmt(m)), RED(memfmt(max)));
+    local mcurr = memfmt(m);
+    local mmax = memfmt(max);
+    if (m < mprev) /* less memory than previous test? */
+        mcurrfmt = CYAN;
+    else if (m == max) /* new maximum or equal to previous maximum? */
+        mcurrfmt = RED;
+    else /* otherwise allocated more memory */
+        mcurrfmt = YELLOW;
+    printf("           %|%", mcurrfmt(mcurr), RED(mmax));
+    mprev = m;
 };
+
+
+/* redirection string to null file, for posix and windows */
+local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
+
+
+/*
+** Removes temporary output file.
+*/
+local fn rmtempfile() {
+    if (__C.out) /* have temporary file? */
+        rm(__C.out); /* remove it */
+}
 
 
 /*
@@ -374,33 +379,35 @@ local fn run_test(filepath) {
     if (__opts.memory)
         showmem();
     local termcodes = !__port and __opts.termcodes and execute("[ -t 1 ]");
-    local isorun = !__port and __opts.run_isolated;
-    if (termcodes) {
+    local isolated = !__port and __opts.run_isolated;
+    if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
-        write(fmt("%sCurrently executing '%s'...", SAVEPOS(), YELLOW(filepath)));
+        write(fmt("%sCurrently running '%s'...", SAVEPOS(), YELLOW(filepath)));
         flush();
     }
     local stat, msg, code;
-    if (isorun) {
-        local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
+    if (isolated) /* run isolated? */
         stat, msg, code = execute(__PROG .. " " .. filepath .. devnull);
-    } else
+    else /* otherwise run in the same global environment */
         stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
-    if (termcodes) {
+    if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
         write(LOADPOS() .. ERASELINE());
         flush();
     }
     printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
-    if (!stat) {
-        if (isorun and msg and code)
-            msg = msg .. " (code " .. tostr(code) .. ")";
-        failed_tests[filepath] = msg;
-        if (__opts.errors)
+    if (!stat) { /* test failed? */
+        if (isolated and msg and code) /* failed isolated with msg and code? */
+            msg = msg .. " (code " .. tostr(code) .. ")"; /* append it to msg */
+        failed_tests[failed_tests.len] = { /* add it to failed tests list */
+            testname = filepath,
+            errormsg = msg,
+        };
+        if (__opts.errors) /* print errors of failed tests? */
             print(msg);
-        if (__opts.stop_on_fail) {
-            if (__C.out) osremove(__C.out);
+        if (__opts.abort_on_fail) { /* abort on first failed test? */
+            rmtempfile();
             exit(0, true);
         }
     }
@@ -422,43 +429,23 @@ local fn testsuite_headerfmt(tsuite, what) {
 
 
 /*
-** Checks if test list entry 'filepath' is a string.
-** @tsuite - string
-** @filepath - string
-*/
-local fn check_tlist_entry(tsuite, filepath) {
-    if (typeof(filepath) != "string")
-        error("expected filepath in test list (in testsuite '"..tsuite.."'), "
-                .. "instead got " .. typeof(filepath));
-}
-
-
-/*
 ** Runs all the tests located in 'tlist' for testsuite 'tsuite'.
 ** @tsuite - string
 ** @tlist - list
 */
 local fn run_tests(tsuite, tlist) {
-    testsuite_headerfmt(tsuite, "BEGIN");
-    if (__opts.timed) { /* timming the execution? */
-        initclock = clock();
-        lastclock = initclock;
+    if (tlist.len > 0) {
+        testsuite_headerfmt(tsuite, "BEGIN");
+        if (__opts.timed) { /* timming the execution? */
+            initclock = clock();
+            lastclock = initclock;
+        }
+        foreach _, filepath in ipairs(tlist) {
+            run_test(filepath);
+            if (__opts.enter_debug) dbg(); /* enter interactive mode */
+        }
+        testsuite_headerfmt(tsuite, "END");
     }
-    foreach _, filepath in ipairs(tlist) {
-        check_tlist_entry(tsuite, filepath);
-        run_test(filepath);
-    }
-    testsuite_headerfmt(tsuite, "END");
-}
-
-
-/*
-** Return 'tests' if non-nil, or tries to fetch global '__tests" or
-** it re-generates tests from the script '__opts.tests_script'.
-** @tests - ?table
-*/
-local fn teststable(tests) {
-    return tests or __tests or get_tests();
 }
 
 
@@ -479,19 +466,18 @@ local fn shouldskip(testsuite) {
 
 /*
 ** Runs specific testsuites provided as extra arguments.
-** These must map to testsuites located in 'tests' table.
-** If 'tests' is not provided, '__tests' global is checked,
-** and if global is nil the 'tests' table is re-generated.
-** @tests - ?table
+** These must map to testsuites located in table returned from 'tests_script'.
+** If 'tests_script' is not provided, the script will try to auto-generate
+** tests table from the current directory (not portable).
+** @tests_script - ?string
+** @varags - string
 */
-local fn run_testsuites(tests, ...) {
+local fn run_testsuites(tests_script, ...) {
     local filter = [...];
-    tests = teststable(tests);
+    if (filter.len == 0) return; /* done; nothing to run */
+    tests = get_tests(tests_script);
     foreach i,name in ipairs(filter) {
-        if typeof(filter[i]) != "string"
-            error("expect testsuite name");
-        if shouldskip(name)
-            continue; /* skip */
+        if shouldskip(name) continue; /* skip */
         local tlist = tests[name];
         if (tlist)
             run_tests(name, tlist);
@@ -502,17 +488,16 @@ local fn run_testsuites(tests, ...) {
 
 
 /*
-** Runs all testsuites located in 'tests' table.
-** If 'tests' is not provided, then the global '__tests' is checked,
-** and if global is nil the 'tests' table is re-generated.
-** @tests - ?table
+** Runs all testsuites located in the table returned from 'tests_script'.
+** If 'tests_script' is not provided, the script will try to auto-generate
+** tests table from the current directory (not portable).
+** @tests_script - ?string
 */
-local fn run_all_testsuites(tests) {
-    tests = teststable(tests);
+local fn run_all_testsuites(tests_script) {
+    local tests = get_tests(tests_script);
     foreach name,tlist in pairs(tests) {
         assert(typeof(name) == "string"); /* must be testsuite name */
-        if shouldskip(name)
-            continue; /* skip */
+        if shouldskip(name) continue; /* skip */
         run_tests(name, tlist);
     }
 }
@@ -522,31 +507,429 @@ local fn run_all_testsuites(tests) {
 
 /*
 ** {====================================================================
-** Main
+** Command-line-interface
 ** =====================================================================
 */
 
-if (__ARGS.len > 1)
-    run_testsuites(nil, flatten(__ARGS, 1));
-else
-    run_all_testsuites();
+/*
+** Usage string.
+*/
+local usage = [=[
+usage: ./test.cscript [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite ...]
+                      [-ttest_file | -t test_file]
+                      [-etestsuite_name | -e testsuite_name]
+                      [-stests_script | -s tests_script]
+                      [--minimal-flags]
+                      [--port-flags]
+                      [--verbose-flags]
+                      [--standard-flags]
 
-if __C.out /* have temporary file? */
-    osremove(__C.out); /* remove it */
+Available options are:
+    -h      Show usage (this), this must be the first option and argument.
+    -c      Output ansii terminal codes in order to color and set different
+            modes to to text in terminal. This also enables showing the current
+            test that is executing (this is disabled if '-w' or '-o').
+            This option is not portable and is ignored if 'stdout' is not a terminal.
+    -w      Enable output of warnings while running tests.
+    -o      Replace 'print' and 'printf' with CScript functions that print to
+            temporary file instead of 'stdout' (not portable).
+    -m      Print memory usage before running the test.
+    -r      Print the error message in case test fails.
+    -f      After all tests are finished, re-print failed test names
+            (and their error message if '-r').
+    -a      Abort the test script after the first failed test.
+    -i      Run each test in isolation as a separate process by executing standalone
+            interpreter with test as its only argument. All warnings and errors
+            won't be reachable as they are redirected to nul(l) device/file,
+            only the exit code can be displayed in error messages (not portable).
+    -d      After each test is finished, enter interactive mode.
+            In order to leave this mode, enter a line containing only "cont".
 
-if __skipmsg and skip_msgs.len > 0 {
-    print("Skip messages:");
-    foreach _,msg in ipairs(skip_msgs)
-        print("> " .. msg);
+    All of the options above have the uppercase version which do the opposite
+    (-C, -W, -O, -M, -R, -F, -A, -I and -D).
+
+    -t test_file        Add a test file {test_file} into the 'cli_tests' testsuite.
+                        This testsuite will be the first to run.
+    -e testsuite_name   Exclude testsuite {testsuite_name}, preventing the script
+                        from running it.
+    -s tests_script     Run CScript script {tests_script} to generate the tests table.
+                        This script should return a table with testsuite names as
+                        keys and lists of filenames as values which represent the
+                        tests of that testsuite. Test filepaths inside the list
+                        should be absolute or relative to the script file.
+
+    --minimal-flags     Equivalent to '-CWoMRZfaID'.
+    --port-flags        Equivalent to '-CwOmrZfaId'.
+    --verbose-flags     Equivalent to '-cWOmrzfAID'.
+    --standard-flags    Equivalent to '-cWoMRzfAiD'.
+    --list-tests        List all tests to be executed by the script found in
+                        {tests_script} (default script is 'testsuites.cscript').
+                        After listing script returns and no tests are executed.
+                        The default {tests_script} can be changed in '__opts' table.
+
+Other:
+    All the other non-option arguments (arg_testsuite) are names of testsuites
+    to run, this can act as a filter, in order to run only specific set of
+    testsuites. In cases where no specific test is provided (using '-t') and
+    no tests script (using '-s'), then the filename in the global table '__opts' 
+    is used (see test script). Global table '__opts' sets some default options,
+    refer to the test script for more information on what the values of these
+    options are.
+
+    If you get error "can't open file...", and you haven't specified '-s' option
+    and you are running only with portable options, it usually means the field
+    '__opts.tests_script' in the script is set to non-existing file.
+    By default this is set to 'testsuites.cscript' which comes with the
+    distribution, make sure you didn't delete this script, or if you moved
+    it to another directory, adjust the filepath of '__opts.tests_script'.
+]=];
+
+
+/* current argument index */
+local argi = 0;
+
+
+/*
+** Raise error for missing option argument.
+** @opt - string
+*/
+local fn option_missing_arg_error(opt, what) {
+    print(usage);
+    error("option '" .. opt .. "' requires argument (" .. what .. ")");
 }
 
-if __opts.reprint_failed {
-    local n = len(failed_tests);
-    if (n > 0) {
-        printf("% failed test(s):", RED(tostr(n)));
-        foreach test,msg in pairs(failed_tests)
-            print(RED(test) .. (__opts.errors and ":\n"..msg or ""));
+
+/*
+** Gets the next argument, which is either part of the current argument
+** string, or is the next argument in the 'args' list.
+** @nbyte - integer
+*/
+local fn get_arg(nbyte) {
+    local arg = substr(args[argi], nbyte+1);
+    if (0 < len(arg)) /* no space between option and argument? */
+        return arg; /* skip option char */
+    else if (argi + 1 < args.len) { /* have next argument? */
+        argi = argi + 1; /* go to next argument */
+        return args[argi]; /* and return it */
+    } else 
+        return nil; /* missing argument */
+}
+
+
+/*
+** Get required argument to current option.
+** @args - list
+** @what - string
+*/
+local fn get_req_arg(nbyte, opt, what) {
+    return get_arg(nbyte) or option_missing_arg_error(opt, what);
+}
+
+
+/* for '--list-tests' option */
+local tlist = false;
+
+/*
+** Handles flag options starting with '--', these options set
+** multiple flag options at once.
+*/
+local fn handle_multi_option(opt) {
+    switch (opt) {
+        case "list-tests": {
+            tlist = true;
+            break;
+        }
+        case "minimal-flags": {
+            __opts.termcodes = false;
+            __opts.warnings = false;
+            __opts.noprint = true;
+            __opts.memory = false;
+            __opts.errors = false;
+            __opts.timed = false;
+            __opts.reprint_failed = true;
+            __opts.abort_on_fail = true;
+            __opts.run_isolated = false;
+            __opts.enter_debug = false;
+            break;
+        }
+        case "port-flags": {
+            __opts.termcodes = false;
+            __opts.warnings = true;
+            __opts.noprint = false;
+            __opts.memory = true;
+            __opts.errors = true;
+            __opts.timed = false;
+            __opts.reprint_failed = true;
+            __opts.abort_on_fail = true;
+            __opts.run_isolated = false;
+            __opts.enter_debug = true;
+            __port = true; /* force portability */
+            break;
+        }
+        case "verbose-flags": {
+            __opts.termcodes = true;
+            __opts.warnings = false;
+            __opts.noprint = false;
+            __opts.memory = true;
+            __opts.errors = true;
+            __opts.timed = true;
+            __opts.reprint_failed = true;
+            __opts.abort_on_fail = false;
+            __opts.run_isolated = false;
+            __opts.enter_debug = false;
+            break;
+        }
+        case "standard-flags": {
+            __opts.termcodes = true;
+            __opts.warnings = false;
+            __opts.noprint = true;
+            __opts.memory = false;
+            __opts.errors = true;
+            __opts.timed = true;
+            __opts.reprint_failed = true;
+            __opts.abort_on_fail = false;
+            __opts.run_isolated = true;
+            __opts.enter_debug = false;
+            break;
+        }
+        default: {
+            print(usage);
+            error("unknown option '" .. opt .. "'");
+        }
     }
 }
+
+
+/*
+** Handles flag option, lowercase flag options always turn on the
+** options in '__opts', while uppercase are considered as false.
+** @f - integer
+*/
+local fn handle_flag_option(f) {
+    assert(typeof(f) == "number" and 0 <= f and f <= 255);
+    local val = ((f&0x20) != 0) and true or false; /* lowercase is true */
+    switch (f & ~0x20) {
+        case 'C': __opts.termcodes = val; break;
+        case 'W': __opts.warnings = val; break;
+        case 'O': __opts.noprint = val; break;
+        case 'M': __opts.memory = val; break;
+        case 'R': __opts.errors = val; break;
+        case 'Z': __opts.timed = val; break;
+        case 'F': __opts.reprint_failed = val; break;
+        case 'A': __opts.abort_on_fail = val; break;
+        case 'I': __opts.run_isolated = val; break;
+        case 'D': __opts.enter_debug = val; break;
+        default: {
+            print(usage);
+            error("unknown option '" .. char(f) .. "'");
+        }
+    }
+}
+
+
+/*
+** Handles command-line option.
+** Flag options can be aggregated by a single '-', such as '-cWOz', and
+** can end with a non-flag option such as '-cWOzt example.cscript'.
+** Non-flag options require additional argument, this argument can be
+** provided as separate argument or part of the same argument such as
+** '-texample.cscript'.
+** @opt - string
+*/
+local fn handle_option(opt) {
+    local lim = len(opt);
+    local nbyte = 1; /* start at byte after '-' */
+    loop {
+        local o = byte(opt, nbyte);
+        switch (o) {
+            case 't': { /* test file */
+                local tests = __opts.cli_tests;
+                tests[tests.len] = get_req_arg(nbyte, o, "test file");
+                return;
+            }
+            case 'e': { /* exclude */
+                local tsuites = __opts.testsuites_to_skip;
+                tsuites[tsuites.len] = get_req_arg(nbyte, o, "testsuite");
+                return;
+            }
+            case 's': { /* tests script */
+                __opts.tests_script = get_req_arg(nbyte, o, "tests script");
+                return;
+            }
+            default: {
+                if (nbyte == 1 and o == '-') { /* multi-set option? */
+                    handle_multi_option(substr(opt, 2));
+                    return;
+                } else /* otherwise regular flag option */
+                    handle_flag_option(o);
+            }
+        }
+        nbyte = nbyte + 1;
+        if (lim <= nbyte) break; /* no more options */
+    }
+}
+
+
+/*
+** Raises error if option value is not of expected type.
+** @option - string
+** @expected_type - string
+** @value_type - string
+*/
+local fn expect_option(option, expected_type, value_type) {
+    assert(typeof(option) == "string", "option is not a string");
+    if expected_type != value_type
+        error(fmt("invalid value for option '%s', expected %s, instead got %s",
+                    option, expected_type, value_type));
+}
+
+
+/*
+** Verifies validity of '__opts' table.
+** @options - table
+*/
+local fn verify_opts() {
+    assert(__opts, "missing '__opts' table");
+    foreach k,_ in pairs(expected_opts)
+        assert(__opts[k] != nil, fmt("missing option '%s' in '__opts'", k));
+    foreach k,v in pairs(__opts) {
+        local expected_type = expected_opts[k];
+        assert(expected_type != nil, fmt("invalid option '%s' in '__opts'", k));
+        expect_option(k, expected_type, typeof(v));
+    }
+}
+
+
+/*
+** Handles all command-line options and arguments.
+** @args - list
+*/
+local fn handle_cli_args() {
+    verify_opts();
+    for (argi = 1; argi < args.len; argi = argi + 1) {
+        local arg = args[argi];
+        if (byte(arg, 0) == '-' and 1 < len(arg)) { /* option? */
+            if (argi == 1 and byte(arg, 1) == 'h') { /* help option? */
+                print(usage);
+                rmtempfile();
+                exit(0, true);
+            }
+            handle_option(arg);
+        }
+        else { /* otherwise treat it as a testsuite name */
+            local l = __opts.testsuites_to_run;
+            l[l.len] = arg;
+        }
+    }
+}
+
+
+/*
+** Prints messages of (parts of) skipped tests.
+*/
+local fn print_skipped() {
+    if __skipmsg and 0 < skip_msgs.len {
+        print("Skip messages:");
+        foreach _,msg in ipairs(skip_msgs)
+            print("> " .. msg);
+    }
+}
+
+
+/*
+** Runs the test script with all the arguments provided by CLI.
+*/
+local fn run_args() {
+    verify_opts();
+    run_tests("cli_tests", __opts.cli_tests);
+    if (__opts.testsuites_to_run.len > 0) /* explicit testsuites? */
+        run_testsuites(__opts.tests_script, flatten(__opts.testsuites_to_run));
+    else if (__opts.cli_tests.len == 0) /* no explicit testsuites and tests? */
+        run_all_testsuites(__opts.tests_script); /* run all from tests script */
+    print_skipped();
+    if __opts.reprint_failed { /* reprint failed tests? */
+        local n = failed_tests.len;
+        if (n > 0) {
+            printf("% failed test(s):", RED(tostr(n)));
+            foreach _,entry in ipairs(failed_tests) {
+                local test = entry.testname;
+                local err = entry.errormsg;
+                print(RED(test) .. (__opts.errors and ":\n"..err or ""));
+            }
+        }
+    }
+}
+
+
+/*
+** Set specific options in '__opts'.
+** Should be called after all cli options and arguments were parsed.
+*/
+local fn set_options() {
+    if __opts.noprint and !__port {
+        __C = { /* store old functions */
+            print = __G.print,
+            printf = __G.printf,
+        };
+
+        /* file for redirecting 'stdout' and 'stderr' when running a test */
+        local out = assert(tmpname());
+        __C.out = out;
+
+        /* replace 'print' while testing */
+        __G.print = fn(...) {
+            local args = [...];
+            local oldout = output();
+            output(out);
+            foreach i,arg in ipairs(args) {
+                if i > 0
+                    write("\t");
+                write(tostr(arg));
+            }
+            write("\n");
+            output(oldout);
+        };
+
+        /* replace 'printf' while testing */
+        __G.printf = fn(fmt, ...) {
+            local str = "";
+            local args = [...];
+            local oldout = output();
+            local i = 0;
+            local j = sfind(fmt, "%");
+            output(out);
+            while (j and j < len(fmt)) {
+                str = str .. substr(fmt, i, j - 1);
+                if byte(fmt, j+1) == '%' {
+                    str = str .. "%";
+                    i = j + 1;
+                } else {
+                    if llen(args) <= 0
+                        error("missing format value");
+                    local arg = tostr(remove(args, 0));
+                    str = str .. arg;
+                    i = j + 1 + len(arg);
+                }
+                fmt = substr(fmt, j+1);
+                j = sfind(fmt, "%");
+            }
+            str = str .. "\n";
+            write(str);
+            output(oldout);
+        };
+    }
+    if !__opts.warnings { /* no warnings? */
+        __C.warn = __G.warn;
+        __G.warn = fn(...) { return; };
+    }
+}
+
+handle_cli_args();
+set_options();
+if (tlist)
+    list_tests(__opts.tests_script);
+else
+    run_args();
+rmtempfile();
 
 /* }==================================================================== */

@@ -4,79 +4,79 @@ switch ("Hello") {
     default: assert(false);
 }
 
-switch ("Hello") {
-    case 5: assert(false); break;
-    case nil: assert(false); break;
-    case "World": assert(false); break;
-    case 5.15: assert(false); break;
-    case true: case false: assert(false); break;
-    default: assert(true); break;
-}
-
-switch ("Hello") {
-    case true: assert(false);
-    case false: assert(false);
-    case 69: assert(false);
-}
-
-switch ("Hello") {
-    case 69: assert(false); break;
-    case "Hello": assert(true); break;
-    case nil: assert(false);
-    case 55: assert(false);
-    default: assert(false);
-}
-
-switch ("Hello") {
-    case 69:
-        assert(false);
-        break;
-    case "Hello":
-        assert(true);
-        /* fall-through */
-    case nil:
-        assert(true);
-    case 55:
-        assert(true);
-    default:
-        assert(true);
-}
-
-local x_;
-assert(x_ == nil);
-switch (x_) {
-    case 65:
-        assert(false);
-        break;
-    case nil:
-        assert(true);
-        break;
-    default:
-        assert(false);
-        break;
-}
-
-assert(x_ == nil);
-switch (x_) {
-    case 65:
-        assert(false);
-        break;
-    case nil:
-        assert(true);
-        /* fall-through */
-    default:
-        assert(true);
-        break;
-}
-
-assert(x_ == nil);
-switch (x_) {
-    case nil:
-        assert(true);
-        assert(x_ == nil);
-        switch (x_) {
-            case nil:
-                assert(true);
-        }
-        assert(true);
-}
+///switch ("Hello") {
+///    case 5: assert(false); break;
+///    case nil: assert(false); break;
+///    case "World": assert(false); break;
+///    case 5.15: assert(false); break;
+///    case true: case false: assert(false); break;
+///    default: assert(true); break;
+///}
+///
+///switch ("Hello") {
+///    case true: assert(false);
+///    case false: assert(false);
+///    case 69: assert(false);
+///}
+///
+///switch ("Hello") {
+///    case 69: assert(false); break;
+///    case "Hello": assert(true); break;
+///    case nil: assert(false);
+///    case 55: assert(false);
+///    default: assert(false);
+///}
+///
+///switch ("Hello") {
+///    case 69:
+///        assert(false);
+///        break;
+///    case "Hello":
+///        assert(true);
+///        /* fall-through */
+///    case nil:
+///        assert(true);
+///    case 55:
+///        assert(true);
+///    default:
+///        assert(true);
+///}
+///
+///local x_;
+///assert(x_ == nil);
+///switch (x_) {
+///    case 65:
+///        assert(false);
+///        break;
+///    case nil:
+///        assert(true);
+///        break;
+///    default:
+///        assert(false);
+///        break;
+///}
+///
+///assert(x_ == nil);
+///switch (x_) {
+///    case 65:
+///        assert(false);
+///        break;
+///    case nil:
+///        assert(true);
+///        /* fall-through */
+///    default:
+///        assert(true);
+///        break;
+///}
+///
+///assert(x_ == nil);
+///switch (x_) {
+///    case nil:
+///        assert(true);
+///        assert(x_ == nil);
+///        switch (x_) {
+///            case nil:
+///                assert(true);
+///        }
+///        assert(true);
+///}

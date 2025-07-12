@@ -176,11 +176,6 @@ typedef struct ParserState {
         int size; /* size of 'arr' */
         struct LiteralInfo *arr; /* array of switch constants */
     } literals;
-    struct { /* list of test targets */
-        int len; /* number of test targets in use */
-        int size; /* size of 'arr' */
-        int *arr; /* array of test targets */
-    } ttargets;
     GotoList gt; /* idem */
 } ParserState;
 
@@ -214,12 +209,12 @@ typedef struct FunctionState {
     int nlocals;        /* number of elements in 'locals' */
     int nupvals;        /* number of elements in 'upvals' */
     int pcswtest;       /* 'pc' of the last test instruction in 'switchstm' */
-    int firsttarget;    /* first test target in 'ttargets' */
-    c_ubyte iwthabs;     /* instructions issued since last abs. line info */
-    c_ubyte needclose;   /* true if needs to close upvalues before returning */
-    c_ubyte opbarrier;   /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
-    c_ubyte lastisend;   /* true if last statement ends control flow
-                         * (1==return, 2==break, 3==continue)*/
+    int lasttarget;     /* latest 'pc' that is jump target */
+    c_ubyte iwthabs;    /* instructions issued since last abs. line info */
+    c_ubyte needclose;  /* true if needs to close upvalues before returning */
+    c_ubyte opbarrier;  /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
+    c_ubyte lastisend;  /* true if last statement ends control flow
+                           (1==return, 2==break, 3==continue)*/
 } FunctionState;
 
 

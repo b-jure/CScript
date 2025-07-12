@@ -370,6 +370,8 @@ syn match cscriptFunc /\<list\.new\>/
 syn match cscriptFunc /\<list\.flatten\>/
 syn match cscriptFunc /\<list\.concat\>/
 syn match cscriptFunc /\<list\.sort\>/
+syn match cscriptFunc /\<list\.isordered\>/
+syn match cscriptFunc /\<list\.enumerate\>/
 syn match cscriptFunc /\<list\.maxindex\>/
 "-UTF8 library----}{
 syn match cscriptFunc /\<utf8\.offset\>/

@@ -172,7 +172,7 @@ static GCObject **getgclist(GCObject *o) {
 ** object 'r' (as in root), effectively moving the collector forward.
 ** If called in the sweep phase, it clears the black object to white
 ** (sweeps it) to avoid other barrier calls for this same object.
-** NOTE that there is a difference between the dead and white object.
+** NOTE: there is a difference between the dead and white object.
 ** Object is considered dead if it was white prior to sweep phase in
 ** the current GC cycle, so clearing (sweeping) the black object to white
 ** by calling this function in the sweep phase, will not result in the
@@ -694,7 +694,6 @@ static int runNfinalizers(cs_State *C, int n) {
 ** list but only if it wasn't moved already indicated by
 ** 'FINBIT' being set, additionally don't move it in case
 ** state is closing.
-** TODO: finalizers are called incorrectly (wrong order)
 */
 void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     GCObject **pp;

@@ -588,10 +588,13 @@ void csV_get(cs_State *C, const TValue *o, const TValue *k, SPtr res) {
 
 
 #define getsuper(C,in,scl,k,res,fget) { \
-    if (c_likely((scl)->methods)) { \
+    if (c_unlikely(scl == NULL)) \
+        csD_runerror(C, "class instance has no superclass"); \
+    if ((scl)->methods) { \
         const TValue *f = fget((scl)->methods, k); \
         if (!isempty(f)) { bindmethod(C, in, f, res); } \
-      } else setnilval(s2v(res)); }
+      } else \
+         setnilval(s2v(res)); }
 
 
 /*
@@ -909,7 +912,7 @@ c_sinline void pushclass(cs_State *C, int b) {
     setclsval2s(C, C->sp.p++, cls);
     if (b & 0x80) { /* have metamethods? */
         b &= 0x7F; /* remove flag */
-        cs_assert(0); /* TODO */
+        cs_assert(0); /* TODO: */
     }
     if (b > 0) /* have methods? */
         cls->methods = csH_newsz(C, log2size1(b));
@@ -1901,7 +1904,6 @@ returning: /* trap already set */
                 OClass *scl = in->oclass->sclass;
                 TValue *sk;
                 savestate(C);
-                cs_assert(scl != NULL);
                 sk = K(fetch_l());
                 getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
                 vm_break;
@@ -1911,7 +1913,6 @@ returning: /* trap already set */
                 OClass *scl = in->oclass->sclass;
                 TValue *idx = peek(0);
                 savestate(C);
-                cs_assert(scl != NULL);
                 getsuper(C, in, scl, idx, sp - 2, csH_get);
                 sp--;
                 vm_break;
@@ -1921,7 +1922,6 @@ returning: /* trap already set */
                 OClass *scl = in->oclass->sclass;
                 TValue *sk;
                 savestate(C);
-                cs_assert(scl != NULL);
                 sk = K(fetch_l());
                 getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
                 vm_break;

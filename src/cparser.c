@@ -81,7 +81,6 @@ typedef struct Scope {
     c_ubyte cf; /* control flow */
     c_ubyte haveupval; /* set if scope contains upvalue variable */
     c_ubyte havetbcvar; /* set if scope contains to-be-closed variable */
-    c_ubyte haveswexp; /* true if have switch exp. (might get optimized) */
 } Scope;
 
 
@@ -105,6 +104,7 @@ typedef struct LoopState {
 ** (Used primarily for optimizations, e.g., trimming dead code.)
 */
 typedef struct FuncContext {
+    int ps_actlocals;
     int ninstpc;
     int prevpc;
     int prevline;
@@ -117,8 +117,7 @@ typedef struct FuncContext {
     int nlocals;
     int nupvals;
     int pcswtest;
-    int firsttarget;
-    int lasttarget; /* last target in 'ttargets' */
+    int lasttarget;
     int lastgoto; /* last pending goto in 'gt' */
     c_ubyte iwthabs;
     c_ubyte needclose;
@@ -128,6 +127,7 @@ typedef struct FuncContext {
 
 
 static void storecontext(FunctionState *fs, FuncContext *ctx) {
+    ctx->ps_actlocals = fs->lx->ps->actlocals.len;
     ctx->ninstpc = fs->ninstpc;
     ctx->prevpc = fs->prevpc;
     ctx->prevline = fs->prevline;
@@ -140,8 +140,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->nlocals = fs->nlocals;
     ctx->nupvals = fs->nupvals;
     ctx->pcswtest = fs->pcswtest;
-    ctx->firsttarget = fs->firsttarget;
-    ctx->lasttarget = fs->lx->ps->ttargets.len;
+    ctx->lasttarget = fs->lasttarget;
     ctx->lastgoto = fs->lx->ps->gt.len;
     ctx->iwthabs = fs->iwthabs;
     ctx->needclose = fs->needclose;
@@ -151,6 +150,7 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
 
 
 static void loadcontext(FunctionState *fs, FuncContext *ctx) {
+    fs->lx->ps->actlocals.len = ctx->ps_actlocals;
     fs->ninstpc = ctx->ninstpc;
     fs->prevpc = ctx->prevpc;
     fs->prevline = ctx->prevline;
@@ -163,8 +163,7 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->nlocals = ctx->nlocals;
     fs->nupvals = ctx->nupvals;
     fs->pcswtest = ctx->pcswtest;
-    fs->firsttarget = ctx->firsttarget;
-    fs->lx->ps->ttargets.len = ctx->lasttarget;
+    fs->lasttarget = ctx->lasttarget;
     fs->lx->ps->gt.len = ctx->lastgoto;
     fs->iwthabs = ctx->iwthabs;
     fs->needclose = ctx->needclose;
@@ -234,6 +233,7 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
 }
 
 
+// TODO: test these errors in 'test/other/errors.cscript'
 static const char *errstmname(Lexer *lx, const char *err) {
     const char *stm;
     switch (lx->fs->lastisend) {
@@ -328,51 +328,10 @@ static int nvarstack(FunctionState *fs) {
 }
 
 
-/*
-** Get number of switch expressions starting from scope 's' up
-** to certain scope limit (limit must be some previous scope).
-** (if 'limit' is NULL then up to and including first scope)
-*/
-static int getnswexpr(Scope *s, Scope *limit) {
-    Scope *curr = s;
-    int nsw = 0;
-    cs_assert((limit == NULL) || (s->depth >= limit->depth));
-    while (curr != limit) {
-        nsw += curr->haveswexp;
-        curr = curr->prev;
-    }
-    return nsw;
-}
-
-
 static void contadjust(FunctionState *fs, int push) {
-    int nswexp = getnswexpr(fs->scope, &fs->ls->s);
     int ncntl = is_genloop(&fs->ls->s) * VAR_N;
-    int total = (fs->nactlocals - fs->ls->s.nactlocals - ncntl) + nswexp;
+    int total = (fs->nactlocals - fs->ls->s.nactlocals - ncntl);
     csC_adjuststack(fs, push ? -total : total);
-}
-
-
-static int getlasttarget(Lexer *lx) {
-    if (lx->ps->ttargets.len > 0)
-        return lx->ps->ttargets.arr[lx->ps->ttargets.len - 1];
-    else
-        return NOPC;
-}
-
-
-/*
-** Adds a new test target into the ttargets list.
-*/
-static void newttarget(Lexer *lx, int pc) {
-    FunctionState *fs = lx->fs;
-    ParserState *ps = lx->ps;
-    cs_assert(pc != NOPC);
-    if (pc == getlasttarget(lx)) return; /* do not insert duplicates */
-    csP_checklimit(fs, ps->ttargets.len, CS_MAXINT, "tests");
-    csM_growarray(lx->C, ps->ttargets.arr, ps->ttargets.size,
-                         ps->ttargets.len, CS_MAXINT, "tests", int);
-    ps->ttargets.arr[ps->ttargets.len++] = pc;
 }
 
 
@@ -437,7 +396,7 @@ static int newpendingjump(Lexer *lx, int bk, int close, int adjust) {
 ** Remove local variables up to specified level.
 */
 static void removelocals(FunctionState *fs, int tolevel) {
-    fs->lx->ps->actlocals.len -= (fs->nactlocals - tolevel);
+    fs->lx->ps->actlocals.len -= fs->nactlocals - tolevel;
     cs_assert(fs->lx->ps->actlocals.len >= 0);
     while (fs->nactlocals > tolevel) /* set debug information */
         getlocalinfo(fs, --fs->nactlocals)->endpc = currPC;
@@ -532,11 +491,9 @@ static void adjustlocals(Lexer *lx, int nvars) {
 static void enterscope(FunctionState *fs, Scope *s, int cf) {
     s->cf = cf;
     if (fs->scope) { /* not a global scope? */
-        s->haveswexp = is_switch(s);
         s->depth = fs->scope->depth + 1;
         s->havetbcvar = fs->scope->havetbcvar;
     } else { /* global scope */
-        s->haveswexp = 0;
         s->depth = 0;
         s->havetbcvar = 0;
     }
@@ -551,16 +508,15 @@ static void enterscope(FunctionState *fs, Scope *s, int cf) {
 static void leavescope(FunctionState *fs) {
     Scope *s = fs->scope;
     int stklevel = stacklevel(fs, s->nactlocals);
-    int nvalues = (fs->nactlocals - s->nactlocals) + s->haveswexp;
+    int nvalues = fs->nactlocals - s->nactlocals;
     if (s->prev && s->haveupval) /* need a 'close'? */
         csC_emitIL(fs, OP_CLOSE, stklevel);
     removelocals(fs, s->nactlocals); /* remove scope locals */
     cs_assert(s->nactlocals == fs->nactlocals);
     if (s->prev) { /* not main chunk scope? */
-        // TODO: there is no need to track test pc? right??
-        if (getlasttarget(fs->lx) == currPC) /* test target is this pc? */
+        if (fs->lasttarget == currPC)
             fs->opbarrier |= 2; /* prevent POP merge */
-        csC_pop(fs, nvalues); /* pop locals and switch expression */
+        csC_pop(fs, nvalues); /* pop locals */
         fs->opbarrier &= ~2; /* allow POP merge */
     }
     if (haspendingjumps(s)) /* might have pending jumps? */
@@ -615,7 +571,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->nlocals = 0;
     fs->nupvals = 0;
     fs->pcswtest = 0;
-    fs->firsttarget = lx->ps->ttargets.len;
+    fs->lasttarget = 0;
     fs->iwthabs = fs->needclose = fs->opbarrier = fs->lastisend = 0;
     p->source = lx->src;
     csG_objbarrier(lx->C, p, p->source);
@@ -628,7 +584,6 @@ static void close_func(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     cs_State *C = lx->C;
-    lx->ps->ttargets.len = fs->firsttarget;
     cs_assert(fs->scope && !fs->scope->prev);
     leavescope(fs); cs_assert(!fs->scope); /* end final scope */
     if (!stmIsReturn(fs)) /* function missing final return? */
@@ -1847,6 +1802,11 @@ static void removeliterals(Lexer *lx, int nliterals) {
 }
 
 
+/// FIX: Two bugs observed:
+/// 1. Not popping the switch value when fall-through jump converts to
+/// JMPS in case where switch statement in enclosed in a loop.
+/// 2. Switch expression is now temporary variable, the code that pops
+/// switch expression needs rehaul.
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
     int ftjmp = NOJMP; /* fall-through jump */
@@ -1877,7 +1837,6 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     ss->nomatch = 0; /* case is the match */
                     ss->c = CMATCH;
                     loadcontext(fs, ctxbefore); /* load context before switch */
-                    fs->scope->haveswexp = 0; /* (no switch expression) */
                 } else if (match == NOMATCH || ss->c == CMATCH) {
                     /* compile-time mismatch or previous case is a match */
                     if (ss->c != CMATCH) ss->c = CMISMATCH;
@@ -1895,7 +1854,6 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                 if (ss->nomatch) { /* all cases are resolved without match? */
                     ss->nomatch = 0; /* default is the match */
                     loadcontext(fs, ctxbefore); /* remove them */
-                    fs->scope->haveswexp = 0; /* (no switch expression) */
                 } else if (ss->c == CASE) /* have test jump? */
                     csC_patchtohere(fs, ss->jmp); /* fix it */
                 ss->havedefault = 1; /* now have 'default' */
@@ -1923,10 +1881,8 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
         loadcontext(fs, &ctxend); /* trim off dead code */
     else if (ss->c == CASE) /* 'case' is last (have test)? */
         csC_patchtohere(fs, ss->jmp); /* patch it */
-    else if (ss->nomatch) { /* compile-time no match? */
-        fs->scope->haveswexp = 0; /* (no switch expression) */
+    else if (ss->nomatch) /* compile-time no match? */
         loadcontext(fs, ctxbefore); /* remove the whole switch */
-    }
     removeliterals(lx, ss->firstli);
 }
 
@@ -1952,6 +1908,8 @@ static void switchstm(Lexer *lx) {
     expr(lx, &e); /* get the 'switch' expression... */
     if ((ss.isconst = codeconstexp(fs, &e))) /* constant expression? */
         csC_const2v(fs, &e, &ss.v); /* get its value */
+    addlocallit(lx, "(switch)"); /* switch expression temporary */
+    adjustlocals(lx, 1); /* register switch temporary */
     line = lx->line;
     expectnext(lx, '{');
     switchbody(lx, &ss, &ctxbefore);
@@ -2018,17 +1976,15 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
             stm(lx); /* else body */
         if (target == currPC) { /* no else branch or it got removed? */
             if (jump != NOJMP) { /* have if jump (opJ)? */
-                cs_assert(fs->p->code[fs->prevpc] == cb->opJ);
+                cs_assert(*prevOP(fs) == cb->opJ);
                 csC_removelastjump(fs); /* remove that jump */
                 target = currPC; /* adjust test target */
             } else cs_assert(optaway || istrue);
         } else if (jump != NOJMP) /* have else branch and 'if' jump (opJ) */
             csC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
-    if (test != NOJMP) { /* have condition test? */
+    if (test != NOJMP) /* have condition test? */
         csC_patch(fs, test, target); /* patch it */
-        newttarget(lx, target); /* add new test target */
-    }
     if (cb->ctxend.pc != NOPC) /* statement has "dead" code? */
         loadcontext(fs, &cb->ctxend); /* trim off dead code */
 }
@@ -2299,7 +2255,7 @@ static void breakstm(Lexer *lx) {
     csY_scan(lx); /* skip 'break' */
     if (c_unlikely(cfs == NULL)) /* no control flow scope? */
         csP_semerror(lx, "'break' outside of a loop or switch statement");
-    adjust = (fs->nactlocals - cfs->nactlocals) + cfs->haveswexp;
+    adjust = fs->nactlocals - cfs->nactlocals;
     newpendingjump(lx, 1, needtoclose(lx, cfs->prev), adjust);
     expectnext(lx, ';');
     /* adjust stack for compiler and symbolic execution */
@@ -2310,8 +2266,7 @@ static void breakstm(Lexer *lx) {
 
 static void returnstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    int first = nvarstack(fs); /* first slot to be returned */
-    int base = fs->sp;
+    int first = fs->sp;
     int nret = 0;
     ExpInfo e = INIT_EXP;
     csY_scan(lx); /* skip 'return' */
@@ -2325,7 +2280,7 @@ static void returnstm(Lexer *lx) {
     }
     csC_ret(fs, first, nret);
     expectnext(lx, ';');
-    fs->sp = base; /* removes all temp values */
+    fs->sp = first; /* removes all temp values */
     fs->lastisend = 1; /* statement is a return */
 }
 
@@ -2358,8 +2313,7 @@ static void stm_(Lexer *lx) {
 
 
 #define stackinvariant(fs) \
-        (fs->p->maxstack >= fs->sp && fs->sp >= \
-         nvarstack(fs) + getnswexpr(fs->switchscope, NULL))
+        (fs->p->maxstack >= fs->sp && fs->sp >= nvarstack(fs))
 
 
 static void decl(Lexer *lx) {
@@ -2431,8 +2385,7 @@ CSClosure *csP_parse(cs_State *C, BuffReader *br, Buffer *buff,
     lx.buff = buff;
     lx.ps = ps;
     csY_setinput(C, &lx, br, fs.p->source);
-    cs_assert(ps->gt.len == 0 && ps->literals.len == 0 &&
-              ps->actlocals.len == 0 && ps->ttargets.len == 0);
+    cs_assert(!ps->gt.len && !ps->literals.len && !ps->actlocals.len);
     mainfunc(&fs, &lx);
     cs_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);
     /* all scopes should be correctly finished */

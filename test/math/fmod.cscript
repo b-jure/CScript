@@ -22,5 +22,4 @@ assert(eqt(math.fmod(math.minint + 1, math.minint), math.minint + 1));
 assert(eqt(math.fmod(math.maxint - 1, math.maxint), math.maxint - 1));
 
 local s, err = pcall(math.fmod, 3, 0);
-print(s, err);
 assert(!s and string.find(err, "zero"));

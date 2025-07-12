@@ -18,6 +18,104 @@
 #include "cscriptlimits.h"
 
 
+static const char *copyerr = "too many values to copy";
+
+
+/* recursive clone */
+static void auxclone(cs_State *C, int t, int index);
+
+
+/*
+** Auxiliary function for copying list objects in 'b_close'.
+*/
+static void clonelist(cs_State *C, int index) {
+    cs_Integer l;
+    csL_check_stack(C, 2, copyerr); /* list+value */
+    l = cs_len(C, index);
+    cs_push_list(C, cast_int(l));
+    for (int i = 0; i < l; i++) {
+        cs_get_index(C, index, i);
+        auxclone(C, cs_type(C, -1), cs_absindex(C, -1));
+        cs_set_index(C, -2, i);
+    }
+}
+
+
+/*
+** Auxiliary function for copying table objects in 'b_close'.
+*/
+static void clonetable(cs_State *C, int index) {
+    csL_check_stack(C, 4, copyerr); /* table+2xkey+value */
+    cs_push_table(C, cast_int(cs_len(C, index)));
+    while (cs_nextfield(C, index)) {
+        cs_push(C, -2); /* key copy */
+        auxclone(C, cs_type(C, -3), cs_absindex(C, -3));
+        auxclone(C, cs_type(C, -2), cs_absindex(C, -2));
+        cs_set_raw(C, -4);
+    }
+}
+
+
+/*
+** Auxiliary function for copying table objects in 'b_close'.
+*/
+static void cloneclass(cs_State *C, int index) {
+    int newindex = cs_absindex(C, -1) + 1;
+    csL_check_stack(C, 2, copyerr); /* class+(list/table/superclass) */
+    cs_push_class(C, 0, NULL); /* first push empty class */
+    if (cs_get_metalist(C, index)) {
+        clonelist(C, newindex);
+        cs_remove(C, -2); /* remove original */
+        cs_set_metalist(C, -2);
+    }
+    if (cs_get_methods(C, index)) {
+        clonetable(C, newindex);
+        cs_remove(C, -2); /* remove original */
+        cs_set_methods(C, -2);
+    }
+    if (cs_get_superclass(C, index)) {
+        cloneclass(C, newindex);
+        cs_remove(C, -2); /* remove original */
+        cs_set_superclass(C, -2);
+    }
+}
+
+
+static void auxclone(cs_State *C, int t, int index) {
+    switch (t) {
+        case CS_T_NIL: case CS_T_BOOL:
+        case CS_T_NUMBER: case CS_T_LIGHTUSERDATA:
+        case CS_T_FUNCTION: case CS_T_STRING: {
+            cs_push(C, index); /* return original value */
+            break;
+        }
+        case CS_T_LIST: {
+            clonelist(C, index);
+            break;
+        }
+        case CS_T_TABLE: {
+            clonetable(C, index);
+            break;
+        }
+        case CS_T_CLASS: {
+            cloneclass(C, index);
+            break;
+        }
+        default: csL_error_arg(C, index, "value can't be cloned");
+    }
+    cs_remove(C, index); /* remove original */
+}
+
+
+// TODO: add docs and tests
+static int b_clone(cs_State *C) {
+    csL_check_any(C, 0);
+    cs_setntop(C, 1); /* leave only object to copy on top */
+    auxclone(C, cs_type(C, 0), 0);
+    return 1;
+}
+
+
 static int b_error(cs_State *C) {
     int level = csL_opt_integer(C, 1, 1);
     cs_setntop(C, 1); /* leave only message on top */
@@ -218,9 +316,9 @@ static int b_nextfield(cs_State *C) {
     csL_expect_arg(C, (t == CS_T_INSTANCE || t == CS_T_TABLE), 0,
                        "instance/table");
     cs_setntop(C, 2); /* if 2nd argument is missing create it */
-    if (cs_nextfield(C, 0)) { /* found field? */
+    if (cs_nextfield(C, 0)) /* found field? */
         return 2; /* key (index) + value */
-    } else {
+    else {
         cs_push_nil(C);
         return 1;
     }
@@ -648,6 +746,7 @@ static int b_range(cs_State *C) {
 
 
 static const cs_Entry basic_funcs[] = {
+    {"clone", b_clone},
     {"error", b_error},
     {"assert", b_assert},
     {"gc", b_gc},

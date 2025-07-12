@@ -377,18 +377,19 @@ if __heavy {
         gc("restart");
     }
     local _, stackmsg = xpcall(g, debug.traceback, 1);
+    local l2 = debug.getinfo(1, "l").currline - 1;
     local stack = [];
     foreach line in reg.gmatch(stackmsg, "[^\n]*") {
         local curr = reg.match(line, ":(%d+):");
         if (curr) list.insert(stack, tonum(curr));
     }
     local i=0;
-    while (stack[i] != l1) {
+    while (stack[i] != l1 and stack[i] != l2) {
         assert(stack[i] == l);
         i = i+1;
     }
     assert(i > 15 or /* if running directly from standalone interpreter */
-           i > 10); /* if running from 'cscript.test' */
+           i > 10); /* @bugprone if 'test.cscript' changes */
 
 
     /// error in error handling

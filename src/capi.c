@@ -819,8 +819,7 @@ c_sinline List *getlist(cs_State *C, int index) {
 }
 
 
-c_sinline void setmethods(cs_State *C, OClass *cls, const cs_Entry *l,
-                          int nup) {
+c_sinline void setmethods(cs_State *C, OClass *cls, const cs_Entry *l, int nup) {
     if (l) { /* have methods? */
         cs_checkstack(C, nup);
         if (l->name) { /* have at least one entry? */
@@ -1194,13 +1193,30 @@ CS_API int cs_get_uservalue(cs_State *C, int index, c_ushort n) {
 }
 
 
-CS_API int cs_get_usermethods(cs_State *C, int index) {
-    UserData *ud;
+// TODO: update docs
+CS_API int cs_get_methods(cs_State *C, int index) {
     int res = 0;
+    Table *t = NULL; /* to prevent warnings */
+    const TValue *o;
     cs_lock(C);
-    ud = getuserdata(C, index);
-    if (ud->methods) {
-        settval2s(C, C->sp.p, ud->methods);
+    o = index2value(C, index);
+    switch (ttype(o)) {
+        case CS_VCLASS: {
+            t = classval(o)->methods;
+            break;
+        }
+        case CS_VINSTANCE: {
+            t = insval(o)->oclass->methods;
+            break;
+        }
+        case CS_VUSERDATA: {
+            t = uval(o)->methods;
+            break;
+        }
+        default: api_check(C, 0, "class/instance/fulluserdata expected");
+    }
+    if (t) {
+        settval2s(C, C->sp.p, t);
         api_inctop(C);
         res = 1;
     }
@@ -1229,7 +1245,7 @@ CS_API void cs_set(cs_State *C, int obj) {
 CS_API void  cs_set_raw(cs_State *C, int obj) {
     TValue *o;
     cs_lock(C);
-    api_checknelems(C, 2); /* value and key */
+    api_checknelems(C, 2); /* key and value */
     o = index2value(C, obj);
     csV_rawset(C, o, s2v(C->sp.p - 2), s2v(C->sp.p - 1));
     C->sp.p -= 2; /* remove value and key */
@@ -1321,57 +1337,61 @@ CS_API void cs_set_cfieldstr(cs_State *C, const char *field) {
 }
 
 
-CS_API int cs_set_metalist(cs_State *C, int index) {
-    const TValue *obj;
+CS_API void cs_set_metalist(cs_State *C, int index) {
     List *ml;
-    int res = 1;
+    TValue temp;
+    const TValue *o;
     cs_lock(C);
     api_checknelems(C, 1); /* metalist */
-    obj = index2value(C, index);
+    o = index2value(C, index);
     if (ttisnil(s2v(C->sp.p - 1)))
         ml = NULL;
     else {
         api_check(C, ttislist(s2v(C->sp.p - 1)), "list expected");
         ml = listval(s2v(C->sp.p - 1));
     }
-    switch (ttype(obj)) {
+    switch (ttype(o)) {
         case CS_T_INSTANCE: {
-            insval(obj)->oclass->metalist = ml;
-            break;
+            insval(o)->oclass->metalist = ml;
+            if (ml) {
+                /* first look for finalizer for the instance */
+                csG_checkfin(C, gcoval(o), ml);
+                setclsval(C, &temp, insval(o)->oclass);
+                o = &temp; /* for GC barrier */
+                goto gcbarrier;
+            }
+            goto nobarrier;
         }
         case CS_T_CLASS: {
-            classval(obj)->metalist = ml;
+            classval(o)->metalist = ml;
             break;
         }
         case CS_T_USERDATA: {
-            uval(obj)->metalist = ml;
-            break;
+            uval(o)->metalist = ml;
+            if (ml) {
+                csG_checkfin(C, gcoval(o), ml);
+                goto gcbarrier;
+            }
+            goto nobarrier;
         }
-        default: {
-            res = 0;
-            goto done;
-        }
+        default: api_check(C, 0, "instance/class/fulluserdata expected");
     }
-    if (ml) {
-        csG_objbarrier(C, gcoval(obj), ml);
-        csG_checkfin(C, gcoval(obj), ml);
-    }
-done:
+    if (ml) gcbarrier: csG_objbarrier(C, gcoval(o), ml);
+nobarrier:
     C->sp.p--; /* remove metalist */
     cs_unlock(C);
-    return res;
 }
 
 
 CS_API int cs_set_uservalue(cs_State *C, int index, c_ushort n) {
-    UserData *ud;
     int res;
+    UserData *ud;
     cs_lock(C);
     api_checknelems(C, 1); /* value */
     ud = getuserdata(C, index);
-    if (ud->nuv <= n) {
+    if (ud->nuv <= n)
         res = 0; /* 'n' not in [0, ud->nuv) */
-    } else {
+    else {
         setobj(C, &ud->uv[n].val, s2v(C->sp.p - 1));
         csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
         res = 1;
@@ -1382,15 +1402,79 @@ CS_API int cs_set_uservalue(cs_State *C, int index, c_ushort n) {
 }
 
 
-CS_API void cs_set_usermethods(cs_State *C, int index) {
-    UserData *ud;
+// TODO: update docs
+CS_API void cs_set_methods(cs_State *C, int index) {
+    Table *t;
+    TValue temp;
+    const TValue *o;
     cs_lock(C);
-    api_checknelems(C, 1); /* table */
-    ud = getuserdata(C, index);
-    api_check(C, ttistable(s2v(C->sp.p - 1)), "expect table");
-    ud->methods = tval(s2v(C->sp.p - 1));
-    csG_barrierback(C, obj2gco(ud), s2v(C->sp.p - 1));
-    C->sp.p--; /* remove table */
+    api_checknelems(C, 1); /* table or nil */
+    o = index2value(C, index);
+    if (ttisnil(s2v(C->sp.p - 1)))
+        t = NULL;
+    else {
+        api_check(C, ttistable(s2v(C->sp.p - 1)), "table expected");
+        t = tval(s2v(C->sp.p - 1));
+    }
+    switch (ttype(o)) {
+        case CS_T_INSTANCE: {
+            insval(o)->oclass->methods = t;
+            if (t) {
+                setclsval(C, &temp, insval(o)->oclass);
+                o = &temp; /* for GC barrier */
+                goto gcbarrier;
+            }
+            goto nobarrier;
+        }
+        case CS_T_CLASS: {
+            classval(o)->methods = t;
+            break;
+        }
+        case CS_T_USERDATA: {
+            uval(o)->methods = t;
+            break;
+        }
+        default: api_check(C, 0, "instance/class/fulluserdata expected");
+    }
+    if (t) gcbarrier: csG_objbarrier(C, gcoval(o), t);
+nobarrier:
+    C->sp.p--; /* remove table or nil */
+    cs_unlock(C);
+}
+
+
+CS_API void cs_set_superclass(cs_State *C, int index) {
+    OClass *sc;
+    TValue temp;
+    const TValue *o;
+    cs_lock(C);
+    api_checknelems(C, 1);
+    o = index2value(C, index);
+    if (ttisnil(s2v(C->sp.p - 1)))
+        sc = NULL;
+    else {
+        api_check(C, ttisclass(s2v(C->sp.p - 1)), "class expected");
+        sc = classval(s2v(C->sp.p - 1));
+    }
+    switch (ttype(o)) {
+        case CS_T_INSTANCE: {
+            insval(o)->oclass->sclass = sc;
+            if (sc) {
+                setclsval(C, &temp, insval(o)->oclass);
+                o = &temp; /* for GC barrier */
+                goto gcbarrier;
+            }
+            goto nobarrier;
+        }
+        case CS_T_CLASS: {
+            classval(o)->sclass = sc;
+            break;
+        }
+        default: api_check(C, 0, "class/instance expected");
+    }
+    if (sc) gcbarrier: csG_objbarrier(C, gcoval(o), sc);
+nobarrier:
+    C->sp.p--; /* remove class or nil */
     cs_unlock(C);
 }
 

@@ -65,7 +65,7 @@ local getinfo = db.getinfo;
 
 local extra = 0;
 if reg.find(db.traceback(nil, 0), "test%.cscript")
-    extra = 6; /* if 'cscript.test' is changed this might need update */
+    extra = 7; /* @bugprone if 'cscript.test' is changed */
 
 { /// active CScript functions
     local t = getinfo(1);

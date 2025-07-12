@@ -3668,7 +3668,7 @@ typedef enum cs_MM {
         <a href="#CS_T_FUNCTION"><code>CS_T_FUNCTION</code></a>, unless the
         value was never assigned a methods table
         (see <a href="#cs_push_class"><code>cs_push_class</code></a> and
-        <a href="#cs_set_usermethods"><code>cs_set_usermethods</code></a>)
+        <a href="#cs_set_methods"><code>cs_set_methods</code></a>)
         or the <code>k</code> field in the methods table is <b>nil</b>,
         in which case this returns <a href="#CS_T_NIL"><code>CS_T_NIL</code></a>.
         </p>
@@ -3700,10 +3700,10 @@ typedef enum cs_MM {
         returns <a href="#CS_T_NONE"><code>CS_T_NONE</code></a>.
         </p>
 
-        <!-- cs_get_usermethods -->
-        <hr><h3><a name="cs_get_usermethods"><code>cs_get_usermethods</code></a></h3>
+        <!-- cs_get_methods -->
+        <hr><h3><a name="cs_get_methods"><code>cs_get_methods</code></a></h3>
         <span class="apii">[-0, +(0|1), &ndash;]</span>
-        <pre>int cs_get_usermethods (cs_State *C, int index);</pre>
+        <pre>int cs_get_methods (cs_State *C, int index);</pre>
         <p>
         Pushes methods table of the full userdata at the given index and
         returns 1.
@@ -3878,10 +3878,10 @@ typedef enum cs_MM {
         index. Returns 0 if the userdata does not have that value.
         </p>
 
-        <!-- cs_set_usermethods -->
-        <hr><h3><a name="cs_set_usermethods"><code>cs_set_usermethods</code></a></h3>
+        <!-- cs_set_methods -->
+        <hr><h3><a name="cs_set_methods"><code>cs_set_methods</code></a></h3>
         <span class="apii">[-1, +0, &ndash;]</span>
-        <pre>void cs_set_usermethods (cs_State *C, int index);</pre>
+        <pre>void cs_set_methods (cs_State *C, int index);</pre>
         <p>
         Pops a value on top of the stack, which must be a table, and
         sets it as the methods table of the value at the given index,

@@ -22,12 +22,6 @@
 #include "cmem.h"
 
 
-/*
-** TODO: change how and/or is compiled, accordingly change
-** 'csC_exp2stack' which all together might require changing bytecode.
-*/
-
-
 /* check if expression has jumps */
 #define hasjumps(e)     ((e)->t != (e)->f)
 
@@ -319,9 +313,7 @@ static void removelastinstruction(FunctionState *fs) {
 ** Remove last instruction which must be a jump.
 */
 void csC_removelastjump(FunctionState *fs) {
-    /* last instruction is jump */
-    cs_assert(fs->p->code[fs->prevpc] == OP_JMP ||
-              fs->p->code[fs->prevpc] == OP_JMPS);
+    cs_assert(*prevOP(fs) == OP_JMP || *prevOP(fs) == OP_JMPS);
     removelastinstruction(fs);
 }
 
@@ -879,6 +871,8 @@ static void fixjump(FunctionState *fs, int pc, int target) {
     if (c_unlikely(offset > MAXJMP)) /* jump is too large? */
         csP_semerror(fs->lx, "control structure too long");
     SET_ARG_L(jmp, 0, offset); /* fix the jump */
+    if (fs->lasttarget < target) /* target 'pc' is bigger than previous? */
+        fs->lasttarget = target; /* update it */
 }
 
 
@@ -1351,8 +1345,10 @@ static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond, int line) {
 }
 
 
-static void patchexplist(FunctionState *fs, int *l, int target) {
+static void patchjumplist(FunctionState *fs, int *l, int target) {
     if (*l != NOJMP) {
+        if (fs->lasttarget < target)
+            fs->lasttarget = target;
         csC_patch(fs, *l, target);
         *l = NOJMP; /* mark 'e->t' or 'e->f' as empty */
     }
@@ -1376,10 +1372,11 @@ static void codeand(FunctionState *fs, ExpInfo *e, int line) {
         default: {
             pc = codeAndOr(fs, e, 0, line); /* jump if false */
             target = fs->prevpc; /* POP */
+            cs_assert(*prevOP(fs) == OP_POP);
         }
     }
     csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
-    patchexplist(fs, &e->t, target); /* patch true list */
+    patchjumplist(fs, &e->t, target); /* patch true list */
 }
 
 
@@ -1399,10 +1396,11 @@ void codeor(FunctionState *fs, ExpInfo *e, int line) {
         default: {
             pc = codeAndOr(fs, e, 1, line); /* jump if true */
             target = fs->prevpc; /* POP */
+            cs_assert(*prevOP(fs) == OP_POP);
         }
     }
     csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
-    patchexplist(fs, &e->f, target);
+    patchjumplist(fs, &e->f, target);
 }
 
 

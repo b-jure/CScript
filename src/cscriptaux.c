@@ -339,9 +339,10 @@ CSLIB_API int csL_new_metalist(cs_State *C, const char *lname) {
 }
 
 
-CSLIB_API int csL_set_metalist(cs_State *C, const char *lname) {
+// TODO: update docs
+CSLIB_API void csL_set_metalist(cs_State *C, const char *lname) {
     csL_get_metalist(C, lname);
-    return cs_set_metalist(C, -2);
+    cs_set_metalist(C, -2);
 }
 
 
@@ -385,7 +386,7 @@ CSLIB_API int csL_new_usermethods(cs_State *C, const char *tname, int sz) {
 
 CSLIB_API void csL_set_usermethods(cs_State *C, const char *tname) {
     csL_get_methods(C, tname);
-    cs_set_usermethods(C, -2);
+    cs_set_methods(C, -2);
 }
 
 

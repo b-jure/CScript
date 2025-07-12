@@ -44,6 +44,7 @@
 #define CS_CLIST_LAST               CS_CLIST_GLOBALS
     
 
+// TODO: update docs
 /* types of values */
 #define CS_T_NONE               (-1)
 #define CS_T_NIL                0   /* nil */
@@ -58,6 +59,7 @@
 #define CS_T_CLASS              9   /* class */
 #define CS_T_INSTANCE           10  /* instance */
 #define CS_T_THREAD             11  /* thread */
+// TODO: #define CS_T_BOUNDMETHOD        12  /* bounded (instance/userdata) method */
 #define CS_T_NUM                12  /* total number of types */
 
 
@@ -268,7 +270,7 @@ CS_API int cs_get_method(cs_State *C, int index);
 CS_API int cs_get_supermethod(cs_State *C, int index);
 CS_API int cs_get_metalist(cs_State *C, int index);
 CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API int cs_get_usermethods(cs_State *C, int index); 
+CS_API int cs_get_methods(cs_State *C, int index); 
 /* }====================================================================== */
 
 /* {======================================================================
@@ -285,9 +287,10 @@ CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field);
 CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
 CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
 CS_API void  cs_set_cfieldstr(cs_State *C, const char *field);
-CS_API int   cs_set_metalist(cs_State *C, int index);
+CS_API void  cs_set_superclass(cs_State *C, int index); 
+CS_API void  cs_set_metalist(cs_State *C, int index);
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API void  cs_set_usermethods(cs_State *C, int index); 
+CS_API void  cs_set_methods(cs_State *C, int index); 
 /* }====================================================================== */
 
 /* {======================================================================

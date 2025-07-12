@@ -756,7 +756,7 @@ assert(typeof(debug.getclist()) == "list");
 
     local extra = 0;
     if reg.find(debug.traceback(nil, 0), "test%.cscript")
-        extra = 6; /* if 'test.cscript' is changed this might need update */
+        extra = 7; /* @bugprone if 'test.cscript' is changed */
 
     local fn countlines(s) {
         return getargs(1, reg.gsub(s, "\n", ""));

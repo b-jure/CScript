@@ -5,8 +5,6 @@ local fn eqt(x,y) {
 
 local fn checkerror(msg, f, ...) {
     local s, err = pcall(f, ...);
-    print(s, err);
-    print(string.find(err, msg));
     assert(!s and string.find(err, msg));
 }
 

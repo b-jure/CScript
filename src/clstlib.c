@@ -51,6 +51,30 @@ static int lst_len(cs_State *C) {
 }
 
 
+static int enumerateaux(cs_State *C) {
+    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
+    cs_Integer i = csL_check_integer(C, 1);
+    i = csL_intop(+, i, 1);
+    cs_push_integer(C, i);
+    if (i < size) {
+        cs_get_index(C, 0, i);
+        return 2;
+    }
+    /* otherwise only return nil (next index might be non-nil) */
+    cs_push_nil(C);
+    return 1;
+}
+
+
+static int lst_enumerate(cs_State *C) {
+    csL_check_type(C, 0, CS_T_LIST);
+    cs_push_cfunction(C, enumerateaux); /* iteration function */
+    cs_push(C, 0); /* state */
+    cs_push_integer(C, -1); /* initial value */
+    return 3;
+}
+
+
 static int lst_insert(cs_State *C) {
     cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 3, 1));
     cs_Integer pos = size;
@@ -409,6 +433,7 @@ static int lst_isordered(cs_State *C) {
 /// TODO: add tests and docs
 static cs_Entry lstlib[] = {
     {"len", lst_len},
+    {"enumerate", lst_enumerate},
     {"insert", lst_insert},
     {"remove", lst_remove},
     {"move", lst_move},
