@@ -1,0 +1,89 @@
+local fn checkerror(msg, f, ...) {
+    local st, err = pcall(f, ...);
+    assert(!st and string.find(err, msg));
+}
+
+local l = list.new(100);
+checkerror("string expected", list.concat, l, 5);
+checkerror("start index", list.concat, l, nil, list.maxindex + 1);
+checkerror("end index", list.concat, l, nil, nil, list.maxindex + 1);
+foreach i in range(100)
+    l[i] = (i%20 == 0) and 5 or "a";
+
+/// with no separator
+local s = list.concat(l);
+assert(len(s) == len(string.repeat("a", 100-100/20)) + len(string.repeat(tostr(5), 100/20)));
+local s2 = "";
+foreach i in range(100)
+    s2 = s2 .. (i%20 == 0 and tostr(5) or "a");
+assert(s == s2);
+
+/// with custom separator
+s = list.concat(l, "%");
+assert(len(s) == 99 + len(string.repeat("a", 100-100/20)) + len(string.repeat(tostr(5), 100/20)));
+s2 = "";
+foreach i in range(100) {
+    s2 = s2 .. (i%20 == 0 and tostr(5) or "a");
+    if i < 99
+        s2 = s2 .. "%";
+}
+assert(s == s2);
+
+/// with starting position
+s = list.concat(l, "%", 19);
+assert(len(s) == 81 + len(string.repeat("a", 80-80/20)) + len(string.repeat(tostr(5), 80/20)));
+s2 = "";
+foreach i in range(19, 100) {
+    s2 = s2 .. (i%20 == 0 and tostr(5) or "a");
+    if i < 99
+        s2 = s2 .. "%";
+}
+assert(s == s2);
+
+/// with ending position
+s = list.concat(l, "%", nil, 80);
+assert(len(s) == 80 + len(string.repeat("a", 81-81//20)) + len(string.repeat(tostr(5), 81//20)));
+s2 = "";
+foreach i in range(81) {
+    s2 = s2 .. (i%20==0 and tostr(5) or "a");
+    if i < 80
+        s2 = s2 .. "%";
+}
+assert(s == s2);
+
+/// with start and end positions
+s = list.concat(l, "%", 19, 79);
+assert(len(s) == 61 + len(string.repeat("a", 60-60/20)) + len(string.repeat(tostr(5), 60/20)));
+s2 = "";
+foreach i in range(19, 80) {
+    s2 = s2 .. (i%20 == 0 and tostr(5) or "a");
+    if i < 79
+        s2 = s2 .. "%";
+}
+assert(s == s2);
+
+
+{ /// test 'skipnil' argument
+    local l = list.new(100);
+    foreach i in range(100) l[i] = 1;
+    /* make holes */
+    l[50], l[51], l[52], l[53], l[58], l[60] = nil;
+    assert(list.len(l) == 50 and l.len == 100 and len(l) == 100);
+    local s = list.concat(l,nil,nil,nil,"bla");
+    assert(len(s) == 94); /* skipped 6 holes */
+    local s2 = "";
+    foreach i in range(100) {
+        if !l[i] continue;
+        s2 = s2 .. tostr(l[i]);
+    }
+    assert(s == s2);
+    /* with 'skipnil' disabled */
+    checkerror("cannot concat", list.concat, l, nil, nil, nil, false);
+    l.len = 50;
+    s = list.concat(l,nil,nil,nil,false);
+    assert(len(s) == 50);
+    s2 = "";
+    foreach i in range(50)
+        s2 = s2 .. tostr(l[i]);
+    assert(s == s2);
+}

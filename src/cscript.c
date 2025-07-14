@@ -151,7 +151,6 @@ static int report(cs_State *C, int status) {
 ** 0 if there is no script name, or the index of the script name.
 */
 static int collect_args(char **argv, int *first) {
-    // TODO: bug here, 'first' is not set correctly, I think...
     int args = 0;
     if (*argv) { /* is there a program name? */
         if (argv[0][0]) /* not empty? */

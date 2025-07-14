@@ -1,0 +1,87 @@
+local fn checkerror(msg, f, ...) {
+    st, err = pcall(f, ...);
+    assert(!st and string.find(err, msg));
+}
+
+/// test checks for invalid order functions
+local fn check(l) {
+    local fn f(a, b) { assert(a and b); return true; }
+    checkerror("invalid order function", list.sort, l, f);
+}
+check([1,2,3,4]);
+check([1,2,3,4,5]);
+check([1,2,3,4,5,6]);
+
+fn check(a, f) {
+    f = f or fn(x,y) { return x<y; };
+    foreach n in range(a.len-1, 0, -1)
+        assert(!f(a[n], a[n-1]));
+}
+local a = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
+            "Oct", "Nov", "Dec"];
+list.sort(a);
+check(a);
+
+local fn perm(s, n) {
+    n = n or list.len(s);
+    if (n == 1) {
+        local l = [list.flatten(s)];
+        list.sort(l);
+        check(l);
+    } else {
+        for (local i=0; i < n; i=i+1) {
+            s[i], s[n-1] = s[n-1], s[i];
+            perm(s, n - 1);
+            s[i], s[n-1] = s[n-1], s[i];
+        }
+    }
+}
+perm([]);
+perm([1]);
+perm([1,2]);
+perm([1,2,3]);
+perm([1,2,3,4]);
+perm([2,2,3,4]);
+perm([1,2,3,4,5]);
+perm([1,2,3,3,5]);
+perm([1,2,3,4,5,6]);
+perm([2,2,3,3,5,6]);
+
+local fn timesort(a, n, func, msg, pre) {
+    local x = os.clock();
+    list.sort(a, func);
+    x = (os.clock() - x) * 1000;
+    pre = pre or "";
+    print(string.fmt("%ssorting %d %s elements in %.2f msec.", pre, n, msg, x));
+    check(a, func);
+}
+local limit = 50000;
+a = [];
+for local i=0; i<=limit; i=i+1;
+    a[i] = math.rand();
+timesort(a, limit, nil, "random");
+timesort(a, limit, nil, "sorted", "re-");
+
+a = [];
+for (local i=0; i <= limit; i=i+1)
+    a[i] = math.rand();
+
+local x = os.clock(); local i = 0;
+list.sort(a, fn(x,y) { i=i+1; return y<x; });
+x = (os.clock() - x) * 1000;
+print(string.fmt("Invert-sorting other %d elements in %.2f msec., with %i comparisons",
+                  limit, x, i));
+check(a,fn(x,y) { return y<x; });
+
+list.sort([]);  /// empty list
+
+for (local i=0; i<=limit; i=i+1) { a[i] = false; }
+timesort(a, limit, fn(x,y) { return nil; }, "equal");
+
+foreach _,v in ipairs(a)
+    assert(v == false);
+
+AA = ["\xE1lo", "\0first :-)", "alo", "then this one", "45", "and a new"];
+list.sort(AA);
+check(AA);
+__G.AA = nil;

@@ -1,0 +1,43 @@
+local fn checkerror(msg, f, ...) {
+    local s, err = pcall(f, ...);
+    assert(!s and string.find(err, msg));
+}
+
+checkerror("list expected", list.move, 1, 2, 3, 4);
+checkerror("start index out of bounds", list.move, [], -1, 0, 0);
+checkerror("start index out of bounds", list.move, [], list.maxindex+1, 0, 0);
+checkerror("end index out of bounds", list.move, [], 0, -1, 0);
+checkerror("end index out of bounds", list.move, [], 0, list.maxindex+1, 0);
+checkerror("destination index out of bounds", list.move, [], 0, 0, -1);
+checkerror("destination index out of bounds", list.move, [], 0, 0, list.maxindex+1);
+
+local fn eqL(a, b) {
+    foreach i, v in ipairs(a) assert(b[i] == v);
+    foreach i, v in ipairs(b) assert(a[i] == v);
+}
+
+local a = list.move([10,20,30], 0, 2, 1); /// move forward
+eqL(a, [10,10,20,30]);
+
+/// move forward with overlap of 1
+a = list.move([10, 20, 30], 0, 2, 2);
+eqL(a, [10, 20, 10, 20, 30]);
+
+/// moving to the same table (not being explicit about it)
+a = [10, 20, 30, 40];
+list.move(a, 0, 3, 1, a);
+eqL(a, [10, 10, 20, 30, 40]);
+
+a = list.move([10,20,30], 1, 2, 0); /// move backward
+eqL(a, [20,30,30]);
+
+a = []; /// move to new table
+assert(list.move([10,20,30], 0, 2, 0, a) == a);
+eqL(a, [10,20,30]);
+
+a = [];
+assert(list.move([10,20,30], 1, 0, 2, a) == a); /// empty move (no move)
+eqL(a, []);
+
+a = list.move([10,20,30], 0, 9, 0); /// move to the same place
+eqL(a, [10,20,30]);

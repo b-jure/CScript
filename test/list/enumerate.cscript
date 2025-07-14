@@ -1,0 +1,29 @@
+local x = 0;
+local l = list.new(20);
+l[19] = nil;
+foreach i,v in list.enumerate(l)
+    x = x + 1;
+assert(x == 0);
+l[19] = true;
+assert(l.len == 20 and list.len(l) == 0);
+foreach i,v in list.enumerate(l)
+    x = x + 1;
+assert(x == 0);
+foreach i in range(20)
+    l[i] = "69";
+assert(l.len == 20 and list.len(l) == 20);
+foreach i,v in list.enumerate(l)
+    x = x + 1;
+assert(x == 20);
+l[10] = nil;
+foreach i,v in list.enumerate(l)
+    x = x - 1;
+assert(x == 10);
+/// enumerate without border
+local iter, lst, i = list.enumerate(l);
+loop {
+    i, v = iter(lst, i, false);
+    if !i break;
+    x = x +  1;
+}
+assert(x == 30);

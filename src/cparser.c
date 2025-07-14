@@ -233,7 +233,6 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
 }
 
 
-// TODO: test these errors in 'test/other/errors.cscript'
 static const char *errstmname(Lexer *lx, const char *err) {
     const char *stm;
     switch (lx->fs->lastisend) {
@@ -249,7 +248,7 @@ static const char *errstmname(Lexer *lx, const char *err) {
 
 static c_noret expecterrorblk(Lexer *lx) {
     const char *err = csS_pushfstring(lx->C,
-                        "expected %s", csY_tok2str(lx, '{'));
+                        "expected %s", csY_tok2str(lx, '}'));
     err = errstmname(lx, err);
     csY_syntaxerror(lx, err);
 }
@@ -807,7 +806,7 @@ static void getdotted(Lexer *lx, ExpInfo *v, int super) {
 }
 
 
-/* TODO(implement OP_CALLSUP) */
+/* TODO: implement CALLSUP */
 static void superkw(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     if (c_unlikely(fs->cs == NULL))
@@ -854,7 +853,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* TODO: implement OP_CALLPROPERTY */
+/* TODO: implement CALLPROPERTY */
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int line = lx->line;

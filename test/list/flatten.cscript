@@ -1,5 +1,6 @@
 local flatten = import("list").flatten;
 
+local n;
 local a = ["420", "69", "1337"];
 local x, y, z, g = flatten(a);
 assert(x == "420");
@@ -56,3 +57,51 @@ assert(x == nil);
 assert(y == nil);
 assert(z == nil);
 assert(g == nil);
+
+
+local fn checkerror(msg, f, ...) {
+    local s, err = pcall(f, ...);
+    assert(!s and string.find(err, msg));
+}
+
+
+a = [];
+local lim = 2000;
+for (local i=0; i <= lim; i=i+1) a[i]=i;
+assert(getargs(lim, flatten(a)) == lim and getargs("last", flatten(a)) == lim);
+x = flatten(a);
+assert(x == 0);
+x = [flatten(a)];
+assert(list.len(x) == lim+1 and x[0] == 0 and x[lim] == lim);
+x = [flatten(a, lim-2)];
+assert(x.len == 3 and x[0] == lim-2 and x[2] == lim);
+x = [flatten(a, 9, 5)];
+assert(x.last == nil); /// no elements
+x = [flatten(a, 11, 10)];
+assert(x.len == 0); /// no elements
+x,y = flatten(a, 10, 10);
+assert(x == 10 and y == nil);
+x,y,z = flatten(a, 10, 11);
+assert(x == 10 and y == 11 and z == nil);
+a,x = flatten([1]);
+assert(a==1 and x==nil);
+a,x = flatten([1,2], 0, 0);
+assert(a==1 and x==nil);
+
+local maxi = (1 << 31) - 1; /// maximum value for an int (usually)
+assert(maxi == list.maxindex + 1);
+checkerror("end index out of bounds", flatten, [], 2, maxi);
+checkerror("end index out of bounds", flatten, [], 2, -1);
+checkerror("start index out of bounds", flatten, [], -1, 5);
+checkerror("start index out of bounds", flatten, [], maxi, 5);
+if (__heavy) { /// test flatten on big list
+    local bl = [];
+    local lim = 1<<24; /// bytecode limit
+    for (local i = 0; i <= lim; i=i+1)
+        bl[i] = i;
+    checkerror("too many results", flatten, bl);
+}
+flatten([], list.maxindex, 0);
+flatten([], list.maxindex, 1);
+flatten([], list.maxindex, list.maxindex);
+pcall(flatten, [], 0, list.maxindex + 1);

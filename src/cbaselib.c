@@ -311,6 +311,17 @@ static int b_setmetalist(cs_State *C) {
 }
 
 
+// TODO: add tests and docs
+static int b_getmethods(cs_State *C) {
+
+}
+
+
+// TODO: add tests and docs
+static int b_setmethods(cs_State *C) {
+}
+
+
 static int b_nextfield(cs_State *C) {
     int t = cs_type(C, 0);
     csL_expect_arg(C, (t == CS_T_INSTANCE || t == CS_T_TABLE), 0,
@@ -755,6 +766,8 @@ static const cs_Entry basic_funcs[] = {
     {"runfile", b_runfile},
     {"getmetalist", b_getmetalist},
     {"setmetalist", b_setmetalist},
+    {"getmethods", b_getmethods},
+    {"setmethods", b_setmethods},
     {"nextfield", b_nextfield},
     {"pairs", b_pairs},
     {"ipairs", b_ipairs},

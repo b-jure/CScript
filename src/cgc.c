@@ -255,9 +255,9 @@ static void markobject_(GState *gs, GCObject *o) {
             break;
         }
         case CS_VLIST: {
-            List *arr = gco2list(o);
-            if (arr->n == 0) { /* no elements? */
-                markblack(arr); /* nothing to visit */
+            List *l = gco2list(o);
+            if (l->len == 0) { /* no elements? */
+                markblack(l); /* nothing to visit */
                 break;
             }
             /* else... */
@@ -445,10 +445,10 @@ static int markopenupvalues(GState *gs) {
 
 
 static c_umem marklist(GState *gs, List *l) {
-    cs_assert(l->n > 0);
-    for (int i = 0; i < l->n; i++)
-        markvalue(gs, &l->b[i]);
-    return 1 + l->n; /* list + elements */
+    cs_assert(l->len > 0);
+    for (int i = 0; i < l->len; i++)
+        markvalue(gs, &l->arr[i]);
+    return 1 + l->len; /* list + elements */
 }
 
 
@@ -700,7 +700,7 @@ void csG_checkfin(cs_State *C, GCObject *o, List *ml) {
     GState *gs = G(C);
     if (!ml ||                          /* no metalist... */
         isfin(o) ||                     /* or object is already marked... */
-        ttisnil(&ml->b[CS_MT_GC]) ||    /* or it has no finalizer... */
+        ttisnil(&ml->arr[CS_MT_GC]) ||    /* or it has no finalizer... */
         (gs->gcstop & GCSTPCLS))        /* ...or state is closing? */
         return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */

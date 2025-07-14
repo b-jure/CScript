@@ -291,6 +291,7 @@ CS_API void  cs_set_superclass(cs_State *C, int index);
 CS_API void  cs_set_metalist(cs_State *C, int index);
 CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
 CS_API void  cs_set_methods(cs_State *C, int index); 
+CS_API void  cs_set_listlen(cs_State *C, int index, int len);
 /* }====================================================================== */
 
 /* {======================================================================
@@ -371,6 +372,7 @@ CS_API void        cs_concat(cs_State *C, int n);
 CS_API size_t      cs_numbertostring(cs_State *C, const char *s, int *f); 
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
+CS_API void        cs_shrinklist(cs_State *C, int index);
 
 #define cs_is_function(C, n)        (cs_type(C, (n)) == CS_T_FUNCTION)
 #define cs_is_list(C, n)            (cs_type(C, (n)) == CS_T_LIST)

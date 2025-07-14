@@ -11,10 +11,10 @@
 
 
 #define csA_fastset(C,l,i,v) \
-    { setobj(C, &(l)->b[(i)], v); csG_barrierback(C, obj2gco(l), (v)); }
+    { setobj(C, &(l)->arr[(i)], v); csG_barrierback(C, obj2gco(l), (v)); }
 
 
-#define csA_fastget(C,l,i,o)      setobj(C, o, &(l)->b[(i)])
+#define csA_fastget(C,l,i,o)      setobj(C, o, &(l)->arr[(i)])
 
 
 /* value of 'extra' for first list field name */

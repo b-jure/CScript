@@ -1,0 +1,26 @@
+local fn checkerror(msg, f, ...) {
+    local s, err = pcall(f, ...);
+    assert(!s and string.find(err, msg));
+}
+
+assert(gc("isrunning"));
+local N = 10000;
+gc();
+gc(); /* again in case of finalizers (if tests share global state) */
+local m = gc("count") * 1024;
+local l = list.new(N);
+local memdiff = gc("count") * 1024 - m;
+assert(memdiff > N * 4);
+foreach i in range(0, 20) {
+    assert(list.len(l) == i);
+    l[i] = 0;
+}
+foreach i in range(0, 20) l[l.len] = i * 10;
+assert(l.len == 40 and l.last == 190);
+l = nil;
+gc();
+m = gc("count") * 1024;
+l = list.new(1024);
+memdiff = gc("count") * 1024 - m;
+assert(memdiff > 1024 * 12);
+checkerror("out of range", list.new, list.maxindex + 2);

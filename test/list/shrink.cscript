@@ -1,0 +1,7 @@
+assert(gc("isrunning"));
+local l = list.new(500);
+gc();
+local m = gc("count") * 1024;
+list.shrink(l);
+local me = gc("count") * 1024;
+assert(me <= (m - 8 * 500));

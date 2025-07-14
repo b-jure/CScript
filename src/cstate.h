@@ -201,7 +201,7 @@ struct cs_State {
 ** indices in the clist were inserted right when the clist
 ** was created and never removed, they must always be present.
 */
-#define GT(C)       (&listval(CL(C))->b[CS_CLIST_GLOBALS])
+#define GT(C)       (&listval(CL(C))->arr[CS_CLIST_GLOBALS])
 
 
 

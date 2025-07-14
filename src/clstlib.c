@@ -186,15 +186,17 @@ static int lst_flatten(cs_State *C) {
 
 
 static void addvalue(cs_State *C, csL_Buffer *b, int i) {
+    int t;
     cs_get_index(C, 0, i);
-    if (cs_is_number(C, -1)) { /* value is number? */
+    t = cs_type(C, -1);
+    if (t == CS_T_NUMBER) {
         char numbuff[CS_N2SBUFFSZ];
         cs_numbertocstring(C, -1, numbuff); /* convert it to string */
         cs_push_string(C, numbuff); /* push it on stack */
         cs_replace(C, -2); /* and replace original value */
-    } else if (c_unlikely(!cs_is_string(C, -1))) /* value is not a string? */
+    } else if (t != CS_T_STRING) /* value is not a string? */
         csL_error(C, "cannot concat value (%s) at index %d",
-                     csL_typename(C, -1), i);
+                      cs_typename(C, t), i);
     csL_buff_push_stack(b);
 }
 
@@ -205,28 +207,28 @@ static void addvalue(cs_State *C, csL_Buffer *b, int i) {
 
 
 static int lst_concat(cs_State *C) {
-    int next;
     size_t lsep;
-    csL_Buffer b;
     cs_Integer l = checklist(C, 0, 0, 0);
     const char *sep = csL_opt_lstring(C, 1, "", &lsep);
     cs_Integer i = csL_opt_integer(C, 2, 0);
     cs_Integer e = csL_opt_integer(C, 3, l - (l>0));
-    int skipnil = csL_opt_bool(C, 4, 1);
+    int sn = csL_opt(C, cs_to_bool, 4, 1);
     check_bounds(C, 2, i, 3, e);
-    if (i <= e && l > 0) { /* non-empty range and list has elements? */
+    if (0 < l && i <= e) { /* list has elements and range is non-empty? */
+        const int x = !sn; /* if using 'cs_find_index' go one index behind */
+        int next = getnexti(C, i-x, e, sn);
+        csL_Buffer b;
         csL_buff_init(C, &b);
-        next = getnexti(C, (i - !skipnil), e, skipnil);
-        while (next >= 0 && next < e) { /* l[next .. (next < e)] */
+        while (0 <= next && next < e) { /* l[next .. (next < e)] */
             addvalue(C, &b, next);
             csL_buff_push_lstring(&b, sep, lsep);
-            next = getnexti(C, next+1, e, skipnil);
+            next = getnexti(C, next+1-x, e, sn);
         }
-        if (next == e && (!skipnil || cs_find_index(C, 0, 0, next, e) != -1))
+        if (next == e && (!sn || 0 <= cs_find_index(C, 0, 0, next, e)))
             addvalue(C, &b, cast_int(e)); /* add last value */
         csL_buff_end(&b);
-    }
-    /* else: nothing to concatenate */
+    } else /* otherwise nothing to concatenate */
+        cs_push_literal(C, "");
     return 1;
 }
 
@@ -402,6 +404,13 @@ static int lst_sort(cs_State *C) {
 /* }=================================================================== */
 
 
+static int lst_shrink(cs_State *C) {
+    csL_check_type(C, 0, CS_T_LIST);
+    cs_shrinklist(C, 0);
+    return 0;
+}
+
+
 static int lst_isordered(cs_State *C) {
     int sorted = 1;
     cs_Integer i, e;
@@ -430,7 +439,7 @@ static int lst_isordered(cs_State *C) {
 }
 
 
-/// TODO: add tests and docs
+/// TODO: add docs
 static cs_Entry lstlib[] = {
     {"len", lst_len},
     {"enumerate", lst_enumerate},
@@ -441,6 +450,7 @@ static cs_Entry lstlib[] = {
     {"flatten", lst_flatten},
     {"concat", lst_concat},
     {"sort", lst_sort},
+    {"shrink", lst_shrink},
     {"isordered", lst_isordered},
     {"maxindex", NULL},
     {NULL, NULL}

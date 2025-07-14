@@ -92,9 +92,9 @@ static void init_cstorage(cs_State *C, GState *gs) {
     /* gs->c_list = list */
     setlistval(C, &gs->c_list, clist);
     /* clist[CS_CLIST_MAINTHREAD] = C (mainthread) */
-    setthval(C, &clist->b[CS_CLIST_MAINTHREAD], C);
+    setthval(C, &clist->arr[CS_CLIST_MAINTHREAD], C);
     /* clist[CS_CLIST_GLOBALS] = global table */
-    settval(C, &clist->b[CS_CLIST_GLOBALS], csH_new(C));
+    settval(C, &clist->arr[CS_CLIST_GLOBALS], csH_new(C));
     /* gs->c_table = table */
     settval(C, &gs->c_table, csH_new(C));
 }

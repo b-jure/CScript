@@ -143,6 +143,7 @@ local ESC = fn (seq) { return "\e" .. seq; };
 local fn RED(s) { return termcode(ESC("[31m"), s); }
 local fn GREEN(s) { return termcode(ESC("[32m"), s); }
 local fn YELLOW(s) { return termcode(ESC("[33m"), s); }
+local fn BLUE(s) { return termcode(ESC("[34m"), s); }
 local fn MAGENTA(s) { return termcode(ESC("[35m"), s); }
 local fn CYAN(s) { return termcode(ESC("[36m"), s); }
 
@@ -177,7 +178,7 @@ if __skipmsg { /* store skipped (parts of) tests? */
 local fn testfmt(test, stat) {
     local C = stat and GREEN or RED;
     local res = stat and "PASS" or "FAIL";
-    return fmt("%s  %4s  %s %-55s", C("["), C(res), C("]"), C(test));
+    return fmt("%s %-55s", C("[  " .. res .. "  ]"), C(test));
 }
 
 
@@ -263,7 +264,7 @@ local fn get_tests(filename) {
         }
     } else { /* otherwise try get 'tests' table from a file */
         if !filename /* no filename? */
-            error("can't generate tests table, missing filename");
+            error("can't generate tests on this system or missing filename");
         tests = runfile(filename);
         if typeof(tests) != "table"
             error(fmt("'%s' script must return a table, instead got %s",
@@ -276,18 +277,29 @@ local fn get_tests(filename) {
 
 
 /*
-** Lists all testsuites and tests in the table returned by 'tests_script'.
-** If 'tests_script' is not provided, the script will try to auto-generate
-** tests table from the current directory (not portable).
+** Output test table to 'stdout'.
+** It first checks for already generated tests table in '__tests', otherwise
+** it tries to generate from 'tests_script', finally if 'tests_script' is
+** not provided, the script will try to auto-generate tests table from the
+** current directory (not portable).
+** Additionally if 'as_script' is true, the 'return' is prepended and ';'
+** appended to terminate the 'return'.
 ** @tests_script - ?string
+** @as_script - ?any
 */
-local fn list_tests(tests_script) {
+local fn output_tests_table(tests_script, as_script) {
     local tests = get_tests(tests_script);
+    stdout.setvbuf("full");
+    stdout.write((as_script and "return " or "") .. "{\n");
     foreach tsuite, tlist in pairs(tests) {
-        print(tsuite .. ":");
-        foreach _, test in ipairs(tlist)
-            print("\t" .. test);
+        stdout.write("  " .. tsuite .. " = [\n");
+        foreach _,test in ipairs(tlist)
+            stdout.write("    \"" .. test .. "\",\n");
+        stdout.write("  ],\n");
     }
+    stdout.write("}" .. (as_script and ";" or "") .. "\n");
+    stdout.flush();
+    stdout.setvbuf("line");
 }
 
 
@@ -295,6 +307,7 @@ local fn list_tests(tests_script) {
 ** Returns formatted elapsed time depending on the time 'c'.
 ** @c - number
 */
+local time_in_dbg = 0;
 local prevtest_time = math.maxint;
 local fn gettime(c) {
     local elapsed = c - lastclock;
@@ -306,9 +319,10 @@ local fn gettime(c) {
         test_time = CYAN(test_time);
     else
         test_time = YELLOW(test_time);
-    local s = fmt("%s (%s)", YELLOW(total_time), test_time);
+    local s = fmt("%s (%s)", BLUE(total_time), test_time);
     prevtest_time = elapsed;
-    lastclock = c;
+    lastclock = c - time_in_dbg; /* compensate for time in interactive mode */
+    time_in_dbg = 0; /* reset */
     return s;
 }
 
@@ -376,8 +390,7 @@ local fn rmtempfile() {
 ** @filepath - string
 */
 local fn run_test(filepath) {
-    if (__opts.memory)
-        showmem();
+    if (__opts.memory) showmem();
     local termcodes = !__port and __opts.termcodes and execute("[ -t 1 ]");
     local isolated = !__port and __opts.run_isolated;
     if (termcodes and __opts.noprint and !__opts.warnings) {
@@ -397,6 +410,11 @@ local fn run_test(filepath) {
         flush();
     }
     printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
+    if (__opts.enter_debug) {
+        local c = clock();
+        dbg(); /* enter interactive mode */
+        time_in_dbg = clock() - c;
+    }
     if (!stat) { /* test failed? */
         if (isolated and msg and code) /* failed isolated with msg and code? */
             msg = msg .. " (code " .. tostr(code) .. ")"; /* append it to msg */
@@ -416,15 +434,19 @@ local fn run_test(filepath) {
 
 /*
 ** @tsuite - string
-** @what - string
+** @isend - ?any
 */
-local fn testsuite_headerfmt(tsuite, what) {
-    local mode, cl = fn(x){return x;}, MAGENTA;
-    if what == "END" {
+local fn testsuite_headerfmt(tsuite, isend) {
+    local txt, mode, cl = "BEGIN", fn(x){return x;}, MAGENTA;
+    if isend {
         mode = STRIKE;
         cl = CYAN;
+        txt = "END";
     }
-    print(cl("> " .. what .. "(") .. mode(tsuite) .. cl(")"));
+    txt = cl("> " .. txt .. "(") .. mode(tsuite) .. cl(")");
+    if (isend and __opts.timed)
+        txt = txt .. BLUE(fmt(" %-8g", lastclock - initclock));
+    print(txt);
 }
 
 
@@ -435,16 +457,14 @@ local fn testsuite_headerfmt(tsuite, what) {
 */
 local fn run_tests(tsuite, tlist) {
     if (tlist.len > 0) {
-        testsuite_headerfmt(tsuite, "BEGIN");
+        testsuite_headerfmt(tsuite);
         if (__opts.timed) { /* timming the execution? */
             initclock = clock();
             lastclock = initclock;
         }
-        foreach _, filepath in ipairs(tlist) {
+        foreach _, filepath in ipairs(tlist)
             run_test(filepath);
-            if (__opts.enter_debug) dbg(); /* enter interactive mode */
-        }
-        testsuite_headerfmt(tsuite, "END");
+        testsuite_headerfmt(tsuite, true);
     }
 }
 
@@ -523,52 +543,82 @@ usage: ./test.cscript [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite
                       [--port-flags]
                       [--verbose-flags]
                       [--standard-flags]
+                      [--out-tests]
+                      [--gen-tests]
+                      [--gen-script]
 
 Available options are:
     -h      Show usage (this), this must be the first option and argument.
-    -c      Output ansii terminal codes in order to color and set different
+
+    -c      Output ANSI escape codes in order to color and set different
             modes to to text in terminal. This also enables showing the current
             test that is executing (this is disabled if '-w' or '-o').
             This option is not portable and is ignored if 'stdout' is not a terminal.
+
     -w      Enable output of warnings while running tests.
+
     -o      Replace 'print' and 'printf' with CScript functions that print to
             temporary file instead of 'stdout' (not portable).
+
     -m      Print memory usage before running the test.
+
     -r      Print the error message in case test fails.
+
     -f      After all tests are finished, re-print failed test names
             (and their error message if '-r').
+
     -a      Abort the test script after the first failed test.
+
     -i      Run each test in isolation as a separate process by executing standalone
             interpreter with test as its only argument. All warnings and errors
             won't be reachable as they are redirected to nul(l) device/file,
             only the exit code can be displayed in error messages (not portable).
+
     -d      After each test is finished, enter interactive mode.
             In order to leave this mode, enter a line containing only "cont".
 
-    All of the options above have the uppercase version which do the opposite
+    All of the options above have the uppercase version which does the opposite
     (-C, -W, -O, -M, -R, -F, -A, -I and -D).
 
     -t test_file        Add a test file {test_file} into the 'cli_tests' testsuite.
                         This testsuite will be the first to run.
+
     -e testsuite_name   Exclude testsuite {testsuite_name}, preventing the script
                         from running it.
+
     -s tests_script     Run CScript script {tests_script} to generate the tests table.
                         This script should return a table with testsuite names as
                         keys and lists of filenames as values which represent the
                         tests of that testsuite. Test filepaths inside the list
                         should be absolute or relative to the script file.
+                        This is ignored if '--gen-tests'.
 
     --minimal-flags     Equivalent to '-CWoMRZfaID'.
     --port-flags        Equivalent to '-CwOmrZfaId'.
     --verbose-flags     Equivalent to '-cWOmrzfAID'.
     --standard-flags    Equivalent to '-cWoMRzfAiD'.
-    --list-tests        List all tests to be executed by the script found in
+
+    --out-tests         Outputs tests table to 'stdout', it first checks for the
+                        already present tests table (if it was generated), if
+                        missing, it tries to generate tests table from the
                         {tests_script} (default script is 'testsuites.cscript').
-                        After listing script returns and no tests are executed.
+                        After outputting, script returns and no tests are executed.
                         The default {tests_script} can be changed in '__opts' table.
 
+    --gen-tests         Generates tests table from the current directory structure.
+                        After generation is complete, script outputs the tests
+                        table if '--out-tests' and returns without executing any
+                        tests (not portable). This is ignored if '--gen-script'.
+
+    --gen-script        Equivalent to '--gen-tests' and '--out-tests', with
+                        exception that it generates tests table from the
+                        {tests_script} provided with '-s' or as fallback from
+                        '__opts.tests_script'. Additionally when outputting the
+                        table, it prepends 'return' before the table and appends
+                        ';' after the table to terminate the 'return'.
+
 Other:
-    All the other non-option arguments (arg_testsuite) are names of testsuites
+    All the other non-option arguments {arg_testsuite} are names of testsuites
     to run, this can act as a filter, in order to run only specific set of
     testsuites. In cases where no specific test is provided (using '-t') and
     no tests script (using '-s'), then the filename in the global table '__opts' 
@@ -582,6 +632,14 @@ Other:
     By default this is set to 'testsuites.cscript' which comes with the
     distribution, make sure you didn't delete this script, or if you moved
     it to another directory, adjust the filepath of '__opts.tests_script'.
+    If that doesn't solve it, then the script '__opts.tests_script' contains
+    invalid test filepath. You could always try to re-generate the tests script
+    from the current directory with './test.cscript --gen-script > {tests_script}'.
+
+    Note: If your system does not have access to 'system', you should use the
+    default testsuites script that comes with the distribution or re-build it
+    manually, by writting out the test table structure yourself, or modify the
+    test script itself.
 ]=];
 
 
@@ -626,19 +684,15 @@ local fn get_req_arg(nbyte, opt, what) {
 }
 
 
-/* for '--list-tests' option */
-local tlist = false;
-
 /*
 ** Handles flag options starting with '--', these options set
 ** multiple flag options at once.
 */
+local outtests = false; /* '--out-tests' option */
+local gentests = false; /* '--gen-tests' option */
+local genscript = false; /* '--gen-script' option */
 local fn handle_multi_option(opt) {
     switch (opt) {
-        case "list-tests": {
-            tlist = true;
-            break;
-        }
         case "minimal-flags": {
             __opts.termcodes = false;
             __opts.warnings = false;
@@ -690,6 +744,18 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = false;
             __opts.run_isolated = true;
             __opts.enter_debug = false;
+            break;
+        }
+        case "list-tests": {
+            outtests = true;
+            break;
+        }
+        case "gen-script":
+            genscript = true;
+            outtests = true;
+            /* fall through */
+        case "gen-tests": {
+            gentests = true;
             break;
         }
         default: {
@@ -926,9 +992,13 @@ local fn set_options() {
 
 handle_cli_args();
 set_options();
-if (tlist)
-    list_tests(__opts.tests_script);
-else
+if (genscript)
+    get_tests(__opts.tests_script);
+else if (gentests)
+    get_tests();
+if (outtests)
+    output_tests_table(__opts.tests_script, genscript);
+else if (!gentests)
     run_args();
 rmtempfile();
 

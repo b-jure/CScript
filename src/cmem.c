@@ -109,9 +109,9 @@ void *csM_malloc_(cs_State *C, size_t size, int tag) {
 void *csM_growarr_(cs_State *C, void *block, int *sizep, int len,
                    int elemsize, int nelems, int limit, const char *what) {
     int size = *sizep;
-    cs_assert(nelems > 0 && elemsize > 0 && what);
+    cs_assert(0 <= nelems && 0 < elemsize && what);
 checkspace:
-    if (c_likely(size - len >= nelems)) { /* have enough space for nelems? */
+    if (c_likely(nelems <= size - len)) { /* have enough space for nelems? */
         cs_assert(size <= limit);
         return block; /* done; return the current block */
     } else { /* otherwise grow */

@@ -136,6 +136,12 @@ checkmessage("return 34 >> {};", "table value");
 checkmessage("aaa = 24 // 0;", "divide by zero");
 checkmessage("aaa = 1 % 0;", "'n%0'");
 
+/// block statement errors
+checkmessage("{ return; print(\"ok\"); }", "'return' must be the last");
+checkmessage("loop { break; print(\"ok\"); }", "'break' must be the last");
+checkmessage("loop { continue; print(\"ok\"); }", "'continue' must be the last");
+checkmessage("loop { print(\"ok\");", "expected '}'");
+
 
 /// passing light userdata instead of full userdata
 __G.D = debug;

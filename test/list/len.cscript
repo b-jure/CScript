@@ -1,0 +1,15 @@
+assert(gc("isrunning")); gc();
+local l = list.new(30);
+local n = gc("count") * 1024;
+assert(list.len(l) == 0);
+for local i = 0; i < 30; i = i +1;
+    l[i] = true;
+local e = gc("count") * 1024;
+assert(n == e); /* no allocation occurred */
+assert(list.len(l) == 30);
+l[15] = nil; /* make a hole */
+assert(list.len(l) == 15);
+l[15] = true;
+assert(list.len(l) == 30);
+l[0] = nil;
+assert(list.len(l) == 0);

@@ -28,26 +28,26 @@ static const char *strlng = "length";
 List *csA_new(cs_State *C) {
     GCObject *o = csG_new(C, sizeof(List), CS_VLIST);
     List *l = gco2list(o);
-    l->sz = l->n = 0;
-    l->b = NULL;
+    l->size = l->len = 0;
+    l->arr = NULL;
     return l;
 }
 
 
 void csA_shrink(cs_State *C, List *l) {
-    if (l->b && l->sz > l->n)
-        csM_shrinkarray(C, l->b, l->sz, l->n, TValue);
+    if (l->arr && l->len < l->size)
+        csM_shrinkarray(C, l->arr, l->size, l->len, TValue);
 }
 
 
 int csA_ensure(cs_State *C, List *l, int space) {
-    if (space <= l->n) /* in bound? */
-        return 0; /* done */
+    if (space <= l->len) /* in bound? */
+        return check_exp(0 <= space, 0); /* done */
     else {
-        csM_ensurearray(C, l->b, l->sz, l->n, (space - l->n) + 1,
-                           CS_MAXLISTINDEX, "list elements", TValue);
-        for (int i = l->n; i < space; i++)
-            setnilval(&l->b[i]); /* clear new part */
+        csM_ensurearray(C, l->arr, l->size, l->len, space - l->len,
+                           CS_MAXINT, "list elements", TValue);
+        for (int i = l->len; i < space; i++)
+            setnilval(&l->arr[i]); /* clear new part */
         return 1;
     }
 }
@@ -56,7 +56,7 @@ int csA_ensure(cs_State *C, List *l, int space) {
 void csA_ensureindex(cs_State *C, List *l, int index) {
     cs_assert(index >= -1);
     if (csA_ensure(C, l, index + 1)) /* length changed? */
-        l->n = index + 1;
+        l->len = index + 1;
 }
 
 
@@ -88,9 +88,9 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
             cs_Integer i;
             if (c_likely(tointeger(v, &i))) {
                 if (c_likely(i >= 0)) {
-                    i = (i <= CS_MAXINT) ? i - 1 : CS_MAXINT - 1;
-                    csA_ensureindex(C, l, i);
-                    setobj(C, &l->b[i], v);
+                    i = (i <= CS_MAXINT) ? i : CS_MAXINT;
+                    csA_ensure(C, l, i);
+                    l->len = i;
                 } else /* otherwise negative length */
                     csD_listerror(C, v, strlng, strneg);
             } else
@@ -98,15 +98,15 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
             break;
         }
         case LFLAST: { /* set the last element */
-            if (l->n > 0)
-                setobj(C, &l->b[l->n - 1], v);
+            if (l->len > 0)
+                setobj(C, &l->arr[l->len - 1], v);
             /* else, do nothing */
             break;
         }
         case LFX: case LFY: case LFZ: { /* set 1st, 2nd or 3rd element */
             int i = lf - LFX;
             csA_ensureindex(C, l, i);
-            setobj(C, &l->b[i], v);
+            setobj(C, &l->arr[i], v);
             break;
         }
         default: cs_assert(0); /* unreachable */
@@ -117,19 +117,19 @@ c_sinline void setfield(cs_State *C, List *l, int lf, const TValue *v) {
 c_sinline void getfield(cs_State *C, List *l, int lf, TValue *out) {
     switch (lf) {
         case LFLEN: { /* get list length */
-            setival(out, l->n);
+            setival(out, l->len);
             break;
         }
         case LFLAST: { /* get the last element */
-            if (l->n > 0) {
-                csA_fastget(C, l, l->n - 1, out);
+            if (l->len > 0) {
+                csA_fastget(C, l, l->len - 1, out);
             } else
                 setnilval(out);
             break;
         }
         case LFX: case LFY: case LFZ: { /* get 1st, 2nd or 3rd element */
             int i = lf - LFX;
-            if (i < l->n) {
+            if (i < l->len) {
                 csA_fastget(C, l, i, out);
             } else
                 setnilval(out);
@@ -176,7 +176,7 @@ void csA_setint(cs_State *C, List *l, const FatValue *k, const TValue *v) {
             csD_listerror(C, k->v, stridx, "too large");
         else { /* ok */
             csA_ensureindex(C, l, k->i);
-            setobj(C, &l->b[k->i], v);
+            setobj(C, &l->arr[k->i], v);
         }
     } else /* TODO: remove this branch (wrap as unsigned) */
         csD_listerror(C, k->v, stridx, strneg);
@@ -205,8 +205,8 @@ void csA_getstr(cs_State *C, List *l, const TValue *k, TValue *out) {
 
 void csA_getint(cs_State *C, List *l, const FatValue *k, TValue *out) {
     if (c_likely(0 <= k->i)) { /* positive index? */
-        if (k->i < l->n) { /* index in bounds? */
-            setobj(C, out, &l->b[k->i]);
+        if (k->i < l->len) { /* index in bounds? */
+            setobj(C, out, &l->arr[k->i]);
         } else /* otherwise index out of bounds */
             setnilval(out);
     } else /* TODO: remove this branch */
@@ -229,8 +229,8 @@ void csA_get(cs_State *C, List *l, const TValue *k, TValue *out) {
 /* returns reference to the value at index 'i' */
 const TValue *csA_getival(cs_State *C, List *l, int i) {
     cs_assert(i >= 0);
-    if (i < l->n)
-        return &l->b[i];
+    if (i < l->len)
+        return &l->arr[i];
     else
         return &G(C)->nil;
 }
@@ -239,7 +239,7 @@ const TValue *csA_getival(cs_State *C, List *l, int i) {
 /* similar to above function, except this returns the value into 'res' */
 void csA_geti(cs_State *C, List *l, int i, TValue *res) {
     cs_assert(i >= 0);
-    if (i < l->n) {
+    if (i < l->len) {
         csA_fastget(C, l, i, res);
     } else
         setnilval(res);
@@ -247,19 +247,19 @@ void csA_geti(cs_State *C, List *l, int i, TValue *res) {
 
 
 int csA_findindex(List *l, int rev, int nn, int s, int e) {
-    cs_assert(s >= 0 && e < l->n);
+    cs_assert(0 <= s && e < l->len);
     if (!rev) { /* search from start */
         for (; s <= e; s++)
-            if (!ttisnil(&l->b[s]) == nn) return s;
+            if (!ttisnil(&l->arr[s]) == nn) return s;
     } else { /* search from end (reverse) */
         for (; s <= e; e--)
-            if (!ttisnil(&l->b[e]) == nn) return e;
+            if (!ttisnil(&l->arr[e]) == nn) return e;
     }
     return -1; /* not found */
 }
 
 
 void csA_free(cs_State *C, List *l) {
-    csM_freearray(C, l->b, l->sz);
+    csM_freearray(C, l->arr, l->size);
     csM_free(C, l);
 }

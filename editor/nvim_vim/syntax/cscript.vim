@@ -209,10 +209,10 @@ syn keyword cscriptMetaTag __eq __lt __le __name
 
 "-Basic library---{{
 syn keyword cscriptFunc error assert gc load loadfile runfile getmetalist
-syn keyword cscriptFunc setmetalist nextfield pairs ipairs pcall xpcall
-syn keyword cscriptFunc print printf warn len rawequal rawget rawset getargs
-syn keyword cscriptFunc tonum tostr typeof getclass getsuper range
-syn keyword cscriptFunc __G __ENV __VERSION
+syn keyword cscriptFunc setmetalist getmethods setmethods nextfield pairs
+syn keyword cscriptFunc ipairs pcall xpcall print printf warn len rawequal
+syn keyword cscriptFunc rawget rawset getargs tonum tostr typeof getclass
+syn keyword cscriptFunc getsuper range __G __ENV __VERSION
 " metatag table keys
 syn match cscriptFunc /\<__MT>\ze[^\.]/
 syn match cscriptFunc /\<__MT\.getidx\>/
@@ -370,6 +370,7 @@ syn match cscriptFunc /\<list\.new\>/
 syn match cscriptFunc /\<list\.flatten\>/
 syn match cscriptFunc /\<list\.concat\>/
 syn match cscriptFunc /\<list\.sort\>/
+syn match cscriptFunc /\<list\.shrink\>/
 syn match cscriptFunc /\<list\.isordered\>/
 syn match cscriptFunc /\<list\.enumerate\>/
 syn match cscriptFunc /\<list\.maxindex\>/

@@ -807,14 +807,14 @@ c_sinline void aux_rawsetstr(cs_State *C, Table *t, const char *str,
 
 c_sinline OClass *getclass(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
-    api_check(C, ttisclass(o), "expected class");
+    api_check(C, ttisclass(o), "class expected");
     return classval(o);
 }
 
 
 c_sinline List *getlist(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
-    api_check(C, ttislist(o), "expect list");
+    api_check(C, ttislist(o), "list expected");
     return listval(o);
 }
 
@@ -1443,6 +1443,18 @@ nobarrier:
 }
 
 
+// TODO: add docs
+CS_API void cs_set_listlen(cs_State *C, int index, int len) {
+    List *l;
+    cs_lock(C);
+    l = getlist(C, index);
+    api_check(C, 0 <= len, "negative 'len'");
+    csA_ensure(C, l, len);
+    l->len = len;
+    cs_unlock(C);
+}
+
+
 CS_API void cs_set_superclass(cs_State *C, int index) {
     OClass *sc;
     TValue temp;
@@ -1720,8 +1732,8 @@ CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e) {
     cs_lock(C);
     api_check(C, !(fi & ~CS_FI_MASK), "invalid 'fi' mask");
     l = getlist(C, index);
-    if (e >= l->n) /* end out of upper bound? */
-        e = l->n - 1; /* end at the last index in use */
+    if (e >= l->len) /* end out of upper bound? */
+        e = l->len - 1; /* end at the last index in use */
     if (s < 0) /* start is negative? */
         s = 0; /* start from beginning */
     res = csA_findindex(l, (fi & CS_FI_REV), !(fi & CS_FI_NIL), s, e);
@@ -1760,7 +1772,7 @@ CS_API cs_Integer cs_len(cs_State *C, int index) {
     switch (ttypetag(o)) {
         case CS_VSHRSTR: return strval(o)->shrlen;
         case CS_VLNGSTR: return strval(o)->u.lnglen;
-        case CS_VLIST: return listval(o)->n;
+        case CS_VLIST: return listval(o)->len;
         case CS_VTABLE: return csH_len(tval(o));
         case CS_VCLASS: {
             Table *t = classval(o)->methods;
@@ -1831,6 +1843,14 @@ CS_API void cs_closeslot(cs_State *C, int index) {
                  "no variable to close at the given level");
     level = csF_close(C, level, CLOSEKTOP);
     setnilval(s2v(level)); /* closed */
+    cs_unlock(C);
+}
+
+
+// TODO: add docs
+CS_API void cs_shrinklist(cs_State *C, int index) {
+    cs_lock(C);
+    csA_shrink(C, getlist(C, index));
     cs_unlock(C);
 }
 

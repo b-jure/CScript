@@ -21,4 +21,4 @@ the script will try to discover the testsuite directories and their tests by
 the protocol mentioned above, however this method is only portable on
 windows and posix environments.
 
-For more information see `test.cscript`.
+For more information do `./test.cscript -h` or see `test.cscript`.
