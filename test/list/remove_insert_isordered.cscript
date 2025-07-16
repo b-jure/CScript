@@ -13,7 +13,6 @@ local fn checkerr(msg, f, ...) {
     assert(l.len == 0 and list.len(l) == 0 and len(l) == 0);
     checkerr("list expected", list.insert, 0, 0);
     checkerr("number expected", list.insert, l, true, 0);
-    checkerr("boolean expected", list.insert, l, 0, 5, 5);
     checkerr("out of bounds", list.insert, l, 1, "val");
     checkerr("out of bounds", list.insert, l, -1, "val");
     checkerr("wrong number of arguments", list.insert, l, 0, "ok", true, 5);
@@ -50,7 +49,6 @@ local fn checkerr(msg, f, ...) {
     local l = list.new(8);
     checkerr("list expected", list.remove, 0, 0);
     checkerr("number expected", list.remove, l, "test");
-    checkerr("boolean expected", list.remove, l, 0, 5);
     checkerr("out of bounds", list.remove, l, 1);
     checkerr("out of bounds", list.remove, l, -1);
 }

@@ -18,6 +18,10 @@
 #define CS_GNAME    "__G"
 
 
+// TODO: update docs
+/* type for storing name:function pairs or placeholders */
+typedef struct csL_Entry csL_Entry;
+
 /* type for storing metaindex:function pairs */
 typedef struct csL_MetaEntry csL_MetaEntry;
 
@@ -58,7 +62,6 @@ CSLIB_API int csL_error_type(cs_State *C, int index, const char *tname);
 ** ======================================================================== */
 CSLIB_API cs_Number     csL_check_number(cs_State *C, int index);
 CSLIB_API cs_Integer    csL_check_integer(cs_State *C, int index);
-CSLIB_API int           csL_check_bool(cs_State *C, int index);
 CSLIB_API const char   *csL_check_lstring(cs_State *C, int index, size_t *l);
 CSLIB_API void          csL_check_type(cs_State *C, int index, int t);
 CSLIB_API void          csL_check_any(cs_State *C, int index);
@@ -76,7 +79,6 @@ CSLIB_API int           csL_check_option(cs_State *C, int index,
 ** ======================================================================== */
 CSLIB_API cs_Number   csL_opt_number(cs_State *C, int index, cs_Number dfl);
 CSLIB_API cs_Integer  csL_opt_integer(cs_State *C, int index, cs_Integer dfl);
-CSLIB_API int         csL_opt_bool(cs_State *C, int index, int dfl);
 CSLIB_API const char *csL_opt_lstring(cs_State *C, int index, const char *dfl,
                                       size_t *l);
 /* }======================================================================= */
@@ -93,11 +95,6 @@ CSLIB_API int csL_loadbuffer(cs_State *C, const char *buff, size_t sz,
 /* {=======================================================================
 ** Userdata and Metalist functions
 ** ======================================================================== */
-typedef struct csL_MetaEntry {
-    int mm; /* metamethod index */
-    cs_CFunction metaf; /* metamethod function */
-} csL_MetaEntry;
-
 CSLIB_API int   csL_new_metalist(cs_State *C, const char *lname);
 CSLIB_API void  csL_set_metalist(cs_State *C, const char *lname);
 CSLIB_API int   csL_get_metaindex(cs_State *C, int index, int mm);
@@ -105,7 +102,13 @@ CSLIB_API int   csL_callmeta(cs_State *C, int index, int mm);
 CSLIB_API int   csL_new_usermethods(cs_State *C, const char *tname, int sz);
 CSLIB_API void  csL_set_usermethods(cs_State *C, const char *tname);
 CSLIB_API void *csL_test_userdata(cs_State *C, int index, const char *lname);
-CSLIB_API void  csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
+
+typedef struct csL_MetaEntry {
+    int mm; /* metamethod index */
+    cs_CFunction metaf; /* metamethod function */
+} csL_MetaEntry;
+
+CSLIB_API void csL_set_metafuncs(cs_State *C, const csL_MetaEntry *l, int nup);
 /* }======================================================================= */
 
 /* {=======================================================================
@@ -125,16 +128,21 @@ CSLIB_API void        csL_where(cs_State *C, int level);
 CSLIB_API int         csL_get_fieldstr(cs_State *C, int index, const char *f);
 CSLIB_API int         csL_get_property(cs_State *C, int index);
 CSLIB_API cs_State   *csL_newstate(void);
-CSLIB_API int         csL_get_subtable(cs_State *C, int index,
-                                       const char *field);
+CSLIB_API int         csL_get_subtable(cs_State *C, int index, const char *f);
 CSLIB_API void        csL_importf(cs_State *C, const char *modname,
                                   cs_CFunction openf, int global);
 CSLIB_API void        csL_traceback(cs_State *C, cs_State *C1, int level,
                                     const char *msg);
-CSLIB_API void        csL_set_funcs(cs_State *C, const cs_Entry *l, int nup);
 CSLIB_API const char *csL_gsub(cs_State *C, const char *s, const char *p,
                                const char *r);
 CSLIB_API unsigned    csL_makeseed(cs_State *C);
+
+struct csL_Entry {
+    const char *name; /* NULL if sentinel entry */
+    cs_CFunction func; /* NULL if placeholder or sentinel entry */
+};
+
+CSLIB_API void csL_set_funcs(cs_State *C, const csL_Entry *l, int nup);
 /* }======================================================================= */
 
 /* {=======================================================================

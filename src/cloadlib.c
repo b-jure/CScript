@@ -31,7 +31,7 @@
 
 
 /*
-** Key for fulluserdata in the global table that keeps handles
+** Key for full userdata in the Ctable that keeps handles
 ** for all loaded C libraries.
 */
 static const char *const CLIBS = "__CLIBS";
@@ -415,7 +415,7 @@ static int searcher_CScript(cs_State *C) {
 }
 
 
-static const cs_Entry pkg_funcs[] = {
+static const csL_Entry pkg_funcs[] = {
     {"loadlib", pkg_loadlib},
     {"searchpath", pkg_searchpath},
     /* placeholders */
@@ -488,7 +488,7 @@ static int l_import(cs_State *C) {
 }
 
 
-static const cs_Entry load_funcs[] = {
+static const csL_Entry load_funcs[] = {
     {"import", l_import},
     {NULL, NULL}
 };

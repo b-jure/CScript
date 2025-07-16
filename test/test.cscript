@@ -20,7 +20,7 @@ __opts = {
     errors = true, /* -r (true) | -R (false) */
     timed = true, /* -z (true) | -Z (false) */
     reprint_failed = true, /* -f (true) | -F (false) */
-    abort_on_fail = false, /* -a (true) | -A (false) */
+    abort_on_fail = true, /* -a (true) | -A (false) */
     run_isolated = false, /* -i (true) | -I (false) */
     enter_debug = false, /* -d (true) | -D (false) */
     testsuites_to_skip = [], /* -e testsuite */
@@ -48,7 +48,7 @@ __skipmsg = __G.__skipmsg or true; /* default is true */
 
 /*
 ** {=====================================================================
-** Test script internals
+** Test driver and internals
 ** ======================================================================
 */
 
@@ -282,22 +282,19 @@ local fn get_tests(filename) {
 ** it tries to generate from 'tests_script', finally if 'tests_script' is
 ** not provided, the script will try to auto-generate tests table from the
 ** current directory (not portable).
-** Additionally if 'as_script' is true, the 'return' is prepended and ';'
-** appended to terminate the 'return'.
 ** @tests_script - ?string
-** @as_script - ?any
 */
-local fn output_tests_table(tests_script, as_script) {
+local fn output_tests_table(tests_script) {
     local tests = get_tests(tests_script);
     stdout.setvbuf("full");
-    stdout.write((as_script and "return " or "") .. "{\n");
+    stdout.write("return " .. "{\n");
     foreach tsuite, tlist in pairs(tests) {
         stdout.write("  " .. tsuite .. " = [\n");
         foreach _,test in ipairs(tlist)
             stdout.write("    \"" .. test .. "\",\n");
         stdout.write("  ],\n");
     }
-    stdout.write("}" .. (as_script and ";" or "") .. "\n");
+    stdout.write("}" .. ";" .. "\n");
     stdout.flush();
     stdout.setvbuf("line");
 }
@@ -444,7 +441,7 @@ local fn testsuite_headerfmt(tsuite, isend) {
         txt = "END";
     }
     txt = cl("> " .. txt .. "(") .. mode(tsuite) .. cl(")");
-    if (isend and __opts.timed)
+    if (isend and __opts.timed) /* output total time? */
         txt = txt .. BLUE(fmt(" %-8g", lastclock - initclock));
     print(txt);
 }
@@ -544,8 +541,8 @@ usage: ./test.cscript [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite
                       [--verbose-flags]
                       [--standard-flags]
                       [--out-tests]
-                      [--gen-tests]
-                      [--gen-script]
+                      [--gen-dir-tests]
+                      [--gen-script-tests]
 
 Available options are:
     -h      Show usage (this), this must be the first option and argument.
@@ -591,7 +588,7 @@ Available options are:
                         keys and lists of filenames as values which represent the
                         tests of that testsuite. Test filepaths inside the list
                         should be absolute or relative to the script file.
-                        This is ignored if '--gen-tests'.
+                        This is ignored if '--gen-dir-tests'.
 
     --minimal-flags     Equivalent to '-CWoMRZfaID'.
     --port-flags        Equivalent to '-CwOmrZfaId'.
@@ -605,17 +602,16 @@ Available options are:
                         After outputting, script returns and no tests are executed.
                         The default {tests_script} can be changed in '__opts' table.
 
-    --gen-tests         Generates tests table from the current directory structure.
+    --gen-dir-tests      Generates tests table from the current directory structure.
                         After generation is complete, script outputs the tests
                         table if '--out-tests' and returns without executing any
-                        tests (not portable). This is ignored if '--gen-script'.
+                        tests (not portable). Additionally when outputting the table,
+                        it prepends 'return' before the table and appends ';' after
+                        the table to terminate the 'return'.
 
-    --gen-script        Equivalent to '--gen-tests' and '--out-tests', with
-                        exception that it generates tests table from the
-                        {tests_script} provided with '-s' or as fallback from
-                        '__opts.tests_script'. Additionally when outputting the
-                        table, it prepends 'return' before the table and appends
-                        ';' after the table to terminate the 'return'.
+    --gen-script-tests  Equivalent to '--gen-dir-tests', but it instead uses {tests_script}
+                        provided with '-s' or as fallback from '__opts.tests_script', to
+                        generate tests table. This is ignored if '--gen-dir-tests'.
 
 Other:
     All the other non-option arguments {arg_testsuite} are names of testsuites
@@ -634,7 +630,8 @@ Other:
     it to another directory, adjust the filepath of '__opts.tests_script'.
     If that doesn't solve it, then the script '__opts.tests_script' contains
     invalid test filepath. You could always try to re-generate the tests script
-    from the current directory with './test.cscript --gen-script > {tests_script}'.
+    from the current directory with:
+    './test.cscript --out-tests --gen-dir-tests > {tests_script}'.
 
     Note: If your system does not have access to 'system', you should use the
     default testsuites script that comes with the distribution or re-build it
@@ -688,9 +685,9 @@ local fn get_req_arg(nbyte, opt, what) {
 ** Handles flag options starting with '--', these options set
 ** multiple flag options at once.
 */
-local outtests = false; /* '--out-tests' option */
-local gentests = false; /* '--gen-tests' option */
-local genscript = false; /* '--gen-script' option */
+local out_tests = false; /* '--out-tests' option */
+local gen_dir_tests = false; /* '--gen-dir-tests' option */
+local gen_script_tests = false; /* '--gen-script-tests' option */
 local fn handle_multi_option(opt) {
     switch (opt) {
         case "minimal-flags": {
@@ -746,18 +743,9 @@ local fn handle_multi_option(opt) {
             __opts.enter_debug = false;
             break;
         }
-        case "list-tests": {
-            outtests = true;
-            break;
-        }
-        case "gen-script":
-            genscript = true;
-            outtests = true;
-            /* fall through */
-        case "gen-tests": {
-            gentests = true;
-            break;
-        }
+        case "out-tests": out_tests = true; break;
+        case "gen-script-tests": gen_script_tests = true; break;
+        case "gen-dir-tests": gen_dir_tests = true; break;
         default: {
             print(usage);
             error("unknown option '" .. opt .. "'");
@@ -881,8 +869,7 @@ local fn handle_cli_args() {
                 exit(0, true);
             }
             handle_option(arg);
-        }
-        else { /* otherwise treat it as a testsuite name */
+        } else { /* otherwise treat it as a testsuite name */
             local l = __opts.testsuites_to_run;
             l[l.len] = arg;
         }
@@ -992,14 +979,17 @@ local fn set_options() {
 
 handle_cli_args();
 set_options();
-if (genscript)
-    get_tests(__opts.tests_script);
-else if (gentests)
+
+if gen_dir_tests
     get_tests();
-if (outtests)
-    output_tests_table(__opts.tests_script, genscript);
-else if (!gentests)
+else if gen_script_tests
+    get_tests(__opts.tests_script);
+
+if out_tests
+    output_tests_table(__opts.tests_script);
+else if !gen_dir_tests and !gen_script_tests
     run_args();
+
 rmtempfile();
 
 /* }==================================================================== */

@@ -6,6 +6,11 @@ assert(typeof("69") == "string");
 assert(typeof([]) == "list");
 assert(typeof({}) == "table");
 assert(typeof(fn (){}) == "function");
-local class X {}
+
+local X = class { fn x() {} };
 assert(typeof(X) == "class");
 assert(typeof(X()) == "instance");
+assert(typeof(X().x) == "bound method");
+
+/// full userdata type name
+assert(typeof(import("debug").getctable().__CLIBS) == "userdata");

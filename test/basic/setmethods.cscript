@@ -1,0 +1,24 @@
+local class X {
+    __init = fn(x,y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    };
+    fn mul() { return self.x * self.y; }
+}
+
+local a = X(5, 2);
+assert(!a.add and !a.sub and !a.div);
+assert(a.mul() == 10);
+
+setmethods(a, {
+    add = fn(self) { return self.x+self.y; };
+    sub = fn(self) { return self.x-self.y; };
+});
+assert(!a.mul and !a.div);
+assert(a.add() == 7);
+assert(a.sub() == 3);
+
+setmethods(X, { div = fn(self) { return self.x / self.y; }; });
+assert(a.div() == 5/2);
+assert(!a.mul and !a.add and !a.sub);

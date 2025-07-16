@@ -6,7 +6,7 @@ static int id(cs_State *C) {
 }
 
 
-static const struct cs_Entry funcs[] = {
+static const struct csL_Entry funcs[] = {
     {"id", id},
     {NULL, NULL}
 };

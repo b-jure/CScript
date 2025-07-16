@@ -276,7 +276,7 @@ static int utf8_itercodes(cs_State *C) {
 #define UTF8PATT	"[\0-\x7F\xC2-\xFD][\x80-\xBF]*"
 
 
-static const cs_Entry funcs[] = {
+static const csL_Entry funcs[] = {
     {"offset", utf8_byteoffset},
     {"codepoint", utf8_codepoint},
     {"char", utf8_char},

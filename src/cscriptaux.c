@@ -110,8 +110,6 @@ CSLIB_API int csL_error_type(cs_State *C, int arg, const char *tname) {
     const char *msg, *type;
     if (csL_get_metaindex(C, arg, CS_MT_NAME) == CS_T_STRING)
         type = cs_to_string(C, -1);
-    else if (cs_type(C, arg) == CS_T_LIGHTUSERDATA)
-        type = "light userdata";
     else
         type = csL_typename(C, arg);
     msg = cs_push_fstring(C, "%s expected, instead got %s", tname, type);
@@ -146,16 +144,6 @@ CSLIB_API cs_Integer csL_check_integer(cs_State *C, int index) {
     cs_Integer i = cs_to_integerx(C, index, &isint);
     if (c_unlikely(!isint))
         interror(C, index);
-    return i;
-}
-
-
-// TODO: add docs
-CSLIB_API int csL_check_bool(cs_State *C, int index) {
-    int isbool;
-    int i = cs_to_boolx(C, index, &isbool);
-    if (c_unlikely(!isbool))
-        terror(C, index, CS_T_BOOL);
     return i;
 }
 
@@ -217,12 +205,6 @@ CSLIB_API cs_Number csL_opt_number(cs_State *C, int index, cs_Number dfl) {
 
 CSLIB_API cs_Integer csL_opt_integer(cs_State *C, int index, cs_Integer dfl) {
     return csL_opt(C, csL_check_integer, index, dfl);
-}
-
-
-// TODO: add docs
-CSLIB_API int csL_opt_bool(cs_State *C, int index, int dfl) {
-    return csL_opt(C, csL_check_bool, index, dfl);
 }
 
 
@@ -776,7 +758,7 @@ CSLIB_API void csL_traceback(cs_State *C, cs_State *C1,
 }
 
 
-CSLIB_API void csL_set_funcs(cs_State *C, const cs_Entry *l, int nup) {
+CSLIB_API void csL_set_funcs(cs_State *C, const csL_Entry *l, int nup) {
     csL_check_stack(C, nup, "too many upvalues");
     for (; l->name != NULL; l++) {
         if (l->func == NULL) { /* placeholder? */

@@ -324,12 +324,12 @@ int csV_ordereq(cs_State *C, const TValue *v1, const TValue *v2) {
         case CS_VLIGHTUSERDATA: return pval(v1) == pval(v2);
         case CS_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
         case CS_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
-        case CS_VIMETHOD: return csMM_eqimethod(imval(v1), imval(v2));
-        case CS_VUMETHOD: return csMM_equmethod(umval(v1), umval(v2));
+        case CS_VIMETHOD: return csMM_eqim(imval(v1), imval(v2));
+        case CS_VUMETHOD: return csMM_equm(umval(v1), umval(v2));
         case CS_VUSERDATA: {
             if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, CS_MT_EQ)) &&
                     (swap = 1) && ttisnil(fmm = csMM_get(C, v2, CS_MT_EQ))))
-                return uval(v1) == uval(v2);
+                return udval(v1) == udval(v2);
             break;
         }
         case CS_VINSTANCE: {
@@ -792,15 +792,15 @@ retry:
         case CS_VIMETHOD: { /* Instance method */
             IMethod *im = imval(s2v(func));
             checkstackGCp(C, 2, func); /* space for method and instance */
-            auxinsertf(C, func, &im->method); /* insert method... */
+            auxinsertf(C, func, &im->method); /* insert method object... */
             setinsval2s(C, func + 1, im->ins); /* ...and ins. as first arg */
             goto retry;
         }
         case CS_VUMETHOD: { /* UserData method */
             UMethod *um = umval(s2v(func));
             checkstackGCp(C, 2, func); /* space for method and userdata */
-            auxinsertf(C, func, &um->method); /* insert method... */
-            setuval2s(C, func + 1, um->ud); /* ...and udata as first arg */
+            auxinsertf(C, func, &um->method); /* insert method object... */
+            setudval2s(C, func + 1, um->ud); /* ...and udata as first arg */
             goto retry;
         }
         default: { /* try __call metamethod */

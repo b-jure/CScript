@@ -176,7 +176,7 @@ static GCObject **getgclist(GCObject *o) {
 ** Object is considered dead if it was white prior to sweep phase in
 ** the current GC cycle, so clearing (sweeping) the black object to white
 ** by calling this function in the sweep phase, will not result in the
-** object being collected.
+** object being collected in the current GC cycle.
 */
 void csG_barrier_(cs_State *C, GCObject *r, GCObject *o) {
     GState *gs = G(C);
@@ -235,15 +235,15 @@ static void markobject_(GState *gs, GCObject *o) {
         }
         case CS_VIMETHOD: {
             IMethod *im = gco2im(o);
-            markobject(gs, im->ins);
             markvalue(gs, &im->method);
+            markobject(gs, im->ins);
             markblack(im); /* nothing else to mark */
             break;
         }
         case CS_VUMETHOD: {
             UMethod *um = gco2um(o);
-            markobject(gs, um->ud);
             markvalue(gs, &um->method);
+            markobject(gs, um->ud);
             markblack(um); /* nothing else to mark */
             break;
         }

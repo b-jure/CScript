@@ -1,0 +1,15 @@
+local class X {
+    fn x() {}
+    fn y() {}
+}
+
+local ins = X();
+assert(typeof(ins.x) == "bound method" and typeof(ins.y) == "bound method");
+assert(getfield(ins, "x") == nil and getfield(ins, "y") == nil);
+assert(ins.x != getfield(ins, "x") and ins.y != getfield(ins, "y"));
+
+local t = { x = 5, y = 6; };
+assert(getfield(t, "x") == t.x and getfield(t, "y") == t.y);
+
+local st, err = pcall(getfield, class {}, "x");
+assert(!st and string.find(err, "instance/table expected"));

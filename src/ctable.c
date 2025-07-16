@@ -25,6 +25,9 @@
 #include "cstate.h"
 
 
+#include "cmeta.h"
+
+
 /* largest integer such that 2^MAXHBITS fits in 'int' */
 #define MAXHBITS        ((int)(sizeof(int) * CHAR_BIT - 1))
 
@@ -382,8 +385,10 @@ static c_uint getindex(cs_State *C, Table *t, const TValue *k) {
     const TValue *slot;
     if (ttisnil(k)) return 0; /* first iteration */
     slot = getgeneric(t, k, 1);
-    if (c_unlikely(isabstkey(slot)))
-        csD_runerror(C, "invalid key passed to 'next'"); /* key not found */
+    if (c_unlikely(isabstkey(slot))) {
+        cs_assert(0);
+        csD_runerror(C, "invalid key passed to 'nextfield'"); /* not found */
+    }
     c_uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
 }

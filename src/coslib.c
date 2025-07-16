@@ -480,7 +480,7 @@ static int os_setlocale (cs_State *C) {
 }
 
 
-static const cs_Entry syslib[] = {
+static const csL_Entry syslib[] = {
     {"clock",     os_clock},
     {"date",      os_date},
     {"difftime",  os_difftime},

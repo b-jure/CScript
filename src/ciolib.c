@@ -688,7 +688,7 @@ static int io_write(cs_State *C) {
 
 
 /* function for 'io' library */
-static const cs_Entry iolib[] = {
+static const csL_Entry iolib[] = {
     {"open", io_open},
     {"close", io_close},
     {"flush", io_flush},
@@ -766,7 +766,7 @@ static int f_setvbuf(cs_State *C) {
 
 
 /* methods for file handles */
-static const cs_Entry f_methods[] = {
+static const csL_Entry f_methods[] = {
     {"read", f_read},
     {"write", f_write},
     {"lines", f_lines},

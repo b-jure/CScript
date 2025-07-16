@@ -154,9 +154,9 @@ typedef struct {
 
 
 
-/* -----------------------------------------------------------------------
+/* -====================================================================
 ** Collectable Objects {
-** ----------------------------------------------------------------------- */
+** ===================================================================== */
 
 /* common header for objects */
 #define ObjectHeader    struct GCObject* next; c_ubyte tt_; c_ubyte mark
@@ -182,13 +182,13 @@ typedef struct GCObject {
     { TValue *o_=(obj); GCObject *x_=(x); \
       val(o_).gc = x_; settt(o_, ctb(x_->tt_)); }
 
-/* } --------------------------------------------------------------------- */
+/* }==================================================================== */
 
 
 
-/* ------------------------------------------------------------------------
+/* ======================================================================
 ** Boolean {
-** ------------------------------------------------------------------------ */
+** ====================================================================== */
 
 #define CS_VFALSE           makevariant(CS_T_BOOL, 0) /* false bool */
 #define CS_VTRUE            makevariant(CS_T_BOOL, 1) /* true bool */
@@ -202,13 +202,13 @@ typedef struct GCObject {
 #define setbfval(o)         settt(o, CS_VFALSE)
 #define setbtval(o)         settt(o, CS_VTRUE)
 
-/* } --------------------------------------------------------------------- */
+/* }==================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* =====================================================================
 ** Numbers {
-** ----------------------------------------------------------------------- */
+** ===================================================================== */
 
 #define CS_VNUMFLT      makevariant(CS_T_NUMBER, 0) /* float numbers */
 #define CS_VNUMINT      makevariant(CS_T_NUMBER, 1) /* integer numbers */
@@ -234,13 +234,13 @@ typedef struct GCObject {
 #define changefval(obj,x) \
     { TValue *o_=(obj); cs_assert(ttisflt(o_)); val_(o_).n = (x); }
 
-/* } --------------------------------------------------------------------- */
+/* }==================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* ======================================================================
 ** List {
-** ------------------------------------------------------------------------ */
+** ====================================================================== */
 
 #define CS_VLIST        makevariant(CS_T_LIST, 0)
 
@@ -263,13 +263,13 @@ typedef struct List {
     int size; /* size of 'b' */
 } List;
 
-/* } --------------------------------------------------------------------- */
+/* }==================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* ======================================================================
 ** Nil {
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 /* standard nil */
 #define CS_VNIL         makevariant(CS_T_NIL, 0)
@@ -290,13 +290,13 @@ typedef struct List {
 
 #define ABSTKEYCONSTANT     {NULL}, CS_VABSTKEY
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* -------------------------------------------------------------------------
+/* =======================================================================
 ** Thread (cs_State) {
-** ------------------------------------------------------------------------- */
+** ======================================================================= */
 
 #define CS_VTHREAD      makevariant(CS_T_THREAD, 0)
 
@@ -311,13 +311,13 @@ typedef struct List {
 
 #define setthval2s(C,o,th)      setthval(C,s2v(o),th)
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* ======================================================================
 ** Hash Table {
-** ----------------------------------------------------------------------- */
+** ====================================================================== */
 
 #define CS_VTABLE           makevariant(CS_T_TABLE, 0)
 
@@ -393,13 +393,13 @@ typedef struct Table {
 #define setdeadkey(node)    (keytt(node) = CS_TDEADKEY)
 #define keyisdead(n)	    (keytt(n) == CS_TDEADKEY)
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* =======================================================================
 ** Strings {
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 #define CS_VSHRSTR      makevariant(CS_T_STRING, 0) /* short string */
 #define CS_VLNGSTR      makevariant(CS_T_STRING, 1) /* long string */
@@ -444,13 +444,13 @@ typedef struct OString {
 /* get string length from 'OString *s' */
 #define getstrlen(s)    ((s)->shrlen != 0xFF ? (s)->shrlen : (s)->u.lnglen)
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* =======================================================================
 ** Class {
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 #define CS_VCLASS       makevariant(CS_T_CLASS, 0)
 
@@ -472,13 +472,13 @@ typedef struct OClass {
     Table *methods;
 } OClass;
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* ------------------------------------------------------------------------
+/* =======================================================================
 ** Function Prototypes {
-** ------------------------------------------------------------------------ */
+** ======================================================================= */
 
 #define CS_VPROTO           makevariant(CS_TPROTO, 0)
 
@@ -551,13 +551,13 @@ typedef struct Proto {
     GCObject *gclist;
 } Proto;
 
-/* } --------------------------------------------------------------------- */
+/* }====================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* =======================================================================
 **  Instance {
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 #define CS_VINSTANCE        makevariant(CS_T_INSTANCE, 0)
 
@@ -578,36 +578,30 @@ typedef struct Instance {
     Table *fields;
 } Instance;
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
 
-/* -----------------------------------------------------------------------
+/* =======================================================================
 ** Functions {
-** ----------------------------------------------------------------------- */
+** ======================================================================= */
 
 #define CS_VUPVALUE     makevariant(CS_TUPVALUE, 0)
 
 #define CS_VCSCL        makevariant(CS_T_FUNCTION, 0) /* CScript closure */
 #define CS_VLCF         makevariant(CS_T_FUNCTION, 1) /* light C function */
 #define CS_VCCL         makevariant(CS_T_FUNCTION, 2) /* C closure */
-#define CS_VIMETHOD     makevariant(CS_T_FUNCTION, 3) /* instance method */
-#define CS_VUMETHOD     makevariant(CS_T_FUNCTION, 4) /* userdata method */
 
 #define ttisfunction(o)         checktype(o, CS_T_FUNCTION)
 #define ttisCSclosure(o)        checktag(o, ctb(CS_VCSCL))
 #define ttislcf(o)              checktag(o, CS_VLCF)
 #define ttisCclosure(o)         checktag(o, ctb(CS_VCCL))
-#define ttisinstancemethod(o)   checktag(o, ctb(CS_VIMETHOD))
-#define ttisusermethod(o)       checktag(o, ctb(CS_VUMETHOD))
 #define ttisclosure(o)          (ttisCSclosure(o) || ttisCclosure(o))
 
 #define clval(o)        check_exp(ttisclosure(o), gco2cl(val(o).gc))
 #define clCSval(o)      check_exp(ttisCSclosure(o), gco2clcs(val(o).gc))
 #define clCval(o)       check_exp(ttisCclosure(o), gco2clc(val(o).gc))
 #define lcfval(o)       check_exp(ttislcf(o), val(o).cfn)
-#define imval(o)        check_exp(ttisinstancemethod(o), gco2im(val(o).gc))
-#define umval(o)        check_exp(ttisusermethod(o), gco2um(val(o).gc))
 
 #define setclCSval(C,obj,x) \
     { TValue *o_=(obj); const CSClosure *x_=(x); \
@@ -625,37 +619,6 @@ typedef struct Instance {
       checkliveness(C, o_); }
 
 #define setclCval2s(C,o,cl)     setclCval(C,s2v(o),cl)
-
-#define setimval(C,obj,x) \
-    { TValue *o_=(obj); const IMethod *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VIMETHOD)); \
-      checkliveness(C, o_); }
-
-#define setimval2s(C,o,im)      setimval(C,s2v(o),im)
-
-#define setumval(C,obj,x) \
-    { TValue *o_=(obj); const UMethod *x_=(x); \
-      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUMETHOD)); \
-      checkliveness(C, o_); }
-
-#define setumval2s(C,o,um)      setumval(C,s2v(o),um)
-
-
-/* method bound to Instance */
-typedef struct IMethod {
-    ObjectHeader;
-    Instance *ins;
-    TValue method;
-} IMethod;
-
-
-/* method bound to UserData */
-typedef struct UMethod {
-    ObjectHeader;
-    struct UserData *ud;
-    TValue method;
-} UMethod;
-
 
 
 /* upvalues for CScript closures */
@@ -702,33 +665,81 @@ typedef union Closure {
 
 #define getproto(o)	(clCSval(o)->p)
 
-/* } --------------------------------------------------------------------- */
+/* }===================================================================== */
 
 
+/* =======================================================================
+** Bound Methods {
+** ======================================================================= */
 
-/* -----------------------------------------------------------------------
+#define CS_VIMETHOD     makevariant(CS_T_BMETHOD, 0) /* instance method */
+#define CS_VUMETHOD     makevariant(CS_T_BMETHOD, 1) /* userdata method */
+
+#define ttisinstancemethod(o)   checktag(o, ctb(CS_VIMETHOD))
+#define ttisusermethod(o)       checktag(o, ctb(CS_VUMETHOD))
+
+#define imval(o)        check_exp(ttisinstancemethod(o), gco2im(val(o).gc))
+#define umval(o)        check_exp(ttisusermethod(o), gco2um(val(o).gc))
+
+#define setimval(C,obj,x) \
+    { TValue *o_=(obj); const IMethod *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VIMETHOD)); \
+      checkliveness(C, o_); }
+
+#define setimval2s(C,o,im)      setimval(C,s2v(o),im)
+
+#define setumval(C,obj,x) \
+    { TValue *o_=(obj); const UMethod *x_=(x); \
+      val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUMETHOD)); \
+      checkliveness(C, o_); }
+
+#define setumval2s(C,o,um)      setumval(C,s2v(o),um)
+
+
+/* common bound method header */
+#define MethodHeader    ObjectHeader; TValue method   
+
+
+/* method bound to Instance */
+typedef struct IMethod {
+    MethodHeader;
+    Instance *ins;
+} IMethod;
+
+
+/* method bound to UserData */
+typedef struct UMethod {
+    MethodHeader;
+    struct UserData *ud;
+} UMethod;
+
+/* }==================================================================== */
+
+
+/* ======================================================================
 ** Userdata {
-** ----------------------------------------------------------------------- */
-
-#define CS_VLIGHTUSERDATA   makevariant(CS_T_LIGHTUSERDATA, 0)
+** ====================================================================== */
 
 #define CS_VUSERDATA        makevariant(CS_T_USERDATA, 0)
 
-#define ttislightuserdata(o)    checktag(o, CS_VLIGHTUSERDATA)
+#define CS_VLIGHTUSERDATA   makevariant(CS_T_LIGHTUSERDATA, 0)
+
 #define ttisfulluserdata(o)     checktag(o, ctb(CS_VUSERDATA))
+#define ttislightuserdata(o)    checktag(o, CS_VLIGHTUSERDATA)
 
+#define udval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
 #define pval(o)     check_exp(ttislightuserdata(o), val(o).p)
-#define uval(o)     check_exp(ttisfulluserdata(o), gco2u(val(o).gc))
 
-#define setpval(obj,x) \
-    { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
-
-#define setuval(C,obj,x) \
+#define setudval(C,obj,x) \
     { TValue *o_=(obj); const UserData *x_=(x); \
       val(o_).gc = obj2gco(x_); settt(o_, ctb(CS_VUSERDATA)); \
       checkliveness(C,o_); }
 
-#define setuval2s(C,o,uv)       setuval(C, s2v(o), uv)
+#define setudval2s(C,o,uv)      setudval(C, s2v(o), uv)
+
+
+#define setpval(obj,x) \
+    { TValue *o_=(obj); val(o_).p = (x); settt(o_, CS_VLIGHTUSERDATA); }
 
 
 /*
@@ -783,7 +794,7 @@ typedef struct EmptyUserData {
 /* size of 'UserData' */
 #define sizeofuserdata(nuv, size)   (udmemoffset(nuv) + (size))
 
-/* } --------------------------------------------------------------------- */
+/* }==================================================================== */
 
 
 

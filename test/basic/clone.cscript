@@ -1,0 +1,112 @@
+local dump_pair;
+
+local fn indent(n) {
+    for local i=0; i<n; i=i+1;
+        io.write("  ");
+}
+
+local fn dump(v,depth,pair) {
+    if !pair or pair == 1
+        indent(depth);
+    io.write(tostr(v));
+    switch typeof(v) {
+        case "list": {
+            io.write(" [\n");
+            foreach i,v in ipairs(v)
+                dump_pair(i, v, depth+1);
+            indent(depth);
+            io.write("]\n");
+            break;
+        }
+        case "table": case "instance": {
+            io.write(" {\n");
+            foreach k,v in pairs(v)
+                dump_pair(k, v, depth+1);
+            indent(depth);
+            io.write("}\n");
+            break;
+        }
+        default: {
+            if pair == 1
+                io.write(" <-> ");
+            else
+                io.write(",\n");
+            break;
+        }
+    }
+}
+
+dump_pair = fn(v1,v2,depth) {
+    dump(v1, depth+1, 1);
+    dump(v2, depth+1, 2);
+};
+
+local fn eqclone(a,b) {
+    if typeof(a) != typeof(b) return false;
+    switch typeof(a) {
+        case "nil": return true;
+        case "thread": return a != b;
+        case "number": return math.type(a) == math.type(b) and a == b;
+        case "boolean": return a == b;
+        case "light userdata": return a == b;
+        case "string": return a == b;
+        case "userdata": return !rawequal(a, b);
+        case "function": return true;
+        case "list": {
+            if (a.len != b.len) return false;
+            foreach i in range(a.len)
+                if !eqclone(a[i], b[i]) return false;
+            return true;
+        }
+        case "bound method": {
+            if a == b return false;
+            local self1,f1 = unwrapmethod(a);
+            local self2,f2 = unwrapmethod(b);
+            if !eqclone(self1, self2) return false;
+            return eqclone(f1, f2);
+        }
+        case "class": {
+            if a == b return false;
+            local tmp1,tmp2 = getsuper(a),getsuper(b);
+            if !eqclone(tmp1,tmp2) return false;
+            tmp1,tmp2 = getmetalist(a),getmetalist(b);
+            if !eqclone(tmp1,tmp2) return false;
+            tmp1,tmp2 = getmethods(a),getmethods(b);
+            return eqclone(tmp1,tmp2);
+        }
+        case "instance": {
+            if a == b return false;
+            if !eqclone(getclass(a),getclass(b)) return false;
+            /* fall through */
+        }
+        case "table": {
+            if (len(a) != len(b)) return false;
+            foreach k,v in pairs(a)
+                if !eqclone(getfield(b,k), v) return false;
+            return true;
+        }
+        default: assert(nil, "unreachable");
+    }
+}
+
+local class Test { fn test() { return l; } };
+local ins = Test();
+ins.x = "ok";
+ins.y = 5;
+ins.z = Test;
+
+local l = [
+    10, 15.5, true, false, "test", io.stdout, io.stdout, fn(){},
+    Test().test, io.stdout.flush, Test, ins, getclass(ins),
+];
+
+local t = {
+    list1 = l, list2 = l, table1 = t, table2 = t, integer = 10,
+    float = 10.15, tbool = true, fbool = false, string = "test",
+    userdata = io.stdout, function = fn() {},
+    ibmethod = Test().test; ubmethod = io.stdout.flush;
+    cls = Test; instance = ins;
+};
+
+local val = clone(t);
+assert(eqclone(val, t));

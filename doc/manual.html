@@ -2521,13 +2521,13 @@
         warnings.
         </p>
 
-        <!-- cs_Entry -->
-        <hr><h3><a name="cs_Entry"><code>cs_Entry</code></a></h3>
+        <!-- csL_Entry -->
+        <hr><h3><a name="csL_Entry"><code>csL_Entry</code></a></h3>
         <pre>
-typedef struct cs_Entry {
+typedef struct csL_Entry {
     const char *name;
     cs_CFunction func;
-} cs_Entry;</pre>
+} csL_Entry;</pre>
         <p>
         Type for arrays of functions or methods to be set by
         <a href="#cs_push_class"><code>cs_push_class</code></a> family of
@@ -3417,7 +3417,7 @@ typedef enum cs_MM {
         <!-- cs_push_class -->
         <hr><h3><a name="cs_push_class"><code>cs_push_class</code></a></h3>
         <span class="apii">[-nup, +1, <em>m</em>]</span>
-        <pre>void cs_push_class (cs_State *C, int nup, const cs_Entry *l);</pre>
+        <pre>void cs_push_class (cs_State *C, int nup, const csL_Entry *l);</pre>
         <p>
         Creates a new class and pushes it on top of the stack.
         Argument <code>l</code> is a list of name-function pairs which are
@@ -3437,7 +3437,7 @@ typedef enum cs_MM {
         <pre>void cs_push_subclass (cs_State *C,
                        int sc,
                        int nup,
-                       const cs_Entry *l);</pre>
+                       const csL_Entry *l);</pre>
         <p>
         Similar to <a href="#cs_push_class"><code>cs_push_class</code></a>,
         except this creates a <em>sub</em>class of superclass at index
@@ -3452,7 +3452,7 @@ typedef enum cs_MM {
         <pre>void cs_push_metaclass (cs_State *C,
                         int ml,
                         int nup,
-                        const cs_Entry *l);</pre>
+                        const csL_Entry *l);</pre>
         <p>
         Similar to <a href="#cs_push_class"><code>cs_push_class</code></a>,
         except this function accepts additional argument <code>ml</code>
@@ -3467,7 +3467,7 @@ typedef enum cs_MM {
                            int sc,
                            int ml,
                            int nup,
-                           const cs_Entry *l);</pre>
+                           const csL_Entry *l);</pre>
         <p>
         This function is combination of
         <a href="#cs_push_subclass"><code>cs_push_subclass</code></a> and
@@ -5278,10 +5278,10 @@ typedef struct csL_MetaEntry {
 
         <hr><h3><a name="csL_set_funcs"><code>csL_set_funcs</code></a></h3><p>
         <span class="apii">[-nup, +0, <em>m</em>]</span>
-        <pre>void csL_set_funcs (cs_State *C, const cs_Entry *l, int nup);</pre>
+        <pre>void csL_set_funcs (cs_State *C, const csL_Entry *l, int nup);</pre>
         <p>
         Registers all functions in the array <code>l</code>
-        (see <a href="#cs_Entry"><code>cs_Entry</code></a>) into the table or
+        (see <a href="#csL_Entry"><code>csL_Entry</code></a>) into the table or
         instance on the top of the stack (below optional upvalues, see next).
         <br/><br/>
         When <code>nup</code> is not zero, all functions are created with
@@ -5433,7 +5433,7 @@ typedef struct csL_MetaEntry {
 
         <hr><h3><a name="csL_push_libtable"><code>csL_push_libtable</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_push_libtable (cs_State *C, const cs_Entry l[]);</pre>
+        <pre>void csL_push_libtable (cs_State *C, const csL_Entry l[]);</pre>
         <p>
         Creates a new table with a size optimized to store all entries in
         the array <code>l</code> (but does not actually store them).
@@ -5447,7 +5447,7 @@ typedef struct csL_MetaEntry {
 
         <hr><h3><a name="csL_push_lib"><code>csL_push_lib</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_push_lib (cs_State *C, const cs_Entry l[]);</pre>
+        <pre>void csL_push_lib (cs_State *C, const csL_Entry l[]);</pre>
         <p>
         Creates a new table and registers there the functions in the
         list <code>l</code>.
@@ -5477,7 +5477,7 @@ typedef struct csL_MetaEntry {
 
         <hr><h3><a name="csL_push_methods"><code>csL_push_methods</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void csL_push_methods (cs_State *C, const char *tname, const cs_Entry l[]);</pre>
+        <pre>void csL_push_methods (cs_State *C, const char *tname, const csL_Entry l[]);</pre>
         <p>
         Gets (or creates) a table <code>tname</code> in the registry table and
         registers there the functions in the list <code>l</code>.

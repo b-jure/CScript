@@ -8,3 +8,7 @@ local x = a();
 x.ok = 69;
 assert(x["ok"] == nil);
 assert(rawget(x, "ok") == 69);
+x = {ok = 69};
+assert(x["ok"] == 69);
+assert(rawget(x, "ok") == 69);
+assert(rawget(x, "notok") == undef);

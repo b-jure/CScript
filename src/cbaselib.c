@@ -18,102 +18,254 @@
 #include "cscriptlimits.h"
 
 
-static const char *copyerr = "too many values to copy";
+/* {=====================================================================
+** Clone
+** ====================================================================== */
+
+/*
+** Index where cache table is stored.
+*/
+#define CACHEINDEX  1
 
 
-/* recursive clone */
+/* repeated error message when cloning objects (for 'csL_check_stack') */
+static const char *errclone = "too many values to clone";
+
+
+/*
+** Create a mapping 'ct[originalobject] = clonedobject' in the cache table.
+** The value at 'index' is the original object, while the value on stack
+** top is the clone of that value. This creates a graph of references,
+** such that, each time we try to clone a new value, we first check if
+** the value we are cloning is "repeated". If we have already "seen" this
+** value, we will find it in cache table, and the value is the already
+** cloned object of the original one. This way we just re-use the cloned
+** object, emulating the way original objects were stored.
+*/
+static void cacheobject(cs_State *C, int index) {
+    cs_push(C, index); /* key */
+    cs_push(C, -2); /* value */
+    cs_set_field(C, CACHEINDEX);
+}
+
+
+/*
+** Check if the original value at index has the mapping in the cache table.
+** If so, re-use the already existing clone.
+*/
+static int checkcache(cs_State *C, int index) {
+    int res = 1;
+    cs_assert(index == -1 || CACHEINDEX < index);
+    cs_push(C, index); /* copy of original value */
+    if (cs_get_field(C, CACHEINDEX) == CS_T_NIL) { /* no cache hit? */
+        cs_pop(C, 1); /* remove nil */
+        res = 0; /* false; not found */
+    } /* otherwise, the clone is on stack top */
+    return res;
+}
+
+
+/*
+** More often than not, the value to query in cache table is
+** on stack top.
+*/
+#define checkcachetop(C)   checkcache(C, -1)
+
+
+/* recursive clone functions */
+static void cloneclass(cs_State *C, int index);
 static void auxclone(cs_State *C, int t, int index);
 
 
-/*
-** Auxiliary function for copying list objects in 'b_close'.
-*/
 static void clonelist(cs_State *C, int index) {
+    int absi; /* absolute index of list value */
     cs_Integer l;
-    csL_check_stack(C, 2, copyerr); /* list+value */
+    cs_assert(CACHEINDEX < index);
+    csL_check_stack(C, 4, errclone); /* list+value+cache */
     l = cs_len(C, index);
     cs_push_list(C, cast_int(l));
+    absi = cs_getntop(C);
     for (int i = 0; i < l; i++) {
-        cs_get_index(C, index, i);
-        auxclone(C, cs_type(C, -1), cs_absindex(C, -1));
+        auxclone(C, cs_get_index(C, index, i), absi);
         cs_set_index(C, -2, i);
     }
+    cacheobject(C, index);
 }
 
 
-/*
-** Auxiliary function for copying table objects in 'b_close'.
-*/
 static void clonetable(cs_State *C, int index) {
-    csL_check_stack(C, 4, copyerr); /* table+2xkey+value */
+    int absi; /* absolute index for table key */
+    cs_assert(CACHEINDEX < index);
+    csL_check_stack(C, 6, errclone); /* table+2xkey+value+cache */
     cs_push_table(C, cast_int(cs_len(C, index)));
+    cs_push_nil(C); /* initial key for 'cs_nextfield' */
+    absi = cs_gettop(C);
     while (cs_nextfield(C, index)) {
-        cs_push(C, -2); /* key copy */
-        auxclone(C, cs_type(C, -3), cs_absindex(C, -3));
-        auxclone(C, cs_type(C, -2), cs_absindex(C, -2));
-        cs_set_raw(C, -4);
+        cs_push(C, absi); /* key copy for 'cs_nextfield' */
+        auxclone(C, cs_type(C, absi), absi);
+        auxclone(C, cs_type(C, absi+1), absi+1);
+        cs_push(C, absi);
+        cs_push(C, absi+1);
+        cs_set_raw(C, absi-1);
+        cs_pop(C, 2); /* key/value */
     }
+    cacheobject(C, index);
 }
 
 
-/*
-** Auxiliary function for copying table objects in 'b_close'.
-*/
-static void cloneclass(cs_State *C, int index) {
-    int newindex = cs_absindex(C, -1) + 1;
-    csL_check_stack(C, 2, copyerr); /* class+(list/table/superclass) */
-    cs_push_class(C, 0, NULL); /* first push empty class */
+/* auxiliary clone function for meta objects */
+static void clonemetalist(cs_State *C, int index) {
+    cs_assert(CACHEINDEX < index);
     if (cs_get_metalist(C, index)) {
-        clonelist(C, newindex);
-        cs_remove(C, -2); /* remove original */
+        if (!checkcachetop(C))
+            clonelist(C, cs_gettop(C));
+        cs_replace(C, -2); /* replace original */
         cs_set_metalist(C, -2);
     }
+}
+
+/* auxiliary clone function for meta objects */
+static void clonemethods(cs_State *C, int index) {
+    cs_assert(CACHEINDEX < index);
     if (cs_get_methods(C, index)) {
-        clonetable(C, newindex);
-        cs_remove(C, -2); /* remove original */
+        if (!checkcachetop(C))
+            clonetable(C, cs_gettop(C));
+        cs_replace(C, -2); /* replace original */
         cs_set_methods(C, -2);
     }
+}
+
+/* auxiliary clone function for meta objects */
+static void clonesuperclass(cs_State *C, int index) {
+    cs_assert(CACHEINDEX < index);
     if (cs_get_superclass(C, index)) {
-        cloneclass(C, newindex);
-        cs_remove(C, -2); /* remove original */
+        if (!checkcachetop(C))
+            cloneclass(C, cs_gettop(C));
+        cs_replace(C, -2); /* replace original */
         cs_set_superclass(C, -2);
     }
 }
 
 
-static void auxclone(cs_State *C, int t, int index) {
-    switch (t) {
-        case CS_T_NIL: case CS_T_BOOL:
-        case CS_T_NUMBER: case CS_T_LIGHTUSERDATA:
-        case CS_T_FUNCTION: case CS_T_STRING: {
-            cs_push(C, index); /* return original value */
-            break;
-        }
-        case CS_T_LIST: {
-            clonelist(C, index);
-            break;
-        }
-        case CS_T_TABLE: {
-            clonetable(C, index);
-            break;
-        }
-        case CS_T_CLASS: {
-            cloneclass(C, index);
-            break;
-        }
-        default: csL_error_arg(C, index, "value can't be cloned");
-    }
-    cs_remove(C, index); /* remove original */
+static void cloneclass(cs_State *C, int index) {
+    cs_assert(CACHEINDEX < index);
+    csL_check_stack(C, 4, errclone); /* class+(list/table/superclass)+cache */
+    cs_push_class(C);
+    clonemetalist(C, index);
+    clonemethods(C, index);
+    clonesuperclass(C, index);
+    cacheobject(C, index);
 }
 
 
-// TODO: add docs and tests
+static void cloneuservalues(cs_State *C, int index, c_uint nuv) {
+    cs_assert(CACHEINDEX < index);
+    for (c_uint i = 0; i < nuv; i++) {
+        cs_get_uservalue(C, index, i);
+        auxclone(C, cs_type(C, -1), cs_absindex(C, -1));
+        cs_set_uservalue(C, -2, i);
+    }
+}
+
+
+static void cloneuserdata(cs_State *C, int index) {
+    void *p;
+    c_uint nuv = cs_numuservalues(C, check_exp(CACHEINDEX < index, index));
+    size_t size = cs_lenudata(C, index);
+    csL_check_stack(C, 5, errclone); /* udata+(mlist/methods/2xudval)+cache */
+    p = cs_push_userdata(C, size, nuv);
+    memcpy(p, cs_to_userdata(C, index), size);
+    clonemethods(C, index);
+    if (cs_get_metalist(C, index))
+        cs_set_metalist(C, -2); /* keep metalist the same */
+    cloneuservalues(C, index, nuv);
+    cacheobject(C, index);
+}
+
+
+static void cloneinstance(cs_State *C, int index) {
+    cs_assert(CACHEINDEX < index);
+    csL_check_stack(C, 4, errclone); /* ins+class+cache */
+    cs_get_class(C, index);
+    if (!checkcachetop(C))
+        cloneclass(C, cs_gettop(C));
+    cs_replace(C, -2); /* replace original */
+    cs_push_instance(C, -1);
+    cs_remove(C, -2); /* remove class */
+    cs_get_fields(C, index);
+    if (!checkcachetop(C))
+        clonetable(C, cs_gettop(C));
+    cs_replace(C, -2); /* replace original */
+    cs_set_fields(C, -2);
+    cacheobject(C, index);
+}
+
+
+static void clonebmethod(cs_State *C, int index) {
+    int type;
+    cs_assert(CACHEINDEX < index);
+    csL_check_stack(C, 5, errclone); /* bmethod+self+method+cache */
+    type = cs_get_self(C, index);
+    if (!checkcachetop(C)) {
+        if (type == CS_T_USERDATA) /* self is userdata? */
+            cloneuserdata(C, cs_gettop(C));
+        else /* otherwise self is instance */
+            cloneinstance(C, cs_gettop(C));
+    }
+    cs_replace(C, -2); /* replace original */
+    cs_get_method(C, index);
+    if (!checkcachetop(C)) /* not in cache table? */
+        auxclone(C, cs_type(C, -1), cs_gettop(C));
+    else /* otherwise cached value is on stack top */
+        cs_replace(C, -2); /* replace original */
+    cs_push_method(C, -2);
+    cs_remove(C, -2); /* remove self */
+    cacheobject(C, index);
+}
+
+
+static int trycopy(cs_State *C, int t, int index) {
+    switch (t) {
+        case CS_T_NIL: case CS_T_BOOL: case CS_T_NUMBER:
+        case CS_T_LIGHTUSERDATA: case CS_T_FUNCTION:
+        case CS_T_STRING: case CS_T_THREAD: {
+            cs_push(C, index);
+            return 1;
+        }
+        default: return 0;
+    }
+}
+
+
+static void auxclone(cs_State *C, int t, int index) {
+    cs_assert(CACHEINDEX < index); /* index is absolute */
+    if (!trycopy(C, t, index) && !checkcache(C, index)) {
+        /* value is object not in cache */
+        switch (t) { /* clone it */
+            case CS_T_LIST: clonelist(C, index); break;
+            case CS_T_TABLE: clonetable(C, index); break;
+            case CS_T_CLASS: cloneclass(C, index); break;
+            case CS_T_INSTANCE: cloneinstance(C, index); break;
+            case CS_T_USERDATA: cloneuserdata(C, index); break;
+            case CS_T_BMETHOD: clonebmethod(C, index); break;
+            default: cs_assert(0); /* unreachable */
+        }
+    }
+    cs_replace(C, index); /* replace original */
+}
+
+
+// TODO: add docs
 static int b_clone(cs_State *C) {
     csL_check_any(C, 0);
     cs_setntop(C, 1); /* leave only object to copy on top */
-    auxclone(C, cs_type(C, 0), 0);
+    cs_push_table(C, 0); /* push cache table */
+    cs_push(C, 0); /* copy of value to clone */
+    auxclone(C, cs_type(C, 2), 2);
     return 1;
 }
+
+/* }===================================================================== */
 
 
 static int b_error(cs_State *C) {
@@ -299,10 +451,15 @@ static int b_getmetalist(cs_State *C) {
 }
 
 
+#define expectmeta(C,t,index) \
+        csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, index, \
+                          "class/instance")
+
+
 // TODO: update docs
 static int b_setmetalist(cs_State *C) {
     int t = cs_type(C, 0);
-    csL_expect_arg(C, t == CS_T_CLASS || t == CS_T_INSTANCE, 0, "class/instance");
+    expectmeta(C, t, 0);
     t = cs_type(C, 1);
     csL_expect_arg(C, t == CS_T_NIL || t == CS_T_LIST, 1, "nil/list");
     cs_setntop(C, 2);
@@ -311,14 +468,37 @@ static int b_setmetalist(cs_State *C) {
 }
 
 
-// TODO: add tests and docs
-static int b_getmethods(cs_State *C) {
-
+// TODO: add docs
+static int b_unwrapmethod(cs_State *C) {
+    csL_check_type(C, 0, CS_T_BMETHOD);
+    cs_get_self(C, 0);
+    cs_get_method(C, 0);
+    return 2;
 }
 
 
-// TODO: add tests and docs
+// TODO: add docs
+static int b_getmethods(cs_State *C) {
+    int t = cs_type(C, 0);
+    expectmeta(C, t, 0);
+    cs_setntop(C, 1);
+    if (!cs_get_methods(C, 0))
+        cs_push_nil(C);
+    return 1;
+}
+
+
+// TODO: add docs
 static int b_setmethods(cs_State *C) {
+    int t = cs_type(C, 0);
+    expectmeta(C, t, 0);
+    if (cs_is_none(C, 1))
+        cs_push_nil(C);
+    else if (!cs_is_nil(C, 1))
+        csL_check_type(C, 1, CS_T_TABLE);
+    cs_setntop(C, 2);
+    cs_set_methods(C, 0);
+    return 1;
 }
 
 
@@ -472,12 +652,28 @@ static int b_rawequal(cs_State *C) {
 }
 
 
-static int b_rawget(cs_State *C) {
-    csL_check_type(C, 0, CS_T_INSTANCE);
+static int auxrawget(cs_State *C, int field) {
+    int t = cs_type(C, 0);
+    csL_expect_arg(C, t == CS_T_INSTANCE || t == CS_T_TABLE, 0, "instance/table");
     csL_check_any(C, 1); /* key */
     cs_setntop(C, 2);
-    cs_get_raw(C, 0);
+    if (field) /* only field? */
+        cs_get_field(C, 0);
+    else /* otherwise get either field or method */
+        cs_get_raw(C, 0);
     return 1;
+}
+
+
+// TODO: update docs (now accepts table)
+static int b_rawget(cs_State *C) {
+    return auxrawget(C, 0);
+}
+
+
+// TODO: add docs
+static int b_getfield(cs_State *C) {
+    return auxrawget(C, 1);
 }
 
 
@@ -756,7 +952,7 @@ static int b_range(cs_State *C) {
 /* ====================================================================} */
 
 
-static const cs_Entry basic_funcs[] = {
+static const csL_Entry basic_funcs[] = {
     {"clone", b_clone},
     {"error", b_error},
     {"assert", b_assert},
@@ -766,6 +962,7 @@ static const cs_Entry basic_funcs[] = {
     {"runfile", b_runfile},
     {"getmetalist", b_getmetalist},
     {"setmetalist", b_setmetalist},
+    {"unwrapmethod", b_unwrapmethod},
     {"getmethods", b_getmethods},
     {"setmethods", b_setmethods},
     {"nextfield", b_nextfield},
@@ -779,6 +976,7 @@ static const cs_Entry basic_funcs[] = {
     {"len", b_len},
     {"rawequal", b_rawequal},
     {"rawget", b_rawget},
+    {"getfield", b_getfield},
     {"rawset", b_rawset},
     {"getargs", b_getargs},
     {"tonum", b_tonum},

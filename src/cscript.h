@@ -32,16 +32,16 @@
 ** (-CSI_MAXSTACK is the minimum valid index; we keep some free empty
 ** space after that to help overflow detection)
 */
-#define CS_CLIST_INDEX              (-CSI_MAXSTACK - 1000)
-#define CS_CTABLE_INDEX             (CS_CLIST_INDEX - 1)
-#define cs_upvalueindex(i)          (CS_CTABLE_INDEX - 1 - (i))
+#define CS_CLIST_INDEX          (-CSI_MAXSTACK - 1000)
+#define CS_CTABLE_INDEX         (CS_CLIST_INDEX - 1)
+#define cs_upvalueindex(i)      (CS_CTABLE_INDEX - 1 - (i))
 
 
 // TODO: update docs
 /* predefined values in the C list */
-#define CS_CLIST_MAINTHREAD         0
-#define CS_CLIST_GLOBALS            1
-#define CS_CLIST_LAST               CS_CLIST_GLOBALS
+#define CS_CLIST_MAINTHREAD     0
+#define CS_CLIST_GLOBALS        1
+#define CS_CLIST_LAST           CS_CLIST_GLOBALS
     
 
 // TODO: update docs
@@ -56,11 +56,11 @@
 #define CS_T_LIST               6   /* list */
 #define CS_T_TABLE              7   /* table */
 #define CS_T_FUNCTION           8   /* function */
-#define CS_T_CLASS              9   /* class */
-#define CS_T_INSTANCE           10  /* instance */
-#define CS_T_THREAD             11  /* thread */
-// TODO: #define CS_T_BOUNDMETHOD        12  /* bounded (instance/userdata) method */
-#define CS_T_NUM                12  /* total number of types */
+#define CS_T_BMETHOD            9   /* bound method */
+#define CS_T_CLASS              10  /* class */
+#define CS_T_INSTANCE           11  /* instance */
+#define CS_T_THREAD             12  /* thread */
+#define CS_T_NUM                13  /* total number of types */
 
 
 
@@ -95,9 +95,6 @@ typedef const char *(*cs_Reader)(cs_State *C, void *data, size_t *szread);
 /* type of warning function */
 typedef void (*cs_WarnFunction)(void *ud, const char *msg, int tocont);
 
-
-/* type for storing name:function pairs or placeholders */
-typedef struct cs_Entry cs_Entry;
 
 /* type for debug API */
 typedef struct cs_Debug cs_Debug;
@@ -170,13 +167,14 @@ CS_API int          cs_is_number(cs_State *C, int index);
 CS_API int          cs_is_integer(cs_State *C, int index); 
 CS_API int          cs_is_string(cs_State *C, int index); 
 CS_API int          cs_is_cfunction(cs_State *C, int index); 
+CS_API int          cs_is_udatamethod(cs_State *C, int index); 
 CS_API int          cs_is_userdata(cs_State *C, int index); 
 CS_API int          cs_type(cs_State *C, int index); 
 CS_API const char  *cs_typename(cs_State *C, int type); 
 
 CS_API cs_Number    cs_to_numberx(cs_State *C, int index, int *isnum); 
 CS_API cs_Integer   cs_to_integerx(cs_State *C, int index, int *isnum); 
-CS_API int          cs_to_boolx(cs_State *C, int index, int *isbool); 
+CS_API int          cs_to_bool(cs_State *C, int index); 
 CS_API const char  *cs_to_lstring(cs_State *C, int index, size_t *len); 
 CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index); 
 CS_API void        *cs_to_userdata(cs_State *C, int index); 
@@ -228,7 +226,7 @@ CS_API void        cs_push_integer(cs_State *C, cs_Integer n);
 CS_API const char *cs_push_lstring(cs_State *C, const char *str, size_t len); 
 CS_API const char *cs_push_string(cs_State *C, const char *str); 
 CS_API const char *cs_push_fstring(cs_State *C, const char *fmt, ...); 
-CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list argp); 
+CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list ap); 
 CS_API void        cs_push_cclosure(cs_State *C, cs_CFunction fn, int upvals); 
 CS_API void        cs_push_bool(cs_State *C, int b); 
 CS_API void        cs_push_lightuserdata(cs_State *C, void *p); 
@@ -236,62 +234,56 @@ CS_API void       *cs_push_userdata(cs_State *C, size_t sz, int nuv);
 CS_API void        cs_push_list(cs_State *C, int sz);
 CS_API void        cs_push_table(cs_State *C, int sz);
 CS_API int         cs_push_thread(cs_State *C); 
+CS_API void        cs_push_class(cs_State *C);
 CS_API void        cs_push_instance(cs_State *C, int clsobj);
-
-CS_API void cs_push_class(cs_State *C, int nup, const cs_Entry *l);
-CS_API void cs_push_subclass(cs_State *C, int sc, int nup, const cs_Entry *l);
-CS_API void cs_push_metaclass(cs_State *C, int ml, int nup, const cs_Entry *l);
-CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
-                                 const cs_Entry *l);
-
-struct cs_Entry {
-    const char *name; /* NULL if sentinel entry */
-    cs_CFunction func; /* NULL if placeholder or sentinel entry */
-};
+CS_API void        cs_push_method(cs_State *C, int index);
 /* }====================================================================== */
 
 /* {======================================================================
 ** Get functions (CScript -> stack)
 ** ======================================================================= */
-CS_API int cs_get(cs_State *C, int index); 
-CS_API int cs_get_raw(cs_State *C, int index); 
-CS_API int cs_get_global(cs_State *C, const char *name); 
-CS_API int cs_get_index(cs_State *C, int index, int i);
-CS_API int cs_get_cindex(cs_State *C, int i); 
-CS_API int cs_get_field(cs_State *C, int index); 
-CS_API int cs_get_fieldstr(cs_State *C, int index, const char *field); 
-CS_API int cs_get_fieldptr(cs_State *C, int index, const void *field); 
-CS_API int cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
-CS_API int cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
-CS_API int cs_get_cfieldstr(cs_State *C, const char *field); 
-CS_API int cs_get_class(cs_State *C, int index); 
-CS_API int cs_get_superclass(cs_State *C, int index); 
-CS_API int cs_get_method(cs_State *C, int index); 
-CS_API int cs_get_supermethod(cs_State *C, int index);
-CS_API int cs_get_metalist(cs_State *C, int index);
-CS_API int cs_get_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API int cs_get_methods(cs_State *C, int index); 
+CS_API int  cs_get(cs_State *C, int index); 
+CS_API int  cs_get_raw(cs_State *C, int index); 
+CS_API int  cs_get_global(cs_State *C, const char *name); 
+CS_API int  cs_get_index(cs_State *C, int index, int i);
+CS_API int  cs_get_cindex(cs_State *C, int i); 
+CS_API int  cs_get_field(cs_State *C, int index); 
+CS_API int  cs_get_fieldstr(cs_State *C, int index, const char *field); 
+CS_API int  cs_get_fieldptr(cs_State *C, int index, const void *field); 
+CS_API int  cs_get_fieldint(cs_State *C, int index, cs_Integer field); 
+CS_API int  cs_get_fieldflt(cs_State *C, int index, cs_Number field); 
+CS_API int  cs_get_cfieldstr(cs_State *C, const char *field); 
+CS_API int  cs_get_class(cs_State *C, int index); 
+CS_API int  cs_get_superclass(cs_State *C, int index); 
+CS_API int  cs_get_method(cs_State *C, int index); 
+CS_API int  cs_get_self(cs_State *C, int index);
+CS_API int  cs_get_supermethod(cs_State *C, int index);
+CS_API int  cs_get_metalist(cs_State *C, int index);
+CS_API int  cs_get_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API int  cs_get_methods(cs_State *C, int index); 
+CS_API void cs_get_fields(cs_State *C, int index); 
 /* }====================================================================== */
 
 /* {======================================================================
 ** Set functions (stack -> CScript)
 ** ======================================================================= */
-CS_API void  cs_set(cs_State *C, int index); 
-CS_API void  cs_set_raw(cs_State *C, int index); 
-CS_API void  cs_set_global(cs_State *C, const char *name); 
-CS_API void  cs_set_index(cs_State *C, int index, int i);
-CS_API void  cs_set_cindex(cs_State *C, int i);
-CS_API void  cs_set_field(cs_State *C, int index); 
-CS_API void  cs_set_fieldstr(cs_State *C, int index, const char *field); 
-CS_API void  cs_set_fieldptr(cs_State *C, int index, const void *field); 
-CS_API void  cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
-CS_API void  cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
-CS_API void  cs_set_cfieldstr(cs_State *C, const char *field);
-CS_API void  cs_set_superclass(cs_State *C, int index); 
-CS_API void  cs_set_metalist(cs_State *C, int index);
-CS_API int   cs_set_uservalue(cs_State *C, int index, unsigned short n); 
-CS_API void  cs_set_methods(cs_State *C, int index); 
-CS_API void  cs_set_listlen(cs_State *C, int index, int len);
+CS_API void cs_set(cs_State *C, int index); 
+CS_API void cs_set_raw(cs_State *C, int index); 
+CS_API void cs_set_global(cs_State *C, const char *name); 
+CS_API void cs_set_index(cs_State *C, int index, int i);
+CS_API void cs_set_cindex(cs_State *C, int i);
+CS_API void cs_set_field(cs_State *C, int index); 
+CS_API void cs_set_fieldstr(cs_State *C, int index, const char *field); 
+CS_API void cs_set_fieldptr(cs_State *C, int index, const void *field); 
+CS_API void cs_set_fieldint(cs_State *C, int index, cs_Integer field); 
+CS_API void cs_set_fieldflt(cs_State *C, int index, cs_Number field); 
+CS_API void cs_set_cfieldstr(cs_State *C, const char *field);
+CS_API void cs_set_superclass(cs_State *C, int index); 
+CS_API void cs_set_metalist(cs_State *C, int index);
+CS_API int  cs_set_uservalue(cs_State *C, int index, unsigned short n); 
+CS_API void cs_set_methods(cs_State *C, int index); 
+CS_API void cs_set_fields(cs_State *C, int index);
+CS_API void cs_set_listlen(cs_State *C, int index, int len);
 /* }====================================================================== */
 
 /* {======================================================================
@@ -373,8 +365,10 @@ CS_API size_t      cs_numbertostring(cs_State *C, const char *s, int *f);
 CS_API void        cs_toclose(cs_State *C, int index); 
 CS_API void        cs_closeslot(cs_State *C, int index); 
 CS_API void        cs_shrinklist(cs_State *C, int index);
+CS_API unsigned    cs_numuservalues(cs_State *C, int index);
 
 #define cs_is_function(C, n)        (cs_type(C, (n)) == CS_T_FUNCTION)
+#define cs_is_boundmethod(C, n)     (cs_type(C, (n)) == CS_T_BMETHOD)
 #define cs_is_list(C, n)            (cs_type(C, (n)) == CS_T_LIST)
 #define cs_is_table(C, n)           (cs_type(C, (n)) == CS_T_TABLE)
 #define cs_is_class(C, n)           (cs_type(C, (n)) == CS_T_CLASS)
@@ -390,8 +384,6 @@ CS_API void        cs_shrinklist(cs_State *C, int index);
 #define cs_to_string(C, i)      cs_to_lstring(C, i, NULL)
 #define cs_to_number(C,i)       cs_to_numberx(C,(i),NULL)
 #define cs_to_integer(C,i)      cs_to_integerx(C,(i),NULL)
-// TODO: update docs
-#define cs_to_bool(C,i)         cs_to_boolx(C,(i),NULL)
 
 // TODO: add docs
 #define cs_push_clist(C)        ((void)cs_push(C, CS_CLIST_INDEX))
@@ -442,6 +434,7 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n);
 CS_API void       *cs_upvalueid(cs_State *C, int index, int n);
 CS_API void        cs_upvaluejoin(cs_State *C, int index1, int n1,
                                                int index2, int n2);
+// TODO: add docs
 CS_API void        cs_sethook(cs_State *C, cs_Hook func, int mask, int count);
 CS_API cs_Hook     cs_gethook(cs_State *C);
 CS_API int         cs_gethookmask(cs_State *C);

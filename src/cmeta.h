@@ -28,11 +28,11 @@ CSI_FUNC UserData *csMM_newuserdata(cs_State *C, size_t size, int nuv);
 CSI_FUNC IMethod *csMM_newinsmethod(cs_State *C,
                                     Instance *receiver,
 				    const TValue *method);
-CSI_FUNC int csMM_eqimethod(const IMethod *v1, const IMethod *v2);
+CSI_FUNC int csMM_eqim(const IMethod *v1, const IMethod *v2);
 CSI_FUNC UMethod *csMM_newudmethod(cs_State *C,
                                    UserData *ud,
                                    const TValue *method);
-CSI_FUNC int csMM_equmethod(const UMethod *v1, const UMethod *v2);
+CSI_FUNC int csMM_equm(const UMethod *v1, const UMethod *v2);
 CSI_FUNC const char *csMM_objtypename(cs_State *C, const TValue *o);
 CSI_FUNC void csMM_callset(cs_State *C,
                            const TValue *fn,

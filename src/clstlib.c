@@ -46,13 +46,14 @@ static int auxlen(cs_State *C, int index, int push, int border) {
 
 
 static int lst_len(cs_State *C) {
-    checklist(C, 0, 1, csL_opt_bool(C, 1, 1));
+    int border = csL_opt(C, cs_to_bool, 1, 1);
+    checklist(C, 0, 1, border);
     return 1;
 }
 
 
 static int enumerateaux(cs_State *C) {
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
+    cs_Integer size = checklist(C, 0, 0, csL_opt(C, cs_to_bool, 2, 1));
     cs_Integer i = csL_check_integer(C, 1);
     i = csL_intop(+, i, 1);
     cs_push_integer(C, i);
@@ -76,7 +77,7 @@ static int lst_enumerate(cs_State *C) {
 
 
 static int lst_insert(cs_State *C) {
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 3, 1));
+    cs_Integer size = checklist(C, 0, 0, csL_opt(C, cs_to_bool, 3, 1));
     cs_Integer pos = size;
     switch (cs_getntop(C)) {
         case 2: break; /* position is already set */
@@ -102,9 +103,10 @@ static int lst_insert(cs_State *C) {
 
 
 static int lst_remove(cs_State *C) {
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
+    cs_Integer size = checklist(C, 0, 0, csL_opt(C, cs_to_bool, 2, 1));
     cs_Integer pos = csL_opt_integer(C, 1, size-(size>0));
-    csL_check_arg(C, 0 <= pos && pos < size+(size==0), 1, "position out of bounds");
+    csL_check_arg(C, 0 <= pos && pos < size+(size==0), 1,
+                     "position out of bounds");
     cs_get_index(C, 0, pos); /* result = l[pos]; */
     if (size != 0) { /* the list is not empty? */
         /* memcpy(&l[pos], &l[pos]+1, size-pos-1) */
@@ -390,7 +392,7 @@ static void auxsort(cs_State *C, Idx lo, Idx hi, unsigned rnd) {
 
 
 static int lst_sort(cs_State *C) {
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 2, 1));
+    cs_Integer size = checklist(C, 0, 0, csL_opt(C, cs_to_bool, 2, 1));
     if (size > 1) { /* non trivial? */
         csL_check_arg(C, size <= CS_MAXINT, 0, "list too big");
         if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
@@ -414,7 +416,7 @@ static int lst_shrink(cs_State *C) {
 static int lst_isordered(cs_State *C) {
     int sorted = 1;
     cs_Integer i, e;
-    cs_Integer size = checklist(C, 0, 0, csL_opt_bool(C, 4, 1));
+    cs_Integer size = checklist(C, 0, 0, csL_opt(C, cs_to_bool, 4, 1));
     if (!cs_is_noneornil(C, 1)) /* is there a 2nd argument? */
         csL_check_type(C, 1, CS_T_FUNCTION); /* must be a function */
     i = csL_opt_integer(C, 2, 0); /* start index */
@@ -440,7 +442,7 @@ static int lst_isordered(cs_State *C) {
 
 
 /// TODO: add docs
-static cs_Entry lstlib[] = {
+static csL_Entry lstlib[] = {
     {"len", lst_len},
     {"enumerate", lst_enumerate},
     {"insert", lst_insert},

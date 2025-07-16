@@ -1,0 +1,30 @@
+
+local class X {
+    __init = fn(x,y) {
+        self.x = x;
+        self.y = y;
+        return self;
+    };
+    fn mul() { return self.x*self.y; }
+    fn add() { return self.x+self.y; }
+    fn sub() { return self.x-self.y; }
+}
+
+local a = X(5, 2);
+local t = getmethods(a);
+assert(t.mul and t.add and t.sub);
+local self,method = unwrapmethod(a.mul);
+assert(t.mul == method and self == a);
+self,method = unwrapmethod(a.add);
+assert(t.add == method and self == a);
+self,method = unwrapmethod(a.sub);
+assert(t.sub == method and self == a);
+setmethods(a, {
+    g = fn() { return 69; },
+    h = "John Cena",
+});
+t = getmethods(a);
+self,method = unwrapmethod(a.g);
+assert(t.g == method and self == a);
+self,method = unwrapmethod(a.h);
+assert(t.h == method and self == a and t.h == "John Cena");

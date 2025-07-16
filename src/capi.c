@@ -61,11 +61,11 @@ static TValue *index2value(const cs_State *C, int index) {
     } else if (!ispseudo(index)) { /* negative index? */
         api_check(C, -index <= C->sp.p - (cf->func.p + 1), "index too small");
         return s2v(C->sp.p + index);
-    } else if (index == CS_CLIST_INDEX) {
+    } else if (index == CS_CLIST_INDEX) /* C list index? */
         return &G(C)->c_list;
-    } else if (index == CS_CTABLE_INDEX) {
+    else if (index == CS_CTABLE_INDEX) /* C table index? */
         return &G(C)->c_table;
-    } else { /* upvalues */
+    else { /* otherwise upvalue index */
         index = UPVALINDEX - index;
         api_check(C, index < USHRT_MAX, "upvalue index too large");
         if (c_likely(ttisCclosure(s2v(cf->func.p)))) { /* C closure? */
@@ -79,6 +79,9 @@ static TValue *index2value(const cs_State *C, int index) {
 }
 
 
+/*
+** Convert index to a stack slot.
+*/
 static SPtr index2stack(const cs_State *C, int index) {
     CallFrame *cf = C->cf;
     if (index >= 0) {
@@ -163,21 +166,11 @@ CS_API void cs_setntop(cs_State *C, int n) {
 }
 
 
-/* 
-** Return the index of the value on top of the stack.
-** This result is equal to the number of elements on the stack - 1.
-** Negative value (-1) means an empty stack.
-*/
 CS_API int cs_gettop(const cs_State *C) {
     return cast_int(C->sp.p - (C->cf->func.p + 1) - 1);
 }
 
 
-/* 
-** Convert 'acceptable' stack index into an absolute index.
-** For example, if there are 5 values on the stack, then, passing
-** -1 as the value of 'index' would return 4. 
-*/
 CS_API int cs_absindex(cs_State *C, int index)
 {
     return (index >= 0 || ispseudo(index))
@@ -187,7 +180,8 @@ CS_API int cs_absindex(cs_State *C, int index)
 
 
 /* 
-** Auxiliary to 'cs_rotate', reverses stack values 'from' until 'to'.
+** Auxiliary to 'cs_rotate', reverses stack values starting at 'from'
+** until 'to'.
 */
 c_sinline void rev(cs_State *C, SPtr from, SPtr to) {
     while (from < to) {
@@ -216,7 +210,6 @@ c_sinline void rev(cs_State *C, SPtr from, SPtr to) {
 ** [func][0][1][2][3][4]
 ** cs_rotate(C, 2, -2);
 ** [func][0][1][4][3][2]
-**
 */
 CS_API void cs_rotate(cs_State *C, int index, int n) {
     SPtr start, end, pivot;
@@ -232,10 +225,6 @@ CS_API void cs_rotate(cs_State *C, int index, int n) {
 }
 
 
-/* 
-** Copy value at index 'src' to stack slot at index 'dest'.
-** Note that 'dest' must be stack index.
-*/
 CS_API void cs_copy(cs_State *C, int src, int dest) {
     TValue *from, *to;
     cs_lock(C);
@@ -249,10 +238,6 @@ CS_API void cs_copy(cs_State *C, int src, int dest) {
 }
 
 
-/*
-** Check if stack has enough space for 'n' elements,
-** if not ensure it does.
-*/
 CS_API int cs_checkstack(cs_State *C, int n) {
     CallFrame *cf;
     int res;
@@ -275,9 +260,6 @@ CS_API int cs_checkstack(cs_State *C, int n) {
     { setobj2s(C, C->sp.p, index2value(C, index)); api_inctop(C); }
 
 
-/*
-** Push value at the index on to the top of the stack.
-*/
 CS_API void cs_push(cs_State *C, int index) {
     cs_lock(C);
     pushvalue(C, index);
@@ -285,11 +267,6 @@ CS_API void cs_push(cs_State *C, int index) {
 }
 
 
-/*
-** Exchange values between two threads of the same state.
-** This function pops 'n' values from 'src' and pushes them
-** onto the stack of 'dest'.
-*/
 CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
     if (src == dest) return; /* same thread ? */
     cs_lock(dest);
@@ -311,7 +288,6 @@ CS_API void cs_xmove(cs_State *src, cs_State *dest, int n) {
 ** Access functions (Stack -> C)
 ** ======================================================================= */
 
-/* Check if the value at index is a number. */
 CS_API int cs_is_number(cs_State *C, int index) {
     cs_Number n;
     UNUSED(n);
@@ -320,61 +296,42 @@ CS_API int cs_is_number(cs_State *C, int index) {
 }
 
 
-/* Check if the value at index is an integer. */
 CS_API int cs_is_integer(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     return ttisint(o);
 }
 
 
-/* Check if the value at index is a string. */
 CS_API int cs_is_string(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     return ttisstring(o);
 }
 
 
-static TValue *unwrapfuncat(cs_State *C, int index) {
-    TValue *o = index2value(C, index);
-    if (ttisinstancemethod(o))
-        o = &imval(o)->method;
-    else if (ttisusermethod(o))
-        o = &umval(o)->method;
-    cs_assert(!ttisinstancemethod(o) && !ttisusermethod(o));
-    return o;
-}
-
-
-/* Check if the value at index is a C function. */
 CS_API int cs_is_cfunction(cs_State *C, int index) {
-    const TValue *o = unwrapfuncat(C, index);
+    const TValue *o = index2value(C, index);
     return (ttislcf(o) || ttisCclosure(o));
 }
 
 
-/* Check if the value at index is a userdata. */
+CS_API int cs_is_udatamethod(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    return ttisusermethod(o);
+}
+
+
 CS_API int cs_is_userdata(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     return (ttislightuserdata(o) || ttisfulluserdata(o));
 }
 
 
-/* 
-** Return the type of the value at valid index or CS_T_NONE
-** if index is invalid. The types returned are defined in
-** 'cscript.h' (CS_T_*).
-*/
 CS_API int cs_type(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     return (isvalid(C, o) ? ttype(o) : CS_T_NONE);
 }
 
 
-/*
-** Return text representation of the given type.
-** The returned string has a static lifetime and should not be modified
-** directly.
-*/
 CS_API const char *cs_typename(cs_State *C, int type) {
     UNUSED(C);
     api_check(C, CS_T_NONE <= type && type < CS_T_NUM, "invalid type");
@@ -382,11 +339,6 @@ CS_API const char *cs_typename(cs_State *C, int type) {
 }
 
 
-/*
-** Returns the number value of the value at index.
-** The fact whether the value was a number is stored in 'pisnum' if
-** provided, the default value returned when index is not a number is 0.0.
-*/
 CS_API cs_Number cs_to_numberx(cs_State *C, int index, int *pisnum) {
     cs_Number n = 0.0;
     const TValue *o = index2value(C, index);
@@ -397,11 +349,6 @@ CS_API cs_Number cs_to_numberx(cs_State *C, int index, int *pisnum) {
 }
 
 
-/*
-** Returns the integer value of the value at index.
-** The fact whether the value was an integer is stored in 'pisint' if
-** provided, the default value returned when index is not an integer is 0.
-*/
 CS_API cs_Integer cs_to_integerx(cs_State *C, int index, int *pisint) {
     cs_Integer i = 0;
     const TValue *o = index2value(C, index);
@@ -412,11 +359,8 @@ CS_API cs_Integer cs_to_integerx(cs_State *C, int index, int *pisint) {
 }
 
 
-// TODO: add docs
-CS_API int cs_to_boolx(cs_State *C, int index, int *isbool) {
+CS_API int cs_to_bool(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
-    if (isbool)
-        *isbool = ttisbool(o);
     return !c_isfalse(o);
 }
 
@@ -445,7 +389,7 @@ CS_API cs_CFunction cs_to_cfunction(cs_State *C, int index) {
 c_sinline void *touserdata(const TValue *o) {
     switch (ttypetag(o)) {
         case CS_VLIGHTUSERDATA: return pval(o);
-        case CS_VUSERDATA: return getuserdatamem(uval(o));
+        case CS_VUSERDATA: return getuserdatamem(udval(o));
         default: return NULL;
     }
 }
@@ -462,19 +406,18 @@ CS_API void *cs_to_userdata(cs_State *C, int index) {
 
 
 /*
-** Return the pointer to the object at index.
-** If the object is not userdata, C function or collectable, then this
-** returns NULL. Note that returned pointer shouldn't be modified.
+** Returns a pointer to the internal representation of an object.
+** Note that ANSI C does not allow the conversion of a pointer to
+** function to a 'void*', so the conversion here goes through
+** a 'size_t'. (As the returned pointer is only informative, this
+** conversion should not be a problem.)
 */
 CS_API const void *cs_to_pointer(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     switch (ttypetag(o)) {
-        case CS_VLCF: {
-            return cast(void *, cast_sizet(lcfval(o)));
-        }
-        case CS_VUSERDATA: case CS_VLIGHTUSERDATA: {
+        case CS_VLCF: return cast_voidp(cast_sizet(lcfval(o)));
+        case CS_VUSERDATA: case CS_VLIGHTUSERDATA:
             return touserdata(o);
-        }
         default: {
             if (iscollectable(o))
                 return gcoval(o);
@@ -485,10 +428,6 @@ CS_API const void *cs_to_pointer(cs_State *C, int index) {
 }
 
 
-/*
-** Return the thread value at index.
-** If the value is not a thread, then this returns NULL.
-*/
 CS_API cs_State *cs_to_thread(cs_State *C, int index) {
     const TValue *o = index2value(C, index);
     return (ttisthread(o) ? thval(o) : NULL);
@@ -501,11 +440,6 @@ CS_API cs_State *cs_to_thread(cs_State *C, int index) {
 ** Ordering & Arithmetic functions
 ** ======================================================================= */
 
-/*
-** Perform arithmetic operation 'op'; the valid arithmetic operations are
-** located in 'cscript.h'.
-** This functions is free to call overloadable methods.
-*/
 CS_API void cs_arith(cs_State *C, int op) {
     cs_lock(C);
     if (op != CS_OP_UNM && op != CS_OP_BNOT) { /* binary op? */
@@ -521,11 +455,6 @@ CS_API void cs_arith(cs_State *C, int op) {
 }
 
 
-/*
-** Perform raw equality between values at 'index1' and 'index2'.
-** 'raw' meaning this function won't call overloaded methods.
-** In cases where either of the indexes is not valid this always returns 0.
-*/
 CS_API int cs_rawequal(cs_State *C, int index1, int index2) {
     const TValue *lhs = index2value(C, index1);
     const TValue *rhs = index2value(C, index2);
@@ -533,11 +462,6 @@ CS_API int cs_rawequal(cs_State *C, int index1, int index2) {
 }
 
 
-/*
-** Compares values at 'index1' and 'index2'.
-** This function is free to call overloded methods.
-** In case either index is invalid this then always returns 0.
-*/
 CS_API int cs_compare(cs_State *C, int index1, int index2, int op) {
     const TValue *lhs;
     const TValue *rhs;
@@ -621,40 +545,30 @@ CS_API const char *cs_push_string(cs_State *C, const char *str) {
 }
 
 
-/* 
-** Push formatted string with format values in a 'va_list' on top of the stack.
-** Valid format values are c (char), d (int), I (cs_Integer), N (cs_Number),
-** s (string), p (pointer) and % ('%'). Note that each format specifier is
-** preceeded by '%' (so %I...).
-*/
-CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list argp) {
+CS_API const char *cs_push_vfstring(cs_State *C, const char *fmt, va_list ap) {
     const char *str;
     cs_lock(C);
-    str = csS_pushvfstring(C, fmt, argp);
+    str = csS_pushvfstring(C, fmt, ap);
     csG_checkGC(C);
     cs_unlock(C);
     return str;
 }
 
 
-/* 
-** Push formatted string with variable amount of format values on top of the
-** stack. Valid format specifiers are the same as in 'cs_pushvfstring'.
-*/
 CS_API const char *cs_push_fstring(cs_State *C, const char *fmt, ...) {
     const char *str;
-    va_list argp;
+    va_list ap;
     cs_lock(C);
-    va_start(argp, fmt);
-    str = csS_pushvfstring(C, fmt, argp);
-    va_end(argp);
+    va_start(ap, fmt);
+    str = csS_pushvfstring(C, fmt, ap);
+    va_end(ap);
     csG_checkGC(C);
     cs_unlock(C);
     return str;
 }
 
 
-/* pushes C closure without 'cs_lock'/'cs_unlock' */
+/* push C closure without locking */
 c_sinline void pushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
     if (nupvals == 0) {
         setcfval(C, s2v(C->sp.p), fn);
@@ -676,13 +590,6 @@ c_sinline void pushcclosure(cs_State *C, cs_CFunction fn, int nupvals) {
 }
 
 
-/*
-** Push C closure value on top of the stack.
-** This closure will have 'nupvals' upvalues, these values will be popped
-** of the stack and inserted into the closure.
-** If 'nupvals' is 0 then this does not create a C closure, rather it only
-** pushes the 'cs_CFunction' on top of the stack.
-*/
 CS_API void cs_push_cclosure(cs_State *C, cs_CFunction fn, int nupvals) {
     cs_lock(C);
     pushcclosure(C, fn, nupvals);
@@ -690,10 +597,6 @@ CS_API void cs_push_cclosure(cs_State *C, cs_CFunction fn, int nupvals) {
 }
 
 
-/*
-** Push boolean value on top of the stack.
-** If 'b' is 0 then 'false' is pushed, otherwise 'true'.
-*/
 CS_API void cs_push_bool(cs_State *C, int b) {
     cs_lock(C);
     if (b)
@@ -705,7 +608,6 @@ CS_API void cs_push_bool(cs_State *C, int b) {
 }
 
 
-/* Push light userdata on top of the stack. */
 CS_API void cs_push_lightuserdata(cs_State *C, void *p) {
     cs_lock(C);
     setpval(s2v(C->sp.p), p);
@@ -714,13 +616,12 @@ CS_API void cs_push_lightuserdata(cs_State *C, void *p) {
 }
 
 
-/* Push fulluserdata on top of the stack. */
 CS_API void *cs_push_userdata(cs_State *C, size_t sz, int nuv) {
     UserData *ud;
     cs_lock(C);
     api_check(C, 0 <= nuv && nuv < USHRT_MAX, "invalid value");
     ud = csMM_newuserdata(C, sz, nuv);
-    setuval2s(C, C->sp.p, ud);
+    setudval2s(C, C->sp.p, ud);
     api_inctop(C);
     csG_checkGC(C);
     cs_unlock(C);
@@ -728,7 +629,6 @@ CS_API void *cs_push_userdata(cs_State *C, size_t sz, int nuv) {
 }
 
 
-/* Push list on top of the stack. */
 CS_API void cs_push_list(cs_State *C, int sz) {
     List *l;
     cs_lock(C);
@@ -741,7 +641,6 @@ CS_API void cs_push_list(cs_State *C, int sz) {
 }
 
 
-/* Push table on top of the stack. */
 CS_API void cs_push_table(cs_State *C, int sz) {
     Table *t;
     cs_lock(C);
@@ -755,16 +654,24 @@ CS_API void cs_push_table(cs_State *C, int sz) {
 }
 
 
-/*
-** Push thread 'C' on top of the stack.
-** Returns non-zero if the pushed thread is main thread.
-*/
 CS_API int cs_push_thread(cs_State *C) {
     cs_lock(C);
     setthval2s(C, C->sp.p, C);
     api_inctop(C);
     cs_unlock(C);
     return (G(C)->mainthread == C);
+}
+
+
+// TODO: update docs
+CS_API void cs_push_class(cs_State *C) {
+    OClass *cls;
+    cs_lock(C);
+    cls = csMM_newclass(C);
+    setclsval2s(C, C->sp.p, cls);
+    api_inctop(C);
+    csG_checkGC(C);
+    cs_unlock(C);
 }
 
 
@@ -782,108 +689,27 @@ CS_API void cs_push_instance(cs_State *C, int index) {
 }
 
 
-#define fastget(C,t,k,slot,f)     ((slot = f(t, k)), !isempty(slot))
-
-#define finishfastset(C,t,slot,v) { \
-    setobj(C, cast(TValue *, slot), v); csG_barrierback(C, obj2gco(t), v); }
-
-
-c_sinline void aux_rawsetstr(cs_State *C, Table *t, const char *str,
-                            const TValue *v) {
-    const TValue *slot;
-    OString *s = csS_new(C, str);
-    if (fastget(C, t, s, slot, csH_getstr)) {
-        finishfastset(C, t, slot, v);
-        C->sp.p--; /* pop value */
-    } else {
-        setstrval2s(C, C->sp.p, s);
-        api_inctop(C);
-        csV_settable(C, t, s, v, csH_setstr);
-        C->sp.p -= 2; /* pop string key and value */
-    }
-    cs_unlock(C);
-}
-
-
-c_sinline OClass *getclass(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    api_check(C, ttisclass(o), "class expected");
-    return classval(o);
-}
-
-
-c_sinline List *getlist(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    api_check(C, ttislist(o), "list expected");
-    return listval(o);
-}
-
-
-c_sinline void setmethods(cs_State *C, OClass *cls, const cs_Entry *l, int nup) {
-    if (l) { /* have methods? */
-        cs_checkstack(C, nup);
-        if (l->name) { /* have at least one entry? */
-            cs_assert(cls->methods == NULL);
-            cls->methods = csH_new(C);
-            do {
-                api_check(C, l->func, "'l->func' is NULL");
-                for (int i = 0; i < nup; i++) /* push upvalues to the top */
-                    pushvalue(C, -nup);
-                pushcclosure(C, l->func, nup);
-                aux_rawsetstr(C, cls->methods, l->name, s2v(C->sp.p - 1));
-            } while (l++, l->name);
-        }
-        settop(C, -(nup - 1)); /* pop upvalues */
-    } else
-        api_check(C, nup <= 0, "'nup' greater than zero but 'l' is NULL");
-}
-
-
-/* 'dowhat' bits for 'aux_pushclass' */
-#define DOWNOTHING          0
-#define DOWINHERIT          1 /* inherit from superclass */
-#define DOWMETALIST         2 /* set class metalist */
-
-static void aux_pushclass(cs_State *C, int nup, const cs_Entry *l, int sci,
-                          int mli, int dowhat) {
-    OClass *cls;
+// TODO: add docs
+CS_API void cs_push_method(cs_State *C, int index) {
+    const TValue *o;
     cs_lock(C);
-    cls = csMM_newclass(C);
-    setclsval2s(C, C->sp.p, cls);
-    api_inctop(C);
-    if (dowhat & DOWINHERIT) { /* inherit? */
-        OClass *scl = getclass(C, sci);
-        csV_inherit(C, cls, scl);
+    api_checknelems(C, 1); /* method */
+    o = index2value(C, index);
+    switch (ttypetag(o)) {
+        case CS_VINSTANCE: {
+            IMethod *im = csMM_newinsmethod(C, insval(o), s2v(C->sp.p - 1));
+            setimval2s(C, C->sp.p - 1, im);
+            break;
+        }
+        case CS_VUSERDATA: {
+            UMethod *um = csMM_newudmethod(C, udval(o), s2v(C->sp.p - 1));
+            setumval2s(C, C->sp.p - 1, um);
+            break;
+        }
+        default: api_check(C, 0, "fulluserdata/instance expected");
     }
-    if (dowhat & DOWMETALIST) { /* set metalist? */
-        List *ml = getlist(C, mli);
-        cls->metalist = ml;
-    }
-    setmethods(C, cls, l, nup);
     csG_checkGC(C);
     cs_unlock(C);
-}
-
-
-CS_API void cs_push_class(cs_State *C, int nup, const cs_Entry *l) {
-    aux_pushclass(C, nup, l, 0, 0, DOWNOTHING);
-}
-
-
-CS_API void cs_push_metaclass(cs_State *C, int ml, int nup,
-                              const cs_Entry *l) {
-    aux_pushclass(C, nup, l, 0, ml, DOWMETALIST);
-}
-
-
-CS_API void cs_push_subclass(cs_State *C, int sc, int nup, const cs_Entry *l) {
-    aux_pushclass(C, nup, l, sc, 0, DOWINHERIT);
-}
-
-
-CS_API void cs_push_metasubclass(cs_State *C, int sc, int ml, int nup,
-                                 const cs_Entry *l) {
-    aux_pushclass(C, nup, l, sc, ml, (DOWINHERIT | DOWMETALIST));
 }
 
 /* }====================================================================== */
@@ -926,6 +752,26 @@ c_sinline int finishrawgetfield(cs_State *C, const TValue *val) {
 }
 
 
+#define fastget(C,t,k,slot,f)     ((slot = f(t, k)), !isempty(slot))
+
+c_sinline void aux_rawsetstr(cs_State *C, Table *t, const char *str,
+                             const TValue *v) {
+    const TValue *slot;
+    OString *s = csS_new(C, str);
+    if (fastget(C, t, s, slot, csH_getstr)) {
+        setobj(C, cast(TValue *, slot), v);
+        csG_barrierback(C, obj2gco(t), v);
+        C->sp.p--; /* pop value */
+    } else {
+        setstrval2s(C, C->sp.p, s);
+        api_inctop(C);
+        csV_settable(C, t, s, v, csH_setstr);
+        C->sp.p -= 2; /* pop string key and value */
+    }
+    cs_unlock(C);
+}
+
+
 c_sinline int aux_rawgetfieldstr(cs_State *C, Table *t, const char *k) {
     const TValue *slot;
     OString *str = csS_new(C, k);
@@ -950,6 +796,13 @@ static int aux_getindex(cs_State *C, List *l, int i) {
     api_inctop(C);
     cs_unlock(C);
     return ttype(s2v(C->sp.p - 1));
+}
+
+
+c_sinline List *getlist(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    api_check(C, ttislist(o), "list expected");
+    return listval(o);
 }
 
 
@@ -1070,13 +923,6 @@ CS_API int cs_get_superclass(cs_State *C, int index) {
 }
 
 
-c_sinline Instance *getinstance(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    api_check(C, ttisinstance(o), "expect instance");
-    return insval(o);
-}
-
-
 static int aux_getmethod(cs_State *C, const TValue *o, Table *t) {
     int tt;
     if (t) { /* have methods table? */
@@ -1087,7 +933,7 @@ static int aux_getmethod(cs_State *C, const TValue *o, Table *t) {
                 IMethod *im = csMM_newinsmethod(C, insval(o), method);
                 setimval2s(C, C->sp.p-1, im);
             } else { /* userdata method */
-                UMethod *um = csMM_newudmethod(C, uval(o), method);
+                UMethod *um = csMM_newudmethod(C, udval(o), method);
                 setumval2s(C, C->sp.p-1, um);
             }
             csG_checkGC(C);
@@ -1102,26 +948,67 @@ unlock:
 }
 
 
-static const TValue *objwithmethods(cs_State *C, int index, Table **t) {
-    const TValue *obj = index2value(C, index);
-    cs_assert(t != NULL);
-    api_check(C, ttisinstance(obj) || ttisfulluserdata(obj),
-                 "expect full userdata or instance");
-    if (ttisinstance(obj))
-        *t = insval(obj)->oclass->methods;
-    else
-        *t = uval(obj)->methods;
-    return obj;
+// TODO: update docs
+CS_API int cs_get_method(cs_State *C, int index) {
+    Table *t = NULL; /* to prevent warnings */
+    TValue *m;
+    const TValue *o;
+    cs_lock(C);
+    api_checknelems(C, 1); /* key */
+    o = index2value(C, index);
+    switch (ttypetag(o)) {
+        case CS_VINSTANCE: {
+            t = insval(o)->oclass->methods;
+            break;
+        }
+        case CS_VUSERDATA: {
+            t = udval(o)->methods;
+            break;
+        }
+        case CS_VIMETHOD: {
+            m = &imval(o)->method;
+            goto unwrap;
+        }
+        case CS_VUMETHOD: {
+            m = &umval(o)->method;
+        unwrap:
+            setobj2s(C, C->sp.p, m);
+            api_inctop(C);
+            cs_unlock(C);
+            return ttype(s2v(C->sp.p - 1));
+        }
+        default: api_check(C, 0, "instance/fulluserdata/bmethod expected");
+    }
+    return aux_getmethod(C, o, t);
 }
 
 
-CS_API int cs_get_method(cs_State *C, int index) {
+// TODO: add docs
+CS_API int cs_get_self(cs_State *C, int index) {
+    int tt;
     const TValue *o;
-    Table *t;
     cs_lock(C);
-    api_checknelems(C, 1); /* key */
-    o = objwithmethods(C, index, &t);
-    return aux_getmethod(C, o, t);
+    o = index2value(C, index);
+    switch (ttypetag(o)) {
+        case CS_VUMETHOD: {
+            tt = CS_T_USERDATA;
+            setudval2s(C, C->sp.p, umval(o)->ud);
+            break;
+        }
+        case CS_VIMETHOD: {
+            tt = CS_T_INSTANCE;
+            setinsval2s(C, C->sp.p, imval(o)->ins);
+            break;
+        }
+        default: {
+            tt = CS_T_NONE;
+            goto nopush;
+        }
+    }
+    api_inctop(C);
+nopush:
+    cs_unlock(C);
+    return tt;
 }
 
 
@@ -1131,17 +1018,10 @@ CS_API int cs_get_supermethod(cs_State *C, int index) {
     cs_lock(C);
     api_checknelems(C, 1); /* key */
     obj = index2value(C, index);
-    api_check(C, ttisinstance(obj), "expect instance");
+    api_check(C, ttisinstance(obj), "instance expected");
     if (insval(obj)->oclass->sclass) /* have superclass? */
         t = insval(obj)->oclass->sclass->methods;
     return aux_getmethod(C, obj, t);
-}
-
-
-c_sinline UserData *getuserdata(cs_State *C, int index) {
-    const TValue *o = index2value(C, index);
-    api_check(C, ttisfulluserdata(o), "expect full userdata");
-    return uval(o);
 }
 
 
@@ -1159,7 +1039,7 @@ CS_API int cs_get_metalist(cs_State *C, int index) {
             ml = classval(obj)->metalist;
             break;
         case CS_T_USERDATA:
-            ml = uval(obj)->metalist;
+            ml = udval(obj)->metalist;
             break;
         default:
             ml = NULL;
@@ -1172,6 +1052,13 @@ CS_API int cs_get_metalist(cs_State *C, int index) {
     }
     cs_unlock(C);
     return res;
+}
+
+
+c_sinline UserData *getuserdata(cs_State *C, int index) {
+    const TValue *o = index2value(C, index);
+    api_check(C, ttisfulluserdata(o), "fulluserdata expected");
+    return udval(o);
 }
 
 
@@ -1210,7 +1097,7 @@ CS_API int cs_get_methods(cs_State *C, int index) {
             break;
         }
         case CS_VUSERDATA: {
-            t = uval(o)->methods;
+            t = udval(o)->methods;
             break;
         }
         default: api_check(C, 0, "class/instance/fulluserdata expected");
@@ -1222,6 +1109,18 @@ CS_API int cs_get_methods(cs_State *C, int index) {
     }
     cs_unlock(C);
     return res;
+}
+
+
+// TODO: add docs
+CS_API void cs_get_fields(cs_State *C, int index) {
+    const TValue *o;
+    cs_lock(C);
+    o = index2value(C, index);
+    api_check(C, ttisinstance(o), "instance expected");
+    settval2s(C, C->sp.p, insval(o)->fields);
+    api_inctop(C);
+    cs_unlock(C);
 }
 
 /* }====================================================================== */
@@ -1354,7 +1253,7 @@ CS_API void cs_set_metalist(cs_State *C, int index) {
         case CS_T_INSTANCE: {
             insval(o)->oclass->metalist = ml;
             if (ml) {
-                /* first look for finalizer for the instance */
+                /* first look for finalizer */
                 csG_checkfin(C, gcoval(o), ml);
                 setclsval(C, &temp, insval(o)->oclass);
                 o = &temp; /* for GC barrier */
@@ -1367,7 +1266,7 @@ CS_API void cs_set_metalist(cs_State *C, int index) {
             break;
         }
         case CS_T_USERDATA: {
-            uval(o)->metalist = ml;
+            udval(o)->metalist = ml;
             if (ml) {
                 csG_checkfin(C, gcoval(o), ml);
                 goto gcbarrier;
@@ -1431,7 +1330,7 @@ CS_API void cs_set_methods(cs_State *C, int index) {
             break;
         }
         case CS_T_USERDATA: {
-            uval(o)->methods = t;
+            udval(o)->methods = t;
             break;
         }
         default: api_check(C, 0, "instance/class/fulluserdata expected");
@@ -1439,6 +1338,27 @@ CS_API void cs_set_methods(cs_State *C, int index) {
     if (t) gcbarrier: csG_objbarrier(C, gcoval(o), t);
 nobarrier:
     C->sp.p--; /* remove table or nil */
+    cs_unlock(C);
+}
+
+
+// TODO: add docs
+CS_API void cs_set_fields(cs_State *C, int index) {
+    const TValue *o;
+    cs_lock(C);
+    api_checknelems(C, 1);
+    o = index2value(C, index);
+    api_check(C, ttisinstance(o), "instance expected");
+    if (ttisnil(s2v(C->sp.p - 1)))
+        insval(o)->fields = NULL;
+    else {
+        Table *t;
+        api_check(C, ttistable(s2v(C->sp.p - 1)), "table expected");
+        t = tval(s2v(C->sp.p - 1));
+        insval(o)->fields = t;
+        csG_objbarrier(C, gcoval(o), t);
+    }
+    C->sp.p--;
     cs_unlock(C);
 }
 
@@ -1474,7 +1394,7 @@ CS_API void cs_set_superclass(cs_State *C, int index) {
             if (sc) {
                 setclsval(C, &temp, insval(o)->oclass);
                 o = &temp; /* for GC barrier */
-                goto gcbarrier;
+                goto barrier;
             }
             goto nobarrier;
         }
@@ -1484,7 +1404,7 @@ CS_API void cs_set_superclass(cs_State *C, int index) {
         }
         default: api_check(C, 0, "class/instance expected");
     }
-    if (sc) gcbarrier: csG_objbarrier(C, gcoval(o), sc);
+    if (sc) barrier: csG_objbarrier(C, gcoval(o), sc);
 nobarrier:
     C->sp.p--; /* remove class or nil */
     cs_unlock(C);
@@ -1561,9 +1481,9 @@ CS_API int cs_pcall(cs_State *C, int nargs, int nresults, int abserrf) {
     api_checknelems(C, nargs+1); /* args + func */
     api_check(C, C->status == CS_STATUS_OK, "can't do calls on non-normal thread");
     checkresults(C, nargs, nresults);
-    if (abserrf < 0) {
+    if (abserrf < 0)
         func = 0;
-    } else {
+    else {
         SPtr o = index2stack(C, abserrf);
         api_check(C, ttisfunction(s2v(o)), "error handler must be a function");
         func = savestack(C, o);
@@ -1724,7 +1644,7 @@ CS_API void cs_warning(cs_State *C, const char *msg, int cont) {
 
 /* {======================================================================
 ** Miscellaneous functions
-** ======================================================================= */
+** ====================================================================== */
 
 CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e) {
     List *l;
@@ -1732,10 +1652,8 @@ CS_API int cs_find_index(cs_State *C, int index, int fi, int s, int e) {
     cs_lock(C);
     api_check(C, !(fi & ~CS_FI_MASK), "invalid 'fi' mask");
     l = getlist(C, index);
-    if (e >= l->len) /* end out of upper bound? */
-        e = l->len - 1; /* end at the last index in use */
-    if (s < 0) /* start is negative? */
-        s = 0; /* start from beginning */
+    e = (e < l->len) ? e : l->len - 1;
+    s = (0 <= s) ? s : 0;
     res = csA_findindex(l, (fi & CS_FI_REV), !(fi & CS_FI_NIL), s, e);
     cs_unlock(C);
     return res;
@@ -1854,6 +1772,12 @@ CS_API void cs_shrinklist(cs_State *C, int index) {
     cs_unlock(C);
 }
 
+
+// TODO: add docs
+CS_API unsigned cs_numuservalues(cs_State *C, int index) {
+    return getuserdata(C, index)->nuv;
+}
+
 /* }====================================================================== */
 
 
@@ -1921,11 +1845,26 @@ static const char *aux_upvalue(TValue *func, int n, TValue **val,
 }
 
 
+/*
+** If object is a bound method, this returns reference to the
+** underlying function object (which again might be the bound method,
+** but at that point we don't care, it's up to the user).
+*/
+static TValue *rawfunc(cs_State *C, int index) {
+    TValue *o = index2value(C, index);
+    if (ttisinstancemethod(o))
+        o = &imval(o)->method;
+    else if (ttisusermethod(o))
+        o = &umval(o)->method;
+    return o;
+}
+
+
 CS_API const char *cs_getupvalue(cs_State *C, int index, int n) {
     const char *name;
     TValue *upval = NULL; /* to avoid warnings */
     cs_lock(C);
-    name = aux_upvalue(unwrapfuncat(C, index), n, &upval, NULL);
+    name = aux_upvalue(rawfunc(C, index), n, &upval, NULL);
     if (name) { /* have upvalue ? */
         setobj2s(C, C->sp.p, upval);
         api_inctop(C);
@@ -1941,7 +1880,7 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
     GCObject *owner = NULL; /* to avoid warnings */
     cs_lock(C);
     api_checknelems(C, 1); /* value */
-    name = aux_upvalue(unwrapfuncat(C, index), n, &upval, &owner);
+    name = aux_upvalue(rawfunc(C, index), n, &upval, &owner);
     if (name) { /* found upvalue ? */
         C->sp.p--;
         setobj(C, upval, s2v(C->sp.p));
@@ -1954,7 +1893,7 @@ CS_API const char *cs_setupvalue(cs_State *C, int index, int n) {
 
 static UpVal **getupvalref(cs_State *C, int index, int n, CSClosure **pf) {
     static const UpVal *const nullup = NULL;
-    const TValue *fi = unwrapfuncat(C, index);
+    const TValue *fi = rawfunc(C, index);
     CSClosure *f;
     api_check(C, ttisCSclosure(fi), "CScript function expected");
     f = clCSval(fi);
@@ -1968,7 +1907,7 @@ static UpVal **getupvalref(cs_State *C, int index, int n, CSClosure **pf) {
 
 // TODO: add docs
 CS_API void *cs_upvalueid(cs_State *C, int index, int n) {
-    const TValue *fi = unwrapfuncat(C, index);
+    const TValue *fi = rawfunc(C, index);
     switch (ttypetag(fi)) {
         case CS_VCSCL: { /* CScript closure */
             return *getupvalref(C, index, n, NULL);

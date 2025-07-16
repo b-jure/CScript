@@ -575,7 +575,7 @@ static int m_randf(cs_State *C) {
 }
 
 
-static const cs_Entry randfuncs[] = {
+static const csL_Entry randfuncs[] = {
     {"srand", m_srand},
     {"rand", m_rand},
     {"randf", m_randf},
@@ -595,7 +595,7 @@ static void set_rand_funcs(cs_State *C) {
 /* }================================================================== */
 
 
-const cs_Entry mathlib[] = {
+const csL_Entry mathlib[] = {
     {"abs", m_abs},
     {"acos", m_acos},
     {"asin", m_asin},

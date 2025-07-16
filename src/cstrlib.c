@@ -1006,7 +1006,7 @@ static int s_cmp(cs_State *C) {
 }
 
 
-static const cs_Entry strlib[] = {
+static const csL_Entry strlib[] = {
     {"split", s_split},
     {"rsplit", s_rsplit},
     {"startswith", s_startswith},

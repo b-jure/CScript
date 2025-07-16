@@ -638,7 +638,7 @@ static int reg_gsub(cs_State *C) {
 
 
 // TODO: add docs
-static const cs_Entry reglib[] = {
+static const csL_Entry reglib[] = {
     {"find", reg_find},
     {"match", reg_match},
     {"gmatch", reg_gmatch},

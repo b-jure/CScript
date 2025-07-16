@@ -749,7 +749,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
 static void *getptr(const TValue *obj) {
     switch (ttypetag(obj)) {
         case CS_VLCF: return cast(void *, cast_sizet(lcfval(obj)));
-        case CS_VUSERDATA: return getuserdatamem(uval(obj));
+        case CS_VUSERDATA: return getuserdatamem(udval(obj));
         case CS_VLIGHTUSERDATA: return pval(obj);
         default: return gcoval(obj);
     }

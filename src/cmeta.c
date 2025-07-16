@@ -24,11 +24,10 @@
 #include "cprotected.h"
 
 
-static const char udataname[] = "userdata";
-
 CSI_DEF const char *const csO_typenames[CSI_TOTALTYPES] = {
-    "no value", "nil", "boolean", "number", udataname, udataname, "string",
-    "list", "table", "function", "class", "instance", "thread",
+    "no value", "nil", "boolean", "number", "userdata", "light userdata",
+    "string", "list", "table", "function", "bound method", "class",
+    "instance", "thread",
     "upvalue", "proto" /* these last cases are used for tests only */
 };
 
@@ -98,7 +97,7 @@ IMethod *csMM_newinsmethod(cs_State *C, Instance *ins, const TValue *method) {
 }
 
 
-int csMM_eqimethod(const IMethod *v1, const IMethod *v2) {
+int csMM_eqim(const IMethod *v1, const IMethod *v2) {
     return (v1 == v2) || /* same instance... */
         (v1->ins == v2->ins && /* ...or equal instances */
          csV_raweq(&v1->method, &v2->method)); /* ...and equal methods */
@@ -114,7 +113,7 @@ UMethod *csMM_newudmethod(cs_State *C, UserData *ud, const TValue *method) {
 }
 
 
-int csMM_equmethod(const UMethod *v1, const UMethod *v2) {
+int csMM_equm(const UMethod *v1, const UMethod *v2) {
     return (v1 == v2) || /* same instance... */
         (v1->ud == v2->ud && /* ...or equal userdata */
          csV_raweq(&v1->method, &v2->method)); /* ...and equal methods */
@@ -127,7 +126,7 @@ const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
     cs_assert(0 <= mm && mm < CS_MT_NUM);
     switch (ttypetag(v)) {
         case CS_VINSTANCE: ml = insval(v)->oclass->metalist; break;
-        case CS_VUSERDATA: ml = uval(v)->metalist; break;
+        case CS_VUSERDATA: ml = udval(v)->metalist; break;
         default: ml = NULL; break;
     }
     return (ml ? csA_getival(C, ml, mm) : &G(C)->nil);
@@ -141,7 +140,7 @@ const TValue *csMM_get(cs_State *C, const TValue *v, int mm) {
 const char *csMM_objtypename(cs_State *C, const TValue *o) {
     List *ml;
     if ((ttisinstance(o) && (ml = insval(o)->oclass->metalist)) ||
-        (ttisfulluserdata(o) && (ml = uval(o)->metalist))) {
+        (ttisfulluserdata(o) && (ml = udval(o)->metalist))) {
         const TValue *v = csA_getival(C, ml, CS_MT_NAME);
         if (ttisstring(v))
             return getstr(strval(v));

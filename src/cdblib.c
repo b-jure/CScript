@@ -433,7 +433,7 @@ static int db_stackinuse(cs_State *C) {
 }
 
 
-static const cs_Entry dblib[] = {
+static const csL_Entry dblib[] = {
     {"debug", db_debug},
     {"getuservalue", db_getuservalue},
     {"gethook", db_gethook},
