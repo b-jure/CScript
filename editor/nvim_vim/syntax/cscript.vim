@@ -204,7 +204,7 @@ syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/
 syn keyword cscriptMetaTag __getidx __setidx __gc __close __call __init
 syn keyword cscriptMetaTag __concat __mod __pow __add __sub __mul __div
 syn keyword cscriptMetaTag __shl __shr __band __bor __bxor __unm __bnot
-syn keyword cscriptMetaTag __eq __lt __le __name
+syn keyword cscriptMetaTag __eq __lt __le __name __metalist
 "-----------------}
 
 "-Basic library---{{
@@ -212,7 +212,8 @@ syn keyword cscriptFunc error assert gc load loadfile runfile getmetalist
 syn keyword cscriptFunc setmetalist getmethods setmethods nextfield pairs
 syn keyword cscriptFunc ipairs pcall xpcall print printf warn len rawequal
 syn keyword cscriptFunc rawget rawset getargs tonum tostr typeof getclass
-syn keyword cscriptFunc getsuper range __G __ENV __VERSION
+syn keyword cscriptFunc clone unwrapmethod getsuper range
+syn keyword cscriptFunc __POSIX __WINDOWS __G __ENV __VERSION
 " metatag table keys
 syn match cscriptFunc /\<__MT>\ze[^\.]/
 syn match cscriptFunc /\<__MT\.getidx\>/
@@ -239,6 +240,7 @@ syn match cscriptFunc /\<__MT\.eq\>/
 syn match cscriptFunc /\<__MT\.lt\>/
 syn match cscriptFunc /\<__MT\.le\>/
 syn match cscriptFunc /\<__MT\.name\>/
+syn match cscriptFunc /\<__MT\.metalist\>/
 syn match cscriptFunc /\<__MT\.tostring\>/
 "-Package library-}{
 syn keyword cscriptFunc import
@@ -363,6 +365,7 @@ syn match cscriptFunc /\<debug\.cstacklimit\>/
 syn match cscriptFunc /\<debug\.maxstack\>/
 "-List library----}{
 syn match cscriptFunc /\<list\.len\>/
+syn match cscriptFunc /\<list\.enumerate\>/
 syn match cscriptFunc /\<list\.insert\>/
 syn match cscriptFunc /\<list\.remove\>/
 syn match cscriptFunc /\<list\.move\>/
@@ -372,7 +375,6 @@ syn match cscriptFunc /\<list\.concat\>/
 syn match cscriptFunc /\<list\.sort\>/
 syn match cscriptFunc /\<list\.shrink\>/
 syn match cscriptFunc /\<list\.isordered\>/
-syn match cscriptFunc /\<list\.enumerate\>/
 syn match cscriptFunc /\<list\.maxindex\>/
 "-UTF8 library----}{
 syn match cscriptFunc /\<utf8\.offset\>/
