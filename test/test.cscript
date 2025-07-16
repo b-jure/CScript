@@ -21,7 +21,7 @@ __opts = {
     timed = true, /* -z (true) | -Z (false) */
     reprint_failed = true, /* -f (true) | -F (false) */
     abort_on_fail = true, /* -a (true) | -A (false) */
-    run_isolated = false, /* -i (true) | -I (false) */
+    run_isolated = true, /* -i (true) | -I (false) */
     enter_debug = false, /* -d (true) | -D (false) */
     testsuites_to_skip = [], /* -e testsuite */
     testsuites_to_run = [], /* non-flag arguments */
@@ -602,7 +602,7 @@ Available options are:
                         After outputting, script returns and no tests are executed.
                         The default {tests_script} can be changed in '__opts' table.
 
-    --gen-dir-tests      Generates tests table from the current directory structure.
+    --gen-dir-tests     Generates tests table from the current directory structure.
                         After generation is complete, script outputs the tests
                         table if '--out-tests' and returns without executing any
                         tests (not portable). Additionally when outputting the table,
@@ -882,9 +882,9 @@ local fn handle_cli_args() {
 */
 local fn print_skipped() {
     if __skipmsg and 0 < skip_msgs.len {
-        print("Skip messages:");
+        print("\nSkip messages:");
         foreach _,msg in ipairs(skip_msgs)
-            print("> " .. msg);
+            print(YELLOW("> ") .. msg);
     }
 }
 

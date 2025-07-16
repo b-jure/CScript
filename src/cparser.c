@@ -1801,11 +1801,6 @@ static void removeliterals(Lexer *lx, int nliterals) {
 }
 
 
-/// FIX: Two bugs observed:
-/// 1. Not popping the switch value when fall-through jump converts to
-/// JMPS in case where switch statement in enclosed in a loop.
-/// 2. Switch expression is now temporary variable, the code that pops
-/// switch expression needs rehaul.
 static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
     FunctionState *fs = lx->fs;
     int ftjmp = NOJMP; /* fall-through jump */

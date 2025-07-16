@@ -132,7 +132,8 @@ typedef void (*cs_Hook)(cs_State *C, cs_Debug *ar);
 #define CS_MT_LT	22
 #define CS_MT_LE	23
 #define CS_MT_NAME	24
-#define CS_MT_NUM	25
+#define CS_MT_METALIST	25
+#define CS_MT_NUM	26
 
 
 /* {======================================================================

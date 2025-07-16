@@ -37,7 +37,7 @@ void csMM_init(cs_State *C) {
         "__getidx", "__setidx", "__gc", "__close", "__call", "__init",
         "__concat", "__add", "__sub", "__mul", "__div", "__idiv", "__mod",
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
-        "__bnot", "__eq", "__lt", "__le", "__name"
+        "__bnot", "__eq", "__lt", "__le", "__name", "__metalist"
     };
     cs_assert(FIRSTMM + CS_MT_NUM <= CS_MAXUBYTE);
     for (int i = 0; i < CS_MT_NUM; i++) {

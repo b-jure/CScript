@@ -689,7 +689,7 @@ assert(typeof(debug.getclist()) == "list");
     }
     local ml = [];
     foreach i in range(0, __MT.n) {
-        if (i == __MT.init)
+        if (i == __MT.init or i == __MT.metalist)
             continue;
         ml[i] = f;
     }
@@ -706,6 +706,7 @@ assert(typeof(debug.getclist()) == "list");
     assert(ml[__MT.bxor] == f); assert(ml[__MT.unm] == f);
     assert(ml[__MT.bnot] == f); assert(ml[__MT.eq] == f);
     assert(ml[__MT.lt] == f); assert(ml[__MT.le] == f);
+    assert(ml[__MT.metalist] == nil);
     assert(__MT.n == ml.len);
 
     local b = getclass(a)();
@@ -728,6 +729,12 @@ assert(typeof(debug.getclist()) == "list");
         return self;
     };
     assert(typeof(getclass(a)()) == "instance");
+
+    /// test __metalist
+    assert(getmetalist(a))[__MT.metalist] = fn(self) { return nil; };
+    assert(typeof(getmetalist(a)) == "function");
+    local st,err = pcall(setmetalist, a, nil);
+    assert(!st and string.find(err, "protected metalist"));
 }
 
 { /// testing for-iterator name
@@ -751,12 +758,9 @@ assert(typeof(debug.getclist()) == "list");
 }
 
 
-{
+/* run only if not running via 'test.cscript' or if running in isolation */
+if !__opts or (__opts and __opts.run_isolated) {
     print("testing traceback sizes");
-
-    local extra = 0;
-    if reg.find(debug.traceback(nil, 0), "test%.cscript")
-        extra = 7; /* @bugprone if 'test.cscript' is changed */
 
     local fn countlines(s) {
         return getargs(1, reg.gsub(s, "\n", ""));
@@ -781,10 +785,11 @@ assert(typeof(debug.getclist()) == "list");
             local rest2 = string.substr(rest, brk);
             assert(countlines(rest1) == 10 and countlines(rest2) == 10);
         } else
-            assert(cl == total - start + 4 + extra);
+            assert(cl == total - start + 4);
     }
 
     foreach d in range(0, 51, 10)
         foreach l in range(d+1)
             checkdeep(d, l);
-}
+} else
+    (Message or print)("skipped traceback size tests");

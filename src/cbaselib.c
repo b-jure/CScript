@@ -443,11 +443,15 @@ static int b_runfile(cs_State *C) {
 }
 
 
+// TODO: update docs
 static int b_getmetalist(cs_State *C) {
     csL_check_any(C, 0);
-    if (!cs_get_metalist(C, 0))
+    if (!cs_get_metalist(C, 0)) {
         cs_push_nil(C);
-    return 1; /* return nil or metalist */
+        return 1; /* no metalist */
+    }
+    csL_get_metaindex(C, 0, CS_MT_METALIST);
+    return 1; /* return either metalist tag value (if present) or metalist */
 }
 
 
@@ -462,6 +466,8 @@ static int b_setmetalist(cs_State *C) {
     expectmeta(C, t, 0);
     t = cs_type(C, 1);
     csL_expect_arg(C, t == CS_T_NIL || t == CS_T_LIST, 1, "nil/list");
+    if (c_unlikely(csL_get_metaindex(C, 0, CS_MT_METALIST) != CS_T_NONE))
+        return csL_error(C, "cannot change a protected metalist");
     cs_setntop(C, 2);
     cs_set_metalist(C, 0);
     return 1;
@@ -1020,10 +1026,10 @@ static void set_compat_flags(cs_State *C) {
 
 /* create __MT table that holds meta tags */
 static void create_meta(cs_State *C) {
-    const char *mm[CS_MT_NUM] = {
+    const char *mm[CS_MT_NUM] = { /* ORDER MT */
         "getidx", "setidx", "gc", "close", "call", "init", "concat", "add",
         "sub", "mul", "div", "idiv", "mod", "pow", "shl", "shr", "band",
-        "bor", "bxor", "unm", "bnot", "eq", "lt", "le", "name"
+        "bor", "bxor", "unm", "bnot", "eq", "lt", "le", "name", "metalist"
     };
     cs_push_table(C, CS_MT_NUM + 1);
     for (int i = 0; i < CS_MT_NUM; i++) {
