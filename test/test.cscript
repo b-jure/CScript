@@ -141,7 +141,7 @@ local stdout, stderr, stdin = io.stdout, io.stderr, io.stdin;
 
 /* store these as locals as tests might change them if they are not ran in isolation */
 local traceback,print,printf,execute = debug.traceback,print,printf,os.execute;
-local fmt,assert,popen,write,flush = string.fmt,assert,io.popen,io.write,io.flush;
+local fmt,assert,popen,flush = string.fmt,assert,io.popen,io.flush;
 local find,runfile,typeof,error,ipairs = reg.find,runfile,typeof,error,ipairs;
 local output,sfind,substr,tostr = io.output,string.find,string.substr,tostr;
 local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock;
@@ -425,7 +425,7 @@ local fn run_test(filepath) {
     local isolated = !__port and __opts.run_isolated;
     if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
-        write(fmt("%sCurrently running '%s'...", SAVEPOS(), YELLOW(filepath)));
+        stdout.write(fmt("%sCurrently running '%s'...", SAVEPOS(), YELLOW(filepath)));
         flush();
     }
     local stat, msg, code;
@@ -436,7 +436,7 @@ local fn run_test(filepath) {
     local c = clock();
     if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
-        write(LOADPOS() .. ERASELINE());
+        stdout.write(LOADPOS() .. ERASELINE());
         flush();
     }
     printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
@@ -967,12 +967,12 @@ local fn display_run_information() {
         info = info .. s; /* add current information to 'info' */
     }
     /* output information to 'stdout' */
-    io.stdout.setvbuf("full");
-    io.stdout.write(YELLOW("> INFO ") .. YELLOW(repeat("=", max-7) .. "\n"));
-    io.stdout.write(info);
-    io.stdout.write(YELLOW("< INFO ") .. YELLOW(repeat("=", max-7) .. "\n\n"));
-    io.stdout.setvbuf("line");
-    io.stdout.flush();
+    stdout.setvbuf("full");
+    stdout.write(YELLOW("> INFO ") .. YELLOW(repeat("=", max-7) .. "\n"));
+    stdout.write(info);
+    stdout.write(YELLOW("< INFO ") .. YELLOW(repeat("=", max-7) .. "\n\n"));
+    stdout.setvbuf("line");
+    stdout.flush();
 }
 
 
@@ -1024,10 +1024,10 @@ local fn set_options() {
             output(out);
             foreach i,arg in ipairs(args) {
                 if i > 0
-                    write("\t");
-                write(tostr(arg));
+                    stdout.write("\t");
+                stdout.write(tostr(arg));
             }
-            write("\n");
+            stdout.write("\n");
             output(oldout);
         };
 
@@ -1055,7 +1055,7 @@ local fn set_options() {
                 j = sfind(fmt, "%");
             }
             str = str .. "\n";
-            write(str);
+            stdout.write(str);
             output(oldout);
         };
     }
