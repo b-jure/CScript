@@ -220,9 +220,8 @@ static int utf8_byteoffset(cs_State *C) {
     } else { /* otherwise push start and final position of utf8 char */
         cs_push_integer(C, posi); /* initial position */
         if ((s[posi] & 0x80) != 0) { /* multi-byte character? */
-            do {
+            while (iscontp(s + posi + 1)) /* skip to final byte */
                 posi++;
-            } while (iscontp(s + posi + 1)); /* skip to final byte */
         }
         /* else one-byte character: final position is the initial one */
         cs_push_integer(C, posi); /* 'posi' now is the final position */

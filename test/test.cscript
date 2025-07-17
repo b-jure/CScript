@@ -74,6 +74,39 @@ local expected_opts = {
 };
 
 
+/*
+** Short description of each option.
+** Kept in a list to preserve ordering.
+*/
+local opts_desc = [
+    ["termcodes", "output ANSI escape codes"],
+    ["warnings", "enable output of warnings"],
+    ["noprint", "replace 'print' and 'printf'"],
+    ["memory", "print memory usage"],
+    ["errors", "print error messages"],
+    ["timed", "time the test execution"],
+    ["reprint_failed", "re-print failed tests"],
+    ["abort_on_fail", "abort test script on failed test"],
+    ["run_isolated", "run each test in isolation"],
+    ["enter_debug", "enter interactive mode"],
+];
+
+
+/* command-line character (including '-') of each option */
+local opts_flags = {
+    termcodes = "-c",
+    warnings = "-w",
+    noprint = "-o",
+    memory = "-m",
+    errors = "-r",
+    timed = "-z",
+    reprint_failed = "-f",
+    abort_on_fail = "-a",
+    run_isolated = "-i",
+    enter_debug = "-d",
+};
+
+
 /* global table for caching tests table */
 __tests = nil;
 
@@ -114,7 +147,7 @@ local output,sfind,substr,tostr = io.output,string.find,string.substr,tostr;
 local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock;
 local tmpname,pairs,gc,rm,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
 local exit,getinfo,enumerate = os.exit,debug.getinfo,list.enumerate;
-local char,dbg = string.char,debug.debug;
+local char,dbg,gmatch,repeat = string.char,debug.debug,reg.gmatch,string.repeat;
 
 
 /* tests should import debug library when needed */
@@ -126,7 +159,7 @@ __C = {};
 
 
 /*
-** Apply terminal code 'c' if 'stdout' is terminal.
+** Apply escape code 'c' if 'stdout' is terminal.
 ** @s - string
 ** @c - string
 */
@@ -561,6 +594,8 @@ Available options are:
 
     -r      Print the error message in case test fails.
 
+    -z      Print how long the test execution took in seconds.
+
     -f      After all tests are finished, re-print failed test names
             (and their error message if '-r').
 
@@ -575,7 +610,7 @@ Available options are:
             In order to leave this mode, enter a line containing only "cont".
 
     All of the options above have the uppercase version which does the opposite
-    (-C, -W, -O, -M, -R, -F, -A, -I and -D).
+    (-C, -W, -O, -M, -R, -Z, -F, -A, -I and -D).
 
     -t test_file        Add a test file {test_file} into the 'cli_tests' testsuite.
                         This testsuite will be the first to run.
@@ -714,7 +749,6 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = true;
             __opts.run_isolated = false;
             __opts.enter_debug = true;
-            __port = true; /* force portability */
             break;
         }
         case "verbose-flags": {
@@ -878,14 +912,67 @@ local fn handle_cli_args() {
 
 
 /*
-** Prints messages of (parts of) skipped tests.
+** Displays messages of (parts of) skipped tests.
 */
-local fn print_skipped() {
-    if __skipmsg and 0 < skip_msgs.len {
-        print("\nSkip messages:");
-        foreach _,msg in ipairs(skip_msgs)
-            print(YELLOW("> ") .. msg);
+local fn display_skipped() {
+    if __skipmsg and (0 < skip_msgs.len or __opts.run_isolated) {
+        if __opts.run_isolated {
+            print("\nNo information on (parts of) skipped tests (if any), " ..
+                  "as tests were ran in isolation ('-i').");
+        } else {
+            print("\nSkip messages:");
+            foreach _,msg in ipairs(skip_msgs)
+                print(YELLOW("> ") .. msg);
+        }
     }
+}
+
+
+/* auxiliary to 'display_run_information' */
+local fn get_maximum_line_length_in_information() {
+    local max = 0;
+    local base_len = len("-  (-x): |\n");
+    foreach _,lst in ipairs(opts_desc) {
+        local k = lst[0];
+        local v = lst[1];
+        local l = base_len + (v and 4 or 5) + len(v);
+        max = max < l and l or max;
+    }
+    return max;
+}
+
+
+/*
+** Before running tests/testsuites, displays information on enabled/disabled
+** options which affect how tests will be run.
+*/
+local fn display_run_information() {
+    local info = "";
+    local max = get_maximum_line_length_in_information();
+    local offset = len("|\n");
+    foreach _,lst in ipairs(opts_desc) {
+        local s = "";
+        local k = lst[0];
+        local v = lst[1];
+        local res = __opts[k] and GREEN("true") or RED("false");
+        s = s .. YELLOW("- ").."("..opts_flags[k]..") "..v..": "..res;
+        local l = len(s);
+        if !__port and __opts.termcodes {
+            l = l - 18; /* length without ANSI escape codes */
+            assert(0 < l, "termcodes not written but options enable it");
+        }
+        l = l + offset; /* do not include 'offset' bytes */
+        s = s .. repeat(" ", max - l); /* add padding */
+        s = s .. YELLOW(" ~\n");
+        info = info .. s; /* add current information to 'info' */
+    }
+    /* output information to 'stdout' */
+    io.stdout.setvbuf("full");
+    io.stdout.write(YELLOW("> INFO ") .. YELLOW(repeat("=", max-7) .. "\n"));
+    io.stdout.write(info);
+    io.stdout.write(YELLOW("< INFO ") .. YELLOW(repeat("=", max-7) .. "\n\n"));
+    io.stdout.setvbuf("line");
+    io.stdout.flush();
 }
 
 
@@ -894,12 +981,13 @@ local fn print_skipped() {
 */
 local fn run_args() {
     verify_opts();
+    display_run_information();
     run_tests("cli_tests", __opts.cli_tests);
     if (__opts.testsuites_to_run.len > 0) /* explicit testsuites? */
         run_testsuites(__opts.tests_script, flatten(__opts.testsuites_to_run));
     else if (__opts.cli_tests.len == 0) /* no explicit testsuites and tests? */
         run_all_testsuites(__opts.tests_script); /* run all from tests script */
-    print_skipped();
+    display_skipped();
     if __opts.reprint_failed { /* reprint failed tests? */
         local n = failed_tests.len;
         if (n > 0) {
