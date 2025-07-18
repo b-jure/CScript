@@ -968,7 +968,7 @@ local fn display_run_information() {
     }
     /* output information to 'stdout' */
     stdout.setvbuf("full");
-    stdout.write(YELLOW("> INFO ") .. YELLOW(repeat("=", max-7) .. "\n"));
+    stdout.write("\n", YELLOW("> INFO ") .. YELLOW(repeat("=", max-7) .. "\n"));
     stdout.write(info);
     stdout.write(YELLOW("< INFO ") .. YELLOW(repeat("=", max-7) .. "\n\n"));
     stdout.setvbuf("line");

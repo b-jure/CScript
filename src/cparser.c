@@ -1378,14 +1378,6 @@ static int dostore(FunctionState *fs, ExpInfo *v, int nvars, int left) {
 }
 
 
-static void adjustvars(Lexer *lx, ExpInfo *e, int nvars, int nexps) {
-    if (nvars != nexps)
-        adjustassign(lx, nvars, nexps, e);
-    else
-        csC_exp2stack(lx->fs, e);
-}
-
-
 static void compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
                                       /*int left, */Binopr op) {
     FunctionState *fs = lx->fs;
@@ -1412,7 +1404,7 @@ static void compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
         nexps += explist(lx, &e);
         adjustassign(lx, nvars, nexps, &e);
     } else if (nexps < nvars) { /* missing expressions? */
-        do {
+        do { /* do 'op' on nil expressions that are missing */
             e = check_exp(lhs, lhs->v);
             initexp(&e2, EXP_NIL, 0);
             csC_prebinary(fs, &e, op, line);
@@ -1450,8 +1442,13 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
             }
             default: { /* regular assign */
                 ExpInfo e = INIT_EXP;
+                int nexps;
                 expectnext(lx, '=');
-                adjustvars(lx, &e, nvars, explist(lx, &e));
+                nexps = explist(lx, &e);
+                if (nvars != nexps)
+                    adjustassign(lx, nvars, nexps, &e);
+                else
+                    csC_exp2stack(lx->fs, &e);
             }
         }
     }
