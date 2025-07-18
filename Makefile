@@ -27,7 +27,7 @@ TO_MAN = cscript.1
 
 default: 	$(PLATFORM)
 
-all:		$(ALL_T)
+all:		clean $(ALL_T) 
 
 o: 		$(ALL_O)
 
@@ -91,7 +91,7 @@ Linux linux: linux-noreadline
 linux-noreadline:
 	$(MAKE) $(ALL) SYSLIBS="-Wl,-E"
 
-linux-readline:
+linux-readline: 	clean
 	$(MAKE) $(ALL) SYSCFLAGS="-DCS_USE_LINUX -DCS_USE_READLINE" SYSLIBS="-Wl,-E -ldl -lreadline"
 
 Darwin macos macosx:

@@ -93,7 +93,7 @@ CSI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
     { FormatIS, 1, 0, 0 }, /* OP_NEWCLASS */
     { FormatIS, 1, 0, 0 }, /* OP_NEWTABLE */
     { FormatIL, 0, 1, 0 }, /* OP_METHOD */
-    { FormatIS, 0, 1, 0 }, /* OP_SETMM */
+    { FormatIS, 0, 1, 0 }, /* OP_SETMT */
     { FormatIS, 0, 0, 0 }, /* OP_MBIN */
     { FormatIL, 0, 0, 1 }, /* OP_ADDK */
     { FormatIL, 0, 0, 1 }, /* OP_SUBK */
@@ -199,7 +199,7 @@ CSI_DEF const c_ubyte csC_opsize[FormatN] = { /* ORDER OPFMT */
 CSI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
 "TRUE", "FALSE", "SUPER", "NIL", "POP", "LOAD", "CONST", "CONSTL",
 "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
-"CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMM", "MBIN", "ADDK",
+"CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMT", "MBIN", "ADDK",
 "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
 "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
 "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
@@ -673,7 +673,7 @@ void csC_methodset(FunctionState *fs, ExpInfo *e) {
 
 void csC_mtset(FunctionState *fs, int mt) {
     cs_assert(0 <= mt && mt < CS_MT_NUM);
-    csC_emitIS(fs, OP_SETMM, mt);
+    csC_emitIS(fs, OP_SETMT, mt);
     freeslots(fs, 1);
 }
 

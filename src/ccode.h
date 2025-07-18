@@ -87,20 +87,20 @@
 ** Binary operations.
 */
 typedef enum { /* ORDER OPR */
-        /* arithmetic operators */
-        OPR_ADD, OPR_SUB, OPR_MUL,
-        OPR_DIV, OPR_IDIV, OPR_MOD, OPR_POW,
-        /* bitwise operators */
-        OPR_SHL, OPR_SHR, OPR_BAND,
-        OPR_BOR, OPR_BXOR,
-        /* concat operator */
-        OPR_CONCAT,
-        /* comparison operators */
-        OPR_NE, OPR_EQ, OPR_LT,
-        OPR_LE, OPR_GT, OPR_GE,
-        /* logical operators */
-        OPR_AND, OPR_OR,
-        OPR_NOBINOPR
+    /* arithmetic operators */
+    OPR_ADD, OPR_SUB, OPR_MUL,
+    OPR_DIV, OPR_IDIV, OPR_MOD, OPR_POW,
+    /* bitwise operators */
+    OPR_SHL, OPR_SHR, OPR_BAND,
+    OPR_BOR, OPR_BXOR,
+    /* concat operator */
+    OPR_CONCAT,
+    /* comparison operators */
+    OPR_NE, OPR_EQ, OPR_LT,
+    OPR_LE, OPR_GT, OPR_GE,
+    /* logical operators */
+    OPR_AND, OPR_OR,
+    OPR_NOBINOPR
 } Binopr;
 
 
@@ -153,7 +153,7 @@ OP_NEWLIST,/*      S          'create and load new array of size 1<<(S-1)'  */
 OP_NEWCLASS,/*     S          'create and load new class of size 1<<(S-1)'  */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
-OP_SETMM,/*        S V1 V2    'V1->metalist[S] = V2'                        */
+OP_SETMT,/*        S V1 V2    'V1->metalist[S] = V2'                        */
 
 OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
 

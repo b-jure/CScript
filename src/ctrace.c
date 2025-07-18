@@ -723,7 +723,7 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 unasmMMBin(C, p, pc);
                 break;
             }
-            case OP_SETMM: {
+            case OP_SETMT: {
                 unasmMM(C, p, pc);
                 break;
             }

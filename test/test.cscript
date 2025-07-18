@@ -1024,10 +1024,10 @@ local fn set_options() {
             output(out);
             foreach i,arg in ipairs(args) {
                 if i > 0
-                    io.output.write("\t");
-                io.output.write(tostr(arg));
+                    io.write("\t");
+                io.write(tostr(arg));
             }
-            io.output.write("\n");
+            io.write("\n");
             output(oldout);
         };
 
@@ -1055,7 +1055,7 @@ local fn set_options() {
                 j = sfind(fmt, "%");
             }
             str = str .. "\n";
-            io.output.write(str);
+            io.write(str);
             output(oldout);
         };
     }

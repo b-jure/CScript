@@ -899,7 +899,13 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
             cls->methods = csH_new(C);
         csH_copykeys(C, cls->methods, scl->methods);
     }
-    cls->metalist = scl->metalist; /* set the metalist */
+    if (scl->metalist) { /* superclass has metalist entries? */
+        if (!cls->metalist) /* class needs a metalist? */
+            cls->metalist = csA_new(C);
+        csA_ensure(C, cls->metalist, scl->metalist->len);
+        for (int i = 0; i < scl->metalist->len; i++)
+            setobj(C, &cls->metalist->arr[i], &scl->metalist->arr[i]);
+    }
     cls->sclass = scl; /* set the superclass */
 }
 
@@ -910,9 +916,10 @@ void csV_inherit(cs_State *C, OClass *cls, OClass *scl) {
 c_sinline void pushclass(cs_State *C, int b) {
     OClass *cls = csMM_newclass(C);
     setclsval2s(C, C->sp.p++, cls);
-    if (b & 0x80) { /* have metamethods? */
+    if (b & 0x80) { /* have metamethod entries? */
+        cs_assert(cls->metalist == NULL);
+        cls->metalist = csA_new(C);
         b &= 0x7F; /* remove flag */
-        cs_assert(0); /* TODO: */
     }
     if (b > 0) /* have methods? */
         cls->methods = csH_newsz(C, log2size1(b));
@@ -1386,7 +1393,7 @@ returning: /* trap already set */
                 sp++;
                 vm_break;
             }
-            vm_case(OP_NEWCLASS) { /* TODO: 'b' 7th bit flag */
+            vm_case(OP_NEWCLASS) {
                 savestate(C);
                 pushclass(C, fetch_s());
                 checkGC(C);
@@ -1411,20 +1418,15 @@ returning: /* trap already set */
                 sp--;
                 vm_break;
             }
-            vm_case(OP_SETMM) {
+            vm_case(OP_SETMT) {
                 TValue *o = peek(1); /* class */
                 TValue *f = peek(0); /* func */
                 List *ml = classval(o)->metalist;
                 int mt; /* metalist index */
                 savestate(C);
+                cs_assert(ml != NULL);
                 mt = fetch_s();
-                cs_assert(0 <= mt && mt < CS_MT_NUM);
-                /* TODO: remove this check (see pushclass) */
-                if (c_unlikely(!ml)) { /* no metalist? */
-                    ml = csA_new(C);
-                    classval(o)->metalist = ml;
-                    checkGC(C);
-                }
+                cs_assert(cast_uint(mt) < CS_MT_NUM);
                 csA_ensureindex(C, ml, mt);
                 csA_fastset(C, ml, mt, f); /* set the entry */
                 sp--;

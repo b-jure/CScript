@@ -256,7 +256,7 @@ static void rehash(cs_State *C, Table *t) {
 
 
 /*
-** Warning: when using this function the caller probably needs to
+** WARNING: when using this function the caller probably needs to
 ** check a GC barrier.
 */
 void csH_newkey(cs_State *C, Table *t, const TValue *key, const TValue *val) {
@@ -483,7 +483,7 @@ const TValue *csH_get(Table *t, const TValue *key) {
 
 
 /*
-** Warning: when using this function the caller probably needs to
+** WARNING: when using this function the caller probably needs to
 ** check a GC barrier.
 */
 void csH_finishset(cs_State *C, Table *t, const TValue *slot,

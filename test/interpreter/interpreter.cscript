@@ -56,11 +56,11 @@ local fn RUN(p, ...) {
 
 
 local fn NoRun(msg, p, ...) {
-  p = reg.gsub(p, "cscript", "\""..progname.."\"", 1);
-  local s = string.fmt(p, ...);
-  s = string.fmt("%s >%s 2>&1", s, out);  /// send output and error to 'out'
-  assert(!os.execute(s));
-  assert(reg.find(getoutput(), msg, 0, true));  /// check error message
+    p = reg.gsub(p, "cscript", "\""..progname.."\"", 1);
+    local s = string.fmt(p, ...);
+    s = string.fmt("%s >%s 2>&1", s, out);  /// send output and error to 'out'
+    assert(!os.execute(s));
+    assert(reg.find(getoutput(), msg, 0, true));  /// check error message
 }
 
 RUN("cscript -v > /dev/null 2>&1");
@@ -476,7 +476,7 @@ NoRun("unknown option '-Ex'", "cscript -Ex");
 NoRun("unknown option '-vv'", "cscript -vv");
 NoRun("unknown option '-iv'", "cscript -iv");
 NoRun("'-e' needs argument", "cscript -e");
-NoRun("syntax error", "cscript -e a");
+NoRun("expected '='", "cscript -e a");
 NoRun("'-l' needs argument", "cscript -l");
 
 

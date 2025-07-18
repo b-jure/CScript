@@ -159,7 +159,7 @@ c_sinline void trylistfield(cs_State *C, List *l, const TValue *k,
 
 
 /*
-** Warning: when using this function the caller probably needs to
+** WARNING: when using this function the caller probably needs to
 ** check a GC barrier.
 */
 void csA_setstr(cs_State *C, List *l, const TValue *k, const TValue *v) {
@@ -178,7 +178,7 @@ void csA_setint(cs_State *C, List *l, const FatValue *k, const TValue *v) {
             csA_ensureindex(C, l, k->i);
             setobj(C, &l->arr[k->i], v);
         }
-    } else /* TODO: remove this branch (wrap as unsigned) */
+    } else /* XXX: remove this branch (wrap as unsigned) */
         csD_listerror(C, k->v, stridx, strneg);
 }
 
@@ -209,7 +209,7 @@ void csA_getint(cs_State *C, List *l, const FatValue *k, TValue *out) {
             setobj(C, out, &l->arr[k->i]);
         } else /* otherwise index out of bounds */
             setnilval(out);
-    } else /* TODO: remove this branch */
+    } else /* XXX: remove this branch */
         csD_listerror(C, k->v, stridx, strneg);
 }
 
