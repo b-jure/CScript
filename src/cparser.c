@@ -1378,39 +1378,50 @@ static int dostore(FunctionState *fs, ExpInfo *v, int nvars, int left) {
 }
 
 
+static void adjustvars(Lexer *lx, ExpInfo *e, int nvars, int nexps) {
+    if (nvars != nexps)
+        adjustassign(lx, nvars, nexps, e);
+    else
+        csC_exp2stack(lx->fs, e);
+}
+
+
 static void compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
                                       /*int left, */Binopr op) {
     FunctionState *fs = lx->fs;
-    ///struct LHS_assign *last = lhs;
     int nexps = 0;
     int line = lx->line;
-    ExpInfo e;
+    ExpInfo e, e2;
     cs_assert(cast_uint(op) <= OPR_CONCAT);
     expectnext(lx, '=');
     while (lhs->prev) /* get first var */
         lhs = lhs->prev;
     do { /* get expressions and 'op' it with variable */
-        ExpInfo e2 = INIT_EXP;
         e = check_exp(lhs, lhs->v); /* save original descriptor for store */
+        voidexp(&e2);
         csC_prebinary(fs, &e, op, line);
         expr(lx, &e2);
         csC_binary(fs, &e, &e2, op, line);
         csC_exp2stack(fs, &e);
         nexps++;
         lhs = lhs->next;
-    } while (check(lx, ',') && nexps < nvars);
+    } while (nexps < nvars && match(lx, ','));
     if (check(lx, ',')) { /* have more expressions? */
         csY_scan(lx); /* skip ',' */
         voidexp(&e);
         nexps += explist(lx, &e);
         adjustassign(lx, nvars, nexps, &e);
+    } else if (nexps < nvars) { /* missing expressions? */
+        do {
+            e = check_exp(lhs, lhs->v);
+            initexp(&e2, EXP_NIL, 0);
+            csC_prebinary(fs, &e, op, line);
+            csC_binary(fs, &e, &e2, op, line);
+            csC_exp2stack(fs, &e);
+            nexps++;
+            lhs = lhs->next;
+        } while (nexps < nvars);
     }
-    ///lhs = last; /* go to last var */
-    ///do { /* do the assign */
-    ///    left += dostore(fs, &lhs->v, nvars, left);
-    ///    lhs = lhs->prev;
-    ///} while (lhs);
-    ///return left;
 }
 
 
@@ -1439,13 +1450,8 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
             }
             default: { /* regular assign */
                 ExpInfo e = INIT_EXP;
-                int nexps;
                 expectnext(lx, '=');
-                nexps = explist(lx, &e);
-                if (nexps != nvars)
-                    adjustassign(lx, nvars, nexps, &e);
-                else
-                    csC_exp2stack(lx->fs, &e);
+                adjustvars(lx, &e, nvars, explist(lx, &e));
             }
         }
     }
