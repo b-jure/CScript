@@ -604,6 +604,7 @@ static void printFunc(const Proto *p) {
 ** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed human readable information
 ** compared to 'csTR_trace' when tracing OpCode and its arguments.
+** > ORDER OP (in case of changes to bytecode) <
 */
 void csTR_disassemble(cs_State *C, const Proto *p) {
     printFunc(p);
@@ -618,9 +619,9 @@ void csTR_disassemble(cs_State *C, const Proto *p) {
                 break;
             }
             case OP_LT: case OP_LE: 
-            case OP_ADD: case OP_SUB: case OP_MUL: case OP_IDIV: case OP_DIV:
-            case OP_MOD: case OP_POW: case OP_BSHL: case OP_BSHR:
-            case OP_BAND: case OP_BOR: case OP_BXOR: {
+            case OP_ADD: case OP_SUB: case OP_MUL: case OP_IDIV:
+            case OP_DIV: case OP_MOD: case OP_POW: case OP_BSHL:
+            case OP_BSHR: case OP_BAND: case OP_BOR: case OP_BXOR: {
                 unasmBinOp(p, pc);
                 break;
             }

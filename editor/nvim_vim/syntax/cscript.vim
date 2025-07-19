@@ -143,60 +143,51 @@ syn keyword cscriptSuper super
 
 "-Operators-------{
 syn keyword cscriptOperator and or
-" greater than
-syn match cscriptSymbolOperator />\ze\%([^>=]\|\n\)/
-" shift right
-syn match cscriptSymbolOperator />>\ze\%([^>=]\|\n\)/
-" less than
-syn match cscriptSymbolOperator /<\ze\%([^<=]\|\n\)/
-" shift left
-syn match cscriptSymbolOperator /<<\ze\%([^<=]\|\n\)/
-" float division
-syn match cscriptSymbolOperator /\/\ze\%([^/=\*]\|\n\)/
-" integer division
-syn match cscriptSymbolOperator /\/\/\ze\%([^/=\*]\|\n\)/
-" multiplication
-syn match cscriptSymbolOperator /\*\ze\%([^\*=]\|\n\)/
-" exponentiation
-syn match cscriptSymbolOperator /\*\*\ze\%([^\*=]\|\n\)/
-" bitwise and
-syn match cscriptSymbolOperator /&\ze\%([^&=]\|\n\)/
-" bitwise or
-syn match cscriptSymbolOperator /|\ze\%([^|=]\|\n\)/
-" bitwise xor
-syn match cscriptSymbolOperator /\^\ze\%([^\^=]\|\n\)/
-" bitwise not
-syn match cscriptSymbolOperator /\~\+\ze\%([^=]\|\n\)/
-" logical not
-syn match cscriptSymbolOperator /!\+\ze\%([^=]\|\n\)/
-" modulo
-syn match cscriptSymbolOperator /%\ze\%([^%=]\|\n\)/
-" addition
-syn match cscriptSymbolOperator /+\ze\%([^+=]\|\n\)/
-" subtraction
-syn match cscriptSymbolOperator /-\ze\%([^-=]\|\n\)/
-" unary minus
-syn match cscriptSymbolOperator /-\+\ze\%([^=]\|\n\)/
-" assignment
-syn match cscriptSymbolOperator /=\ze\%([^=]\|\n\)/
-" equal
-syn match cscriptSymbolOperator /==\ze\%([^=]\|\n\)/
-" not equal
-syn match cscriptSymbolOperator /!=\ze\%([^=]\|\n\)/
-" less equal
-syn match cscriptSymbolOperator /<=\ze\%([^=]\|\n\)/
-" greater equal
-syn match cscriptSymbolOperator />=\ze\%([^=]\|\n\)/
-" concatenation
-syn match cscriptSymbolOperator /\.\.\ze\%([^\.=]\|\n\)/
-" varargs
-syn match cscriptSymbolOperator /\.\.\.\ze\%([^\.=]\|\n\)/
+syn match cscriptSymbolOperator />\ze\%([^>=,]\|\n\)/
+syn match cscriptSymbolOperator />>\ze\%([^>=,]\|\n\)/
+syn match cscriptSymbolOperator /<\ze\%([^<=,]\|\n\)/
+syn match cscriptSymbolOperator /<<\ze\%([^<=,]\|\n\)/
+syn match cscriptSymbolOperator /\/\ze\%([^/=\*,]\|\n\)/
+syn match cscriptSymbolOperator /\/\/\ze\%([^/=\*,]\|\n\)/
+syn match cscriptSymbolOperator /\*\ze\%([^\*=,]\|\n\)/
+syn match cscriptSymbolOperator /\*\*\ze\%([^\*=,]\|\n\)/
+syn match cscriptSymbolOperator /&\ze\%([^&=,]\|\n\)/
+syn match cscriptSymbolOperator /|\ze\%([^|=,]\|\n\)/
+syn match cscriptSymbolOperator /\^\ze\%([^\^=,]\|\n\)/
+syn match cscriptSymbolOperator /\~\+\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /!\+\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /%\ze\%([^%=,]\|\n\)/
+syn match cscriptSymbolOperator /+\ze\%([^+=,]\|\n\)/
+syn match cscriptSymbolOperator /-\ze\%([^-=,]\|\n\)/
+syn match cscriptSymbolOperator /-\+\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /=\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /==\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /!=\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /<=\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator />=\ze\%([^=,]\|\n\)/
+syn match cscriptSymbolOperator /\.\.\ze\%([^\.=,]\|\n\)/
+syn match cscriptSymbolOperator /\.\.\.\ze\%([^\.=,]\|\n\)/
+syn match cscriptSymbolOperator /,/
+" compound assignments
+syn match cscriptSymbolOperator /+=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /-=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /*=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /%=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /\/=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /&=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /|=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /\/\/=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /\*\*=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /<<=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator />>=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /\.\.=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /++\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
+syn match cscriptSymbolOperator /--\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
 "-----------------}
 
 "-Other----------_{
 syn match cscriptFunctionCall /\k\+\_s*(\@=/
 syn match cscriptSemicolon /;/
-syn match cscriptComma /,/
 syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/
 "-----------------}
 

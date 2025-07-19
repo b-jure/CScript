@@ -389,6 +389,8 @@ CSI_FUNC void csC_patchtohere(FunctionState *fs, int pc);
 CSI_FUNC void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line);
 CSI_FUNC void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
                          Binopr opr, int line);
+CSI_FUNC void csC_binimmediate(FunctionState *fs, ExpInfo *e1, int imm,
+                                                  Binopr opr, int line);
 CSI_FUNC void csC_finish(FunctionState *fs);
 
 #endif

@@ -6,14 +6,14 @@ if __port return;
 
 assert(os.execute()); /// machine has a system command
 
-local cliargs = cliargs or __G.__CLIARGS;
-local args = args or __G.__ARGS;
+local cliargs = cliargs or __G.__cliargs;
+local args = args or __G.__args;
 
 local prog = os.tmpname();
 local otherprog = os.tmpname();
 local out = os.tmpname();
 
-local progname = cliargs[0] or __G.__PROG;
+local progname = cliargs[0] or __G.__prog;
 print("progname: "..progname);
 
 local prepfile = fn(s, mod, p) {
@@ -481,7 +481,7 @@ NoRun("'-l' needs argument", "cscript -l");
 
 
 {
-    local Cwarn = (__C and __C.warn) or warn;
+    local Cwarn = (__c and __c.warn) or warn;
     /// 'warn' must get at least one argument
     local st, msg = pcall(Cwarn);
     assert(string.find(msg, "string expected"));

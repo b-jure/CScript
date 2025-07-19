@@ -1,5 +1,477 @@
 /// Test compound assignments
 
-local x, y, z = 5, 6.5, 0xff;
-x,y,z += 1,1,1,print;
-assert(x == 6 and y == 7.5 and z == 0x100);
+local fn results() {
+    return 5, 2, 1, 8, 4;
+}
+
+local fn strresults() {
+    return "5", "2", "1", "8", "4";
+}
+
+local fn checkfail(msg, op, x, y, z, ...) {
+    local l = [...];
+    local s = string.fmt("x=%s;y=%s;z=%s;x,y,z", x, y, z);
+    s ..= op;
+    l.len = (l.len < 3) and 3 or l.len;
+    foreach i,v in ipairs(l)
+        s ..= tostr(v) .. (i == l.len - 1 and ";" or ",");
+    local f = assert(load(s, ""));
+    local st, err = pcall(f);
+    assert(!st and string.find(err, msg));
+}
+
+local fn checkerror(msg, f, ...) {
+    local st, err = pcall(f, ...);
+    assert(!st and string.find(err, msg));
+}
+
+assert(__G.x == nil and __G.y == nil and __G.z == nil);
+
+{ /// addition
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z += 1,2,3,print;
+    assert(x == 6 and y == 8.5 and z == 0x102);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z += 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 15 and y == 54.5 and z == 324);
+    }
+    x,y,z = 0,0,0;
+    x,y,z += results();
+    assert(x == 5 and y == 2 and z == 1);
+    x,y,z += results();
+    assert(x == 10 and y == 4 and z == 2);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g += results();
+    assert(x == 13 and y == 7 and z == 5 and g == 17);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z += 1, 2, 3;
+    assert(x.x == 6 and x.y == 4 and x.z == 6);
+    x.x,x.y,x.z += x.x, x.y, x.z;
+    assert(x.x == 12 and x.y == 8 and x.z == 12);
+    checkfail("on a nil", "+=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "+=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "+=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z += 2,3,4;
+    assert(x.t.x == 7 and x.t.y == 9 and x.t.z == 11);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// subtraction
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z -= 1,2,3,print;
+    assert(x == 4 and y == 4.5 and z == 0xfc);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z -= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 5 and y == 50.5 and z == 316);
+    }
+    x,y,z = 0,0,0;
+    x,y,z -= results();
+    assert(x == -5 and y == -2 and z == -1);
+    x,y,z -= results();
+    assert(x == -10 and y == -4 and z == -2);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g -= results();
+    assert(x == 3 and y == 3 and z == 3 and g == 1);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z -= 1, 2, 3;
+    assert(x.x == 4 and x.y == 0 and x.z == 0);
+    x.x,x.y,x.z -= x.x, x.y, x.z;
+    assert(x.x == 0 and x.y == 0 and x.z == 0);
+    checkfail("on a nil", "-=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "-=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "-=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z -= 2,3,4;
+    assert(x.t.x == 3 and x.t.y == 3 and x.t.z == 3);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// multiplication
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z *= 1,2,3,print;
+    assert(x == 5 and y == 6.5*2 and z == 765);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z *= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 50 and y == 105 and z == 1280);
+    }
+    x,y,z = 0,0,0;
+    x,y,z *= results();
+    assert(x == 0 and y == 0 and z == 0);
+    x,y,z *= results();
+    assert(x == 0 and y == 0 and z == 0);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g *= results();
+    assert(x == 40 and y == 10 and z == 4 and g == 72);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z *= 1, 2, 3;
+    assert(x.x == 5 and x.y == 4 and x.z == 9);
+    x.x,x.y,x.z *= x.x, x.y, x.z;
+    assert(x.x == 25 and x.y == 16 and x.z == 81);
+    checkfail("on a nil", "*=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "*=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "*=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z *= 2,3,4;
+    assert(x.t.x == 10 and x.t.y == 18 and x.t.z == 28);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// mod
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z %= 1,2,3,print;
+    assert(x == 0 and y == 0.5 and z == 0);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z %= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 0 and y == 0.5 and z == 0);
+    }
+    x,y,z = 2,3,0.5;
+    x,y,z %= results();
+    assert(x == 2 and y == 1 and z == 0.5);
+    x,y,z %= results();
+    assert(x == 2 and y == 1 and z == 0.5);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g %= results();
+    assert(x == 3 and y == 1 and z == 0 and g == 1);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z %= 1, 2, 3;
+    assert(x.x == 0 and x.y == 0 and x.z == 0);
+    x.x, x.y, x.z = 5.2, 3.6, 2; /// avoid 'n%0'
+    x.x,x.y,x.z %= x.x, x.y, x.z;
+    assert(x.x == 0 and x.y == 0 and x.z == 0);
+    checkfail("'n%0'", "%=", x.x, x.y, x.z, 3, 2, 0);
+    checkfail("on a nil", "%=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "%=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "%=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z %= 2,3,4;
+    assert(x.t.x == 1 and x.t.y == 0 and x.t.z == 3);
+    assert(x and y and z and g and checkfail and results);
+
+}
+{ /// division
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z /= 1,2,3,print;
+    assert(x == 5 and y == 3.25 and z == 85);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z /= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 2 and y == 26.25 and z == 80);
+    }
+    x,y,z = 2,3,0.5;
+    x,y,z /= results();
+    assert(x == 0.4 and y == 1.5 and z == 0.5);
+    x,y,z /= results();
+    assert(x == 0.08 and y == 0.75 and z == 0.5);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g /= results();
+    assert(x == 1.6 and y == 2.5 and z == 4 and g == 1.125);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z /= 1, 2, 3;
+    assert(x.x == 5 and x.y == 1 and x.z == 1);
+    x.x,x.y,x.z /= x.x, x.y, x.z;
+    assert(x.x == 1 and x.y == 1 and x.z == 1);
+    checkfail("on a nil", "/=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "/=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "/=", x.x, x.y, x.z, nil, nil, nil);
+    x.x,x.y,x.z /= 0,0,0;
+    assert(x.x == inf and x.y == inf and x.z == inf);
+    x.x,x.y,x.z = -5,-2,-3;
+    x.x,x.y,x.z /= 0,0,0;
+    assert(x.x == -inf and x.y == -inf and x.z == -inf);
+    x.x,x.y,x.z = 0,0,0;
+    x.x,x.y,x.z /= x.x,x.y,x.z,x.v,nil,15;
+    assert(x.x != x.x and x.y != x.y and x.z != x.z);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z /= 2,3,4;
+    assert(x.t.x == 2.5 and x.t.y == 2 and x.t.z == 1.75);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// bitwise and
+    x, y, z = 5, 6, 0xff;
+    x,y,z &= 1,2,3,print;
+    assert(x == 1 and y == 2 and z == 3);
+    {
+        local x, y, z = 10, 52, 320, 16;
+        x,y,z &= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 0 and y == 0 and z == 0);
+    }
+    x,y,z = 2,3,5;
+    x,y,z &= results();
+    assert(x == 0 and y == 2 and z == 1);
+    x,y,z &= results();
+    assert(x == 0 and y == 2 and z == 1);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g &= results();
+    assert(x == 0 and y == 0 and z == 0 and g == 8);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z &= 1, 2, 3;
+    assert(x.x == 1 and x.y == 2 and x.z == 3);
+    x.x,x.y,x.z &= x.x, x.y, x.z;
+    assert(x.x == 1 and x.y == 2 and x.z == 3);
+    checkfail("on a nil", "&=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "&=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "&=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z &= 2,3,4;
+    assert(x.t.x == 0 and x.t.y == 2 and x.t.z == 4);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// bitwise or
+    x, y, z = 5, 6, 0xff;
+    x,y,z |= 1,2,3,print;
+    assert(x == 5 and y == 6 and z == 255);
+    {
+        local x, y, z = 10, 52, 320, 16;
+        x,y,z |= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 15 and y == 54 and z == 324);
+    }
+    x,y,z = 0,0,0;
+    x,y,z |= results();
+    assert(x == 5 and y == 2 and z == 1);
+    x,y,z |= results();
+    assert(x == 5 and y == 2 and z == 1);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g |= results();
+    assert(x == 13 and y == 7 and z == 5 and g == 9);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z |= 1, 2, 3;
+    assert(x.x == 5 and x.y == 2 and x.z == 3);
+    x.x,x.y,x.z |= x.x, x.y, x.z;
+    assert(x.x == 5 and x.y == 2 and x.z == 3);
+    checkfail("on a nil", "|=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "|=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "|=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z |= 2,3,4;
+    assert(x.t.x == 7 and x.t.y == 7 and x.t.z == 7);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// integer division
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z //= 1,2,3,print;
+    assert(x == 5 and y == 3 and z == 85);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z //= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 2 and y == 26 and z == 80);
+    }
+    x,y,z = 2,3,0.5;
+    x,y,z //= results();
+    assert(x == 0 and y == 1 and z == 0);
+    x,y,z //= results();
+    assert(x == 0 and y == 0 and z == 0);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g //= results();
+    assert(x == 1 and y == 2 and z == 4 and g == 1);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z //= 1, 2, 3;
+    assert(x.x == 5 and x.y == 1 and x.z == 1);
+    x.x,x.y,x.z //= x.x, x.y, x.z;
+    assert(x.x == 1 and x.y == 1 and x.z == 1);
+    checkfail("on a nil", "//=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "//=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "//=", x.x, x.y, x.z, nil, nil, nil);
+    checkerror("divide by zero", fn() {x.x,x.y,x.z//=0,0,0;});
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z //= 2,3,4;
+    assert(x.t.x == 2 and x.t.y == 2 and x.t.z == 1);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// exponentiation
+    x, y, z = 5, 6.5, 0xff;
+    x,y,z **= 1,2,3,print;
+    assert(x == 5 and y == 42.25 and z == 16_581_375);
+    {
+        local x, y, z = 10, 52.5, 320, 16;
+        x,y,z **= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 100_000 and y == 2756.25 and z == 10_485_760_000);
+    }
+    x,y,z = 0,0,0;
+    x,y,z **= results();
+    assert(x == 0 and y == 0 and z == 0);
+    x,y,z **= results();
+    assert(x == 0 and y == 0 and z == 0);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g **= results();
+    assert(x == 32768 and y == 25 and z == 4 and g == 43_046_721);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z **= 1, 2, 3;
+    assert(x.x == 5 and x.y == 4 and x.z == 27);
+    x.x,x.y,x.z **= x.x, x.y, x.z;
+    assert(x.x == 3125 and x.y == 256 and x.z == 27**27);
+    checkfail("on a nil", "**=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "**=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "**=", x.x, x.y, x.z, nil, nil, nil);
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z **= 2,3,4;
+    assert(x.t.x == 25 and x.t.y == 216 and x.t.z == 2401);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// left shift
+    x, y, z = 5, 6, 0xff;
+    x,y,z <<= 1,2,3,print;
+    assert(x == 10 and y == 24 and z == 2040);
+    {
+        local x, y, z = 10, 52, 320, 16;
+        x,y,z <<= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 320 and y == 208 and z == 5120);
+    }
+    x,y,z = 1,1,1;
+    x,y,z <<= results();
+    assert(x == 32 and y == 4 and z == 2);
+    x,y,z <<= results();
+    assert(x == 1024 and y == 16 and z == 4);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g <<= results();
+    assert(x == 256 and y == 20 and z == 8 and g == 2304);
+    x = {};
+    x.x,x.y,x.z = 5, 2, 3;
+    x.x,x.y,x.z <<= 1, 2, 3;
+    assert(x.x == 10 and x.y == 8 and x.z == 24);
+    x.x,x.y,x.z <<= x.x, x.y, x.z;
+    assert(x.x == 10_240 and x.y == 2048 and x.z == 402_653_184);
+    checkfail("on a nil", "<<=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", "<<=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", "<<=", x.x, x.y, x.z, nil, nil, nil);
+    checkerror("integer representation", fn(){x.x,x.y,x.z<<=3,2,3.2;});
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 5,6,7;
+    x.t.x,x.t.y,x.t.z <<= 2,3,4;
+    assert(x.t.x == 20 and x.t.y == 48 and x.t.z == 112);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// right shift
+    x, y, z = 5, 6, 0xff;
+    x,y,z >>= 1,2,3,print;
+    assert(x == 2 and y == 1 and z == 31);
+    {
+        local x, y, z = 10, 52, 320, 16;
+        x,y,z >>= 5, 2, 4, 15, 22, 33, 7;
+        assert(x == 0 and y == 13 and z == 20);
+    }
+    x,y,z = 100,100,100;
+    x,y,z >>= results();
+    assert(x == 3 and y == 25 and z == 50);
+    x,y,z >>= results();
+    assert(x == 0 and y == 6 and z == 25);
+    local x,y,z,g = 8, 5, 4, 9, 100;
+    x,y,z,g >>= results();
+    assert(x == 0 and y == 1 and z == 2 and g == 0);
+    x = {};
+    x.x,x.y,x.z = 5, 16, 32;
+    x.x,x.y,x.z >>= 1, 2, 3;
+    assert(x.x == 2 and x.y == 4 and x.z == 4);
+    x.x,x.y,x.z >>= x.x, x.y, x.z;
+    assert(x.x == 0 and x.y == 0 and x.z == 0);
+    checkfail("on a nil", ">>=", x.x, x.y, x.z, 3, 2, nil);
+    checkfail("on a nil", ">>=", x.x, x.y, x.z, 3, nil, nil);
+    checkfail("on a nil", ">>=", x.x, x.y, x.z, nil, nil, nil);
+    checkerror("integer representation", fn(){x.x,x.y,x.z>>=3,2,3.2;});
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = 52,63,78;
+    x.t.x,x.t.y,x.t.z >>= 2,3,4;
+    assert(x.t.x == 13 and x.t.y == 7 and x.t.z == 4);
+    assert(x and y and z and g and checkfail and results);
+}
+{ /// concatenation
+    x, y, z = "ok", "ko", "oo";
+    x,y,z ..= y,z,"ok",print;
+    assert(x == "okko" and y == "kooo" and z == "oook");
+    x,y,z = "ok", "ko", "oo";
+    z,y,x ..= y,z,"ok";
+    assert(z == "ooko" and y == "kooo" and x == "okok");
+    {
+        local x, y, z = "10", "52", "320", "16";
+        x,y,z ..= "5", "2", "4", 15, "22", 33, 7;
+        assert(x == "105" and y == "522" and z == "3204");
+    }
+    x,y,z = "100","100","100";
+    x,y,z ..= strresults();
+    assert(x == "1005" and y == "1002" and z == "1001");
+    x,y,z ..= strresults();
+    assert(x == "10055" and y == "10022" and z == "10011");
+    local x,y,z,g = "8", "5", "4", "9", "100";
+    x,y,z,g ..= strresults();
+    assert(x == "85" and y == "52" and z == "41" and g == "98");
+    x = {};
+    x.x,x.y,x.z = "5", "16", "32";
+    x.x,x.y,x.z ..= "1", "2", "3";
+    assert(x.x == "51" and x.y == "162" and x.z == "323");
+    x.x,x.y,x.z ..= x.x, x.y, x.z;
+    assert(x.x == "5151" and x.y == "162162" and x.z == "323323");
+    checkerror("concatenate a nil", fn(){x.x,x.y,x.z..="a","b",nil;});
+    checkerror("concatenate a number", fn(){x.x,x.y,x.z..="nil",5,"ok";});
+
+    x.t = {};
+    x.t.x,x.t.y,x.t.z = "52","63","78";
+    x.t.x,x.t.y,x.t.z ..= "2","3","4";
+    assert(x.t.x == "522" and x.t.y == "633" and x.t.z == "784");
+    assert(x and y and z and g and checkfail and strresults);
+}
+
+{ /* ++ */
+    x,y,z = 5,2.5,3;
+    x++; y++; z++;
+    assert(x == 6 and y == 3.5 and z == 4);
+    x = {};
+    x.x,x.y,x.z = 5,7.8,8;
+    x.x++; x.y++; x.z++;
+    assert(x.x == 6 and x.y == 8.8 and x.z == 9);
+    x.x,x.y,x.z = results();
+    x.x++; x.y++; x.z++;
+    assert(x.x == 6 and x.y == 3 and x.z == 2);
+    x.z = -1; x.z++;
+    assert(x.z == 0);
+    local st, err = load("x=1;y=2;x,y++;");
+    assert(!st and string.find(err, "expected '='"));
+}
+
+{ /* -- */
+    x,y,z = 5,2.5,3;
+    x--; y--; z--;
+    assert(x == 4 and y == 1.5 and z == 2);
+    x = {};
+    x.x,x.y,x.z = 5,7.8,8;
+    x.x--; x.y--; x.z--;
+    assert(x.x == 4 and x.y == 6.8 and x.z == 7);
+    x.x,x.y,x.z = results();
+    x.x--; x.y--; x.z--;
+    assert(x.x == 4 and x.y == 1 and x.z == 0);
+    x.z--;
+    assert(x.z == -1);
+    local st, err = load("x=1;y=2;x,y--;");
+    assert(!st and string.find(err, "expected '='"));
+}
+
+__G.x, __G.y, __G.z = nil;

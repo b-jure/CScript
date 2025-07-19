@@ -887,7 +887,7 @@ c_noret csD_binoperror(cs_State *C, const TValue *v1,
     switch (mm) {
         case CS_MT_BAND: case CS_MT_BOR: case CS_MT_BXOR:
         case CS_MT_BSHL: case CS_MT_BSHR: case CS_MT_BNOT: {
-            if (ttisnum(v1))
+            if (ttisnum(v1) && ttisnum(v2))
                 csD_tointerror(C, v1, v2);
             else
                 csD_opinterror(C, v1, v2, "perform bitwise operation on");

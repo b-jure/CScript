@@ -21,7 +21,7 @@ local fn test(s, l, p) {    /// this must be line 14
     assert(list.len(l) == 0);
 }
 
-local Cprint = (__C and __C.print) or print;
+local Cprint = (__c and __c.print) or print;
 
 { /// test basic cases for 'getinfo'
     assert(!pcall(debug.getinfo, Cprint, "X"));  /// invalid option

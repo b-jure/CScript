@@ -206,10 +206,11 @@ CSI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
 "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
 "NOT", "JMP", "JMPS", "TEST", "TESTPOP", "CALL", "CLOSE",
-"TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST", "SETPROPERTY",
-"GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR", "SETINDEXSTR",
-"GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL", "GETSUP",
-"GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL", "FORLOOP", "RET",
+"TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST",
+"SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
+"SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL",
+"GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
+"FORLOOP", "RET",
 };
 
 
@@ -1530,6 +1531,16 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     e1->u.info = csC_emitIL(fs, op, (imm < 0 ? imml(imm) : imm));
     e1->et = EXP_FINEXPR;
     csC_fixline(fs, line);
+}
+
+
+void csC_binimmediate(FunctionState *fs, ExpInfo *e1, int imm, Binopr opr,
+                      int line) {
+    ExpInfo e2;
+    e2.et = EXP_INT;
+    e2.u.i = (cs_Integer)imm;
+    cs_assert(isIMM(imm) || isIMML(imm));
+    codebinI(fs, e1, &e2, opr, line);
 }
 
 

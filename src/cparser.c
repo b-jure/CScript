@@ -1378,46 +1378,66 @@ static int dostore(FunctionState *fs, ExpInfo *v, int nvars, int left) {
 }
 
 
-static void compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
+static int compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
                                       /*int left, */Binopr op) {
     FunctionState *fs = lx->fs;
     int nexps = 0;
     int line = lx->line;
+    int first = fs->sp;
+    int left = 0;
+    int temp = nvars;
     ExpInfo e, e2;
     cs_assert(cast_uint(op) <= OPR_CONCAT);
     expectnext(lx, '=');
-    while (lhs->prev) /* get first var */
-        lhs = lhs->prev;
-    do { /* get expressions and 'op' it with variable */
-        e = check_exp(lhs, lhs->v); /* save original descriptor for store */
-        voidexp(&e2);
-        csC_prebinary(fs, &e, op, line);
-        expr(lx, &e2);
-        csC_binary(fs, &e, &e2, op, line);
-        csC_exp2stack(fs, &e);
-        nexps++;
-        lhs = lhs->next;
-    } while (nexps < nvars && match(lx, ','));
-    if (check(lx, ',')) { /* have more expressions? */
-        csY_scan(lx); /* skip ',' */
-        voidexp(&e);
-        nexps += explist(lx, &e);
+    nexps = explist(lx, &e);
+    if (nvars != nexps)
         adjustassign(lx, nvars, nexps, &e);
-    } else if (nexps < nvars) { /* missing expressions? */
-        do { /* do 'op' on nil expressions that are missing */
-            e = check_exp(lhs, lhs->v);
-            initexp(&e2, EXP_NIL, 0);
-            csC_prebinary(fs, &e, op, line);
-            csC_binary(fs, &e, &e2, op, line);
-            csC_exp2stack(fs, &e);
-            nexps++;
-            lhs = lhs->next;
-        } while (nexps < nvars);
-    }
+    else
+        csC_exp2stack(lx->fs, &e);
+    initexp(&e2, EXP_FINEXPR, 0); /* set as finalized (on stack) */
+    do { /* do 'op' and store */
+        e = check_exp(lhs != NULL, lhs->v);
+        cs_assert(eisvar(&e));
+        if (eisindexed(&e))
+            csC_load(fs, first-temp);
+        csC_exp2stack(fs, &e);
+        csC_load(fs, first+temp-1);
+        csC_binary(fs, &e, &e2, op, line);
+        left += dostore(fs, &lhs->v, temp+1, left+nvars-1);
+        lhs = lhs->prev;
+    } while (--temp);
+    csC_pop(fs, nvars); /* remove rhs expressions */
+    return left;
+    ///do { /* get expressions and 'op' it with variable */
+    ///    e = check_exp(lhs, lhs->v); /* save original descriptor for store */
+    ///    voidexp(&e2);
+    ///    csC_prebinary(fs, &e, op, line);
+    ///    expr(lx, &e2);
+    ///    csC_binary(fs, &e, &e2, op, line);
+    ///    csC_exp2stack(fs, &e);
+    ///    nexps++;
+    ///    lhs = lhs->next;
+    ///} while (nexps < nvars && match(lx, ','));
+    ///if (check(lx, ',')) { /* have more expressions? */
+    ///    csY_scan(lx); /* skip ',' */
+    ///    voidexp(&e);
+    ///    nexps += explist(lx, &e);
+    ///    adjustassign(lx, nvars, nexps, &e);
+    ///} else if (nexps < nvars) { /* missing expressions? */
+    ///    do { /* do 'op' on nil expressions that are missing */
+    ///        e = check_exp(lhs, lhs->v);
+    ///        initexp(&e2, EXP_NIL, 0);
+    ///        csC_prebinary(fs, &e, op, line);
+    ///        csC_binary(fs, &e, &e2, op, line);
+    ///        csC_exp2stack(fs, &e);
+    ///        nexps++;
+    ///        lhs = lhs->next;
+    ///    } while (nexps < nvars);
+    ///}
 }
 
 
-static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
+static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars, int *comp) {
     int left = 0; /* number of values left in the stack after assignment */
     expect_cond(lx, eisvar(&lhs->v), "expect variable");
     checkreadonly(lx, &lhs->v);
@@ -1427,18 +1447,18 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
         lhs->next = &var; /* chain current var into previous var */
         suffixedexp(lx, &var.v);
         enterCstack(lx); /* control recursion depth */
-        left = assign(lx, &var, nvars + 1);
+        left = assign(lx, &var, nvars + 1, comp);
         leaveCstack(lx);
     } else { /* right side of assignment */
         int tk = lx->t.tk;
         switch (tk) {
             case '+': case '-': case '*': case '%':
-            case '&': case '|': case TK_IDIV: case TK_POW:
-            case TK_SHL: case TK_SHR: case TK_CONCAT: {
+            case '/': case '&': case '|': case TK_IDIV:
+            case TK_POW: case TK_SHL: case TK_SHR: case TK_CONCAT: {
                 Binopr op = getbinopr(tk);
                 csY_scan(lx); /* skip operator */
-                compound_assign(lx, lhs, nvars, op);
-                break;
+                *comp = 1; /* indicate this is compound assignment */
+                return compound_assign(lx, lhs, nvars, op);
             }
             default: { /* regular assign */
                 ExpInfo e = INIT_EXP;
@@ -1452,7 +1472,7 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
             }
         }
     }
-    return left + dostore(lx->fs, &lhs->v, nvars, left);
+    return *comp ? left : left + dostore(lx->fs, &lhs->v, nvars, left);
 }
 
 
@@ -1460,14 +1480,12 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars) {
 static int ppmm(Lexer *lx, ExpInfo *v, Binopr op) {
     FunctionState *fs = lx->fs;
     ExpInfo copy = *v; /* copy of variable we are assigning to */
-    ExpInfo e = INIT_EXP;
     int line = lx->line;
     csY_scan(lx); /* skip '+' */
-    e.et = EXP_INT;
-    e.u.i = 1;
-    csC_prebinary(fs, v, op, line);
-    csC_binary(fs, v, &e, op, line);
-    csC_exp2stack(fs, v);
+    cs_assert(eisvar(v));
+    csC_load(fs, fs->sp - 1);
+    csC_dischargevars(fs, v);
+    csC_binimmediate(fs, v, 1, op, line);
     return dostore(fs, &copy, 1, 0);
 }
 
@@ -1480,11 +1498,14 @@ static void expstm(Lexer *lx) {
     else { /* otherwise it must be assignment */
         int left = 0;
         if (check(lx, '=') || check(lx, ',')) {
+            int comp = 0;
             v.prev = NULL;
-            left = assign(lx, &v, 1);
+            left = assign(lx, &v, 1, &comp);
         } else { /* otherwise compound assignment to only one variable */
             int tk = lx->t.tk;
             Binopr op = getbinopr(tk);
+            expect_cond(lx, eisvar(&v.v), "expect variable");
+            checkreadonly(lx, &v.v);
             switch (tk) {
                 case '+': {
                     csY_scan(lx);
@@ -1501,13 +1522,12 @@ static void expstm(Lexer *lx) {
                     }
                     goto compassign;
                 }
-                case '*': case '%': case '&': case '|':
-                case TK_IDIV: case TK_POW: case TK_SHL:
-                case TK_SHR: case TK_CONCAT: {
+                case '*': case '%': case '/': case '&':
+                case '|': case TK_IDIV: case TK_POW:
+                case TK_SHL: case TK_SHR: case TK_CONCAT: {
                     csY_scan(lx);
                 compassign:
-                    compound_assign(lx, &v, 1, op);
-                    left = dostore(lx->fs, &v.v, 1, 0);
+                    left = compound_assign(lx, &v, 1, op);
                     break;
                 }
                 default: expecterror(lx, '=');

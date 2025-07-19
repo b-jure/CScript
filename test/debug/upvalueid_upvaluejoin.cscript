@@ -31,7 +31,7 @@ assert(foo3() == 10 + 5);
 debug.upvaluejoin(foo3, 1, foo2, 1);
 assert(foo3() == 10 + 3);
 
-local Cprint = (__C and __C.print) or print;
+local Cprint = (__c and __c.print) or print;
 assert(!pcall(debug.upvaluejoin, foo1, 2, foo2, 0));
 assert(!pcall(debug.upvaluejoin, foo1, 0, foo2, 2));
 assert(!pcall(debug.upvaluejoin, foo1, -1, foo2, 1));

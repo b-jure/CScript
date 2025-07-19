@@ -112,9 +112,9 @@ __tests = nil;
 
 
 /* save command-line arguments and program name */
-__CLIARGS = cliargs;
-__ARGS = args;
-__PROG = "../cscript";
+__cliargs = cliargs;
+__args = args;
+__prog = "../cscript";
 
 
 /* save program name */
@@ -122,8 +122,8 @@ local prog = "../cscript";
 
 
 /* copy over command-line arguments */
-local args = list.new(__ARGS.len);
-foreach i,arg in list.enumerate(__ARGS)
+local args = list.new(__args.len);
+foreach i,arg in list.enumerate(__args)
     args[i] = arg;
 
 
@@ -155,7 +155,7 @@ debug = nil;
 
 
 /* storage for print functions and temporary file (otherwise empty) */
-__C = {};
+__c = {};
 
 
 /*
@@ -410,8 +410,8 @@ local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
 ** Removes temporary output file.
 */
 local fn rmtempfile() {
-    if (__C.out) /* have temporary file? */
-        rm(__C.out); /* remove it */
+    if (__c.out) /* have temporary file? */
+        rm(__c.out); /* remove it */
 }
 
 
@@ -430,7 +430,7 @@ local fn run_test(filepath) {
     }
     local stat, msg, code;
     if (isolated) /* run isolated? */
-        stat, msg, code = execute(__PROG .. " " .. filepath .. devnull);
+        stat, msg, code = execute(__prog .. " " .. filepath .. devnull);
     else /* otherwise run in the same global environment */
         stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
@@ -1008,14 +1008,14 @@ local fn run_args() {
 */
 local fn set_options() {
     if __opts.noprint and !__port {
-        __C = { /* store old functions */
+        __c = { /* store old functions */
             print = __G.print,
             printf = __G.printf,
         };
 
         /* file for redirecting 'stdout' and 'stderr' when running a test */
         local out = assert(tmpname());
-        __C.out = out;
+        __c.out = out;
 
         /* replace 'print' while testing */
         __G.print = fn(...) {
@@ -1060,7 +1060,7 @@ local fn set_options() {
         };
     }
     if !__opts.warnings { /* no warnings? */
-        __C.warn = __G.warn;
+        __c.warn = __G.warn;
         __G.warn = fn(...) { return; };
     }
 }

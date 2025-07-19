@@ -86,7 +86,7 @@ if reg.find(db.traceback(nil, 0), "test%.cscript")
     assert(getinfo(3 + extra) == nil); /// level out of range
 }
 
-local Cprint = (__C and __C.print) or print;
+local Cprint = (__c and __c.print) or print;
 
 { /// inactive C function
     local t = getinfo(Cprint);
