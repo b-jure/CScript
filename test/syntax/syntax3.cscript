@@ -295,7 +295,7 @@ assert(__G.x == nil and __G.y == nil and __G.z == nil);
     checkfail("on a nil", "//=", x.x, x.y, x.z, 3, 2, nil);
     checkfail("on a nil", "//=", x.x, x.y, x.z, 3, nil, nil);
     checkfail("on a nil", "//=", x.x, x.y, x.z, nil, nil, nil);
-    checkerror("divide by zero", fn() {x.x,x.y,x.z//=0,0,0;});
+    checkerror("divide by zero", || {x.x,x.y,x.z//=0,0,0;});
 
     x.t = {};
     x.t.x,x.t.y,x.t.z = 5,6,7;
@@ -362,7 +362,7 @@ assert(__G.x == nil and __G.y == nil and __G.z == nil);
     checkfail("on a nil", "<<=", x.x, x.y, x.z, 3, 2, nil);
     checkfail("on a nil", "<<=", x.x, x.y, x.z, 3, nil, nil);
     checkfail("on a nil", "<<=", x.x, x.y, x.z, nil, nil, nil);
-    checkerror("integer representation", fn(){x.x,x.y,x.z<<=3,2,3.2;});
+    checkerror("integer representation", ||{x.x,x.y,x.z<<=3,2,3.2;});
 
     x.t = {};
     x.t.x,x.t.y,x.t.z = 5,6,7;
@@ -396,7 +396,7 @@ assert(__G.x == nil and __G.y == nil and __G.z == nil);
     checkfail("on a nil", ">>=", x.x, x.y, x.z, 3, 2, nil);
     checkfail("on a nil", ">>=", x.x, x.y, x.z, 3, nil, nil);
     checkfail("on a nil", ">>=", x.x, x.y, x.z, nil, nil, nil);
-    checkerror("integer representation", fn(){x.x,x.y,x.z>>=3,2,3.2;});
+    checkerror("integer representation", ||{x.x,x.y,x.z>>=3,2,3.2;});
 
     x.t = {};
     x.t.x,x.t.y,x.t.z = 52,63,78;
@@ -430,8 +430,8 @@ assert(__G.x == nil and __G.y == nil and __G.z == nil);
     assert(x.x == "51" and x.y == "162" and x.z == "323");
     x.x,x.y,x.z ..= x.x, x.y, x.z;
     assert(x.x == "5151" and x.y == "162162" and x.z == "323323");
-    checkerror("concatenate a nil", fn(){x.x,x.y,x.z..="a","b",nil;});
-    checkerror("concatenate a number", fn(){x.x,x.y,x.z..="nil",5,"ok";});
+    checkerror("concatenate a nil", ||{x.x,x.y,x.z..="a","b",nil;});
+    checkerror("concatenate a number", ||{x.x,x.y,x.z..="nil",5,"ok";});
 
     x.t = {};
     x.t.x,x.t.y,x.t.z = "52","63","78";

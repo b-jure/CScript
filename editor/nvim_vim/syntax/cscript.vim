@@ -189,6 +189,8 @@ syn match cscriptSymbolOperator /--\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
 syn match cscriptFunctionCall /\k\+\_s*(\@=/
 syn match cscriptSemicolon /;/
 syn match cscriptAttribute /<\_s*\%(close\|final\)\_s*>/
+syn match cscriptEmptyClosure /|\_s*|/
+syn region cscriptClosure transparent matchgroup=cscriptStatement start=/|\ze\_s*\h\+\_s*\%(,\_s*\h\+\_s*\)*/ end=/|/
 "-----------------}
 
 "-Metamethods-----{
@@ -376,6 +378,7 @@ syn match cscriptFunc /\<utf8\.codes\>/
 syn match cscriptFunc /\<utf8\.charpattern\>/
 "-----------------}}
 
+hi def link cscriptEmptyClosure         cscriptClosure
 hi def link cscriptAttribute            StorageClass
 hi def link cscriptSemicolon            cscriptStatement
 hi def link cscriptIdentifier           NONE
