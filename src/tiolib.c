@@ -844,7 +844,7 @@ static void create_stdfile(toku_State *T, FILE *f, const char *k,
 }
 
 
-CSMOD_API int tokuopen_io(toku_State *T) {
+TOKUMOD_API int tokuopen_io(toku_State *T) {
     tokuL_push_lib(T, iolib); /* 'io' table */
     create_filehandle_methods(T);
     create_filehandle_metalist(T);

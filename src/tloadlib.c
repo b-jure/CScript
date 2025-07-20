@@ -669,7 +669,7 @@ static void setpath(toku_State *T, const char *fieldname, const char *envname,
 }
 
 
-CSMOD_API int tokuopen_package(toku_State *T) {
+TOKUMOD_API int tokuopen_package(toku_State *T) {
     create_clibs_userdata(T); /* create clibs userdata */
     tokuL_push_lib(T, pkg_funcs); /* create 'package' table */
     create_searchers_array(T); /* set 'package.searchers' */

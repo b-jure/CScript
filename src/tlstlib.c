@@ -459,7 +459,7 @@ static tokuL_Entry lstlib[] = {
 };
 
 
-CSMOD_API int tokuopen_list(toku_State *T) {
+TOKUMOD_API int tokuopen_list(toku_State *T) {
     tokuL_push_lib(T, lstlib);
     toku_push_integer(T, TOKU_MAXLISTINDEX);
     toku_set_fieldstr(T, -2, "maxindex");

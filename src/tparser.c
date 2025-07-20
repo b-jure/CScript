@@ -1132,6 +1132,7 @@ static void klass(Lexer *lx, ExpInfo *e) {
 
 
 static void simpleexp(Lexer *lx, ExpInfo *e) {
+    int linenum;
     switch (lx->t.tk) {
         case TK_INT: {
             initexp(e, EXP_INT, 0);
@@ -1174,12 +1175,14 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             tabledef(lx, e);
             return;
         }
-        case TK_FN: tokuY_scan(lx); /* skip 'fn' */
-            /* fall through */
+        case TK_FN:
+            linenum = lx->line;
+            tokuY_scan(lx); /* skip 'fn' */
+            goto func;
         case '|': {
-            int linenum = lx->line;
-            int del = lx->t.tk;
-            funcbody(lx, e, 0, linenum, del);
+            linenum = lx->line;
+        func:
+            funcbody(lx, e, 0, linenum, lx->t.tk);
             return;
         }
         case TK_CLASS: {
@@ -1463,8 +1466,9 @@ static int ppmm(Lexer *lx, ExpInfo *v, Binopr op) {
     int linenum = lx->line;
     tokuY_scan(lx); /* skip '+' */
     toku_assert(eisvar(v));
-    tokuC_load(fs, fs->sp - 1);
-    tokuC_dischargevars(fs, v);
+    if (eisindexed(v)) /* indexed? */
+        tokuC_load(fs, fs->sp - 1); /* copy receiver to not lose it */
+    tokuC_dischargevars(fs, v); /* make sure value is on stack */
     tokuC_binimmediate(fs, v, 1, op, linenum);
     return dostore(fs, &copy, 1, 0);
 }
@@ -1518,7 +1522,7 @@ static void expstm(Lexer *lx) {
 }
 
 
-static int getlocalastribute(Lexer *lx) {
+static int getlocalattribute(Lexer *lx) {
     if (match(lx, '<')) {
         const char *astr = getstr(str_expectname(lx));
         expectnext(lx, '>');
@@ -1528,7 +1532,7 @@ static int getlocalastribute(Lexer *lx) {
             return VARTBC; /* to-be-closed variable */
         else
             tokuP_semerror(lx,
-                tokuS_pushfstring(lx->T, "unknown astribute '%s'", astr));
+                tokuS_pushfstring(lx->T, "unknown attribute '%s'", astr));
     }
     return VARREG;
 }
@@ -1563,7 +1567,7 @@ static void localstm(Lexer *lx) {
     ExpInfo e = INIT_EXP;
     do {
         vidx = newlocalvar(lx, str_expectname(lx), 1);
-        kind = getlocalastribute(lx);
+        kind = getlocalattribute(lx);
         getlocalvar(fs, vidx)->s.kind = kind;
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
@@ -1621,12 +1625,12 @@ static void blockstm(Lexer *lx) {
 }
 
 
-static void paramlist(Lexer *lx) {
+static void paramlist(Lexer *lx, int del) {
     FunctionState *fs = lx->fs;
     Proto *fn = fs->p;
     int nparams = 0;
     int isvararg = 0;
-    if (!check(lx, ')')) { /* have at least one arg? */
+    if (!check(lx, del)) { /* have at least one arg? */
         do {
             switch (lx->t.tk) {
                 case TK_NAME: {
@@ -1673,13 +1677,13 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int linenum, int del) 
         addlocallit(lx, "self"); /* create 'self' local */
         adjustlocals(lx, 1); /* 'paramlist()' reserves stack slots */
     }
-    paramlist(lx); /* get function parameters */
+    paramlist(lx, matchdel); /* get function parameters */
     expectmatch(lx, matchdel, del, linenum);
     if (match(lx, '{')) {
-        int curlyline = lx->line;
+        int curly_linenum = lx->line;
         decl_list(lx, '}');
         newfs.p->deflastline = lx->line;
-        expectmatch(lx, '}', '{', curlyline);
+        expectmatch(lx, '}', '{', curly_linenum);
     } else {
         stm(lx);
         newfs.p->deflastline = lx->line;

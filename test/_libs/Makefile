@@ -1,6 +1,6 @@
 # change this variable to point to the directory with Tokudae headers
 # of the version being tested
-TOKU_DIR = ../src
+TOKU_DIR = ../../src
 
 CC = gcc
 

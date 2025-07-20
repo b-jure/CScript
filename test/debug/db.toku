@@ -29,6 +29,7 @@ local Cprint = (__c and __c.print) or print;
     assert(!debug.getinfo(1000));  /// out of range level
     assert(!debug.getinfo(-1));    /// out of range level
     local a = debug.getinfo(Cprint);
+    print(a.what, a.shortsrc);
     assert(a.what == "C" and a.shortsrc == "[C]");
     a = debug.getinfo(Cprint, "L");
     assert(a.activelines == nil);
@@ -352,7 +353,7 @@ fn f(a,b) {
     x = debug.getinfo(2);
     assert(x.func == g and x.what == "Tokudae" and
            x.name == "g" and x.nupvals == 2 and
-           reg.find(x.source, "^@.*db%.cscript$"));
+           reg.find(x.source, "^@.*db%.toku$"));
     glob = glob+1;
     assert(debug.getinfo(1, "l").currline == L+1);
     assert(debug.getinfo(1, "l").currline == L+2);
@@ -426,13 +427,13 @@ assert(!debug.gethook());
     assert(a == nil and !b);
 }
 
-/// testing iteraction between multiple values x hooks
+/// testing interaction between multiple values x hooks
 {
     local fn f(...) { return 3, ...; }
     local count = 0;
     local a = [];
     foreach i in range(0, 100) a[i] = i;
-    debug.sethook(fn() { count = count + 1; }, "", 1);
+    debug.sethook(|| { count++; }, "", 1);
     local l = [list.flatten(a)];
     assert(l.len == 100);
     l = [list.flatten(a, 0, 2)];
@@ -758,7 +759,7 @@ assert(typeof(debug.getclist()) == "list");
 }
 
 
-/* run only if not running via 'test.cscript' or if running in isolation */
+/* run only if not running via 'test.toku' or if running in isolation */
 if !__opts or (__opts and __opts.run_isolated) {
     print("testing traceback sizes");
 

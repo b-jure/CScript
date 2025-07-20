@@ -254,6 +254,7 @@ while (false); while (nil);
 
 { /// testing constants
   local prog <final> = "local x <XXX> = 10;";
+  print(load(prog));
   checkload(prog, "unknown attribute 'XXX'");
 
   checkload("local xxx <final> = 20; xxx = 10;",

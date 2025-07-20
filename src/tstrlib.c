@@ -1070,7 +1070,7 @@ static void set_string_bytes(toku_State *T) {
 }
 
 
-CSMOD_API int tokuopen_string(toku_State *T) {
+TOKUMOD_API int tokuopen_string(toku_State *T) {
     tokuL_push_lib(T, strlib);
     set_string_bytes(T);
     return 1;

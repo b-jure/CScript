@@ -237,7 +237,7 @@ __G.aaa = nil;
 
 
 /// testing size of 'source' info; size of buffer for that info is
-/// TOKU_IDSIZE, declared as 60 in cscriptconf. Get one position for '\0'.
+/// TOKU_IDSIZE, declared as 60 in tokuconf. Get one position for '\0'.
 local idsize = 60 - 1;
 local fn checksize(source) {
     /// syntax error
@@ -395,7 +395,7 @@ if __heavy {
         i = i+1;
     }
     assert(i > 15 or /* if running directly from standalone interpreter */
-           i > 10); /* @bugprone if 'test.cscript' changes */
+           i > 10); /* @bugprone if 'test.toku' changes */
 
 
     /// error in error handling
@@ -464,7 +464,7 @@ if __heavy {
 
     /// 'assert' with no message
     res, msg = pcall(fn () { assert(false); });
-    local line = reg.match(msg, "%w+%.cscript:(%d+): assertion failed!$");
+    local line = reg.match(msg, "%w+%.toku:(%d+): assertion failed!$");
     assert(tonum(line) == debug.getinfo(1, "l").currline - 2);
 
     /// 'assert' with non-string messages

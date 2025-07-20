@@ -131,16 +131,16 @@
 ** In Windows, any exclamation mark ('!') in the path is replaced by the
 ** path of the directory of the executable file of the current process.
 */
-#define TOKU_CSDIR      "!\\tokudae\\"
+#define TOKU_TDIR       "!\\tokudae\\"
 #define TOKU_CDIR       "!\\"
 #define TOKU_SHRDIR     "!\\..\\share\\tokudae\\" TOKU_VDIR "\\"
 
 #if !defined(TOKU_PATH_DEFAULT)
 #define TOKU_PATH_DEFAULT \
-        TOKU_CSDIR"?.tokudae;"  TOKU_CSDIR"?\\init.tokudae;" \
-        TOKU_CDIR"?.tokudae;"  TOKU_CDIR"?\\init.tokudae;" \
-        TOKU_SHRDIR"?.tokudae;" TOKU_SHRDIR"?\\init.tokudae;" \
-        ".\\?.tokudae;" ".\\?\\init.tokudae"
+        TOKU_TDIR"?.toku;"  TOKU_TDIR"?\\init.toku;" \
+        TOKU_CDIR"?.toku;"  TOKU_CDIR"?\\init.toku;" \
+        TOKU_SHRDIR"?.toku;" TOKU_SHRDIR"?\\init.toku;" \
+        ".\\?.toku;" ".\\?\\init.toku"
 #endif
 
 #if !defined(TOKU_CPATH_DEFAULT)
@@ -153,14 +153,14 @@
 #else                   /* }{ */
 
 #define TOKU_ROOT       "/usr/local/"
-#define TOKU_CSDIR      TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
+#define TOKU_TDIR      TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
 #define TOKU_CDIR       TOKU_ROOT "lib/tokudae/" TOKU_VDIR "/"
 
 #if !defined(TOKU_PATH_DEFAULT)
 #define TOKU_PATH_DEFAULT \
-        TOKU_CSDIR"?.tokudae;"  TOKU_CSDIR"?/init.tokudae;" \
-        TOKU_CDIR"?.tokudae;"  TOKU_CDIR"?/init.tokudae;" \
-        "./?.tokudae;" "./?/init.tokudae"
+        TOKU_TDIR"?.toku;"  TOKU_TDIR"?/init.toku;" \
+        TOKU_CDIR"?.toku;"  TOKU_CDIR"?/init.toku;" \
+        "./?.toku;" "./?/init.toku"
 #endif
 
 #if !defined(TOKU_CPATH_DEFAULT)
@@ -206,7 +206,7 @@
 /*
 ** @TOKU_API - is a mark for all core API functions.
 ** @TOKULIB_API - is a mark for all auxiliary library functions.
-** @CSMOD_API - is a mark for all standard library opening functions.
+** @TOKUMOD_API - is a mark for all standard library opening functions.
 ** CHANGE them if you need to define those functions in some special way.
 ** For instance, if you want to create one Windows DLL with the core and
 ** the libraries, you may want to use the following definition (define
@@ -224,7 +224,7 @@
 
 
 #define TOKULIB_API     TOKU_API
-#define CSMOD_API       TOKU_API
+#define TOKUMOD_API       TOKU_API
 
 
 /*

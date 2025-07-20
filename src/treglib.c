@@ -647,7 +647,7 @@ static const tokuL_Entry reglib[] = {
 };
 
 
-CSMOD_API int tokuopen_reg(toku_State *T) {
+TOKUMOD_API int tokuopen_reg(toku_State *T) {
     tokuL_push_lib(T, reglib);
     return 1;
 }

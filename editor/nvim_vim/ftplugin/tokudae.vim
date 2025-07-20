@@ -11,15 +11,15 @@ endif
 " Don't load another plugin for this buffer
 let b:did_ftplugin = 1
 
-" keep in sync with syntax/cscript.vim
-if !exists("cscript_version")
+" keep in sync with syntax/tokudae.vim
+if !exists("tokudae_version")
   " Default is Tokudae 1.0
-  let cscript_version = 1
-  let cscript_subversion = 0
-elseif !exists("cscript_subversion")
-  " cscript_version exists, but cscript_subversion doesn't.
+  let tokudae_version = 1
+  let tokudae_subversion = 0
+elseif !exists("tokudae_subversion")
+  " tokudae_version exists, but tokudae_subversion doesn't.
   " In this case set it to 0.
-  let cscript_subversion = 0
+  let tokudae_subversion = 0
 endif
 
 let s:cpo_save = &cpo
@@ -34,7 +34,7 @@ setlocal fo-=t fo+=croql
 setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://,:#
 
 if (has("gui_win32") || has("gui_gtk")) && !exists("b:browsefilter")
-    let b:browsefilter = "Tokudae Source Files (*.cscript)\t*.cscript\n"
+    let b:browsefilter = "Tokudae Source Files (*.toku)\t*.toku\n"
     if has("win32")
         let b:browsefilter ..= "All Files (*.*)\t*\n"
     else

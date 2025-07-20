@@ -450,7 +450,7 @@ void tokuT_incsp(toku_State *T) {
 */
 void tokuT_checkCstack(toku_State *T) {
     if (getCcalls(T) == TOKUI_MAXCCALLS) /* not handling error ? */
-        tokuD_runerror(T, "T stack overflow");
+        tokuD_runerror(T, "C stack overflow");
     else if (getCcalls(T) >= (TOKUI_MAXCCALLS / 10 * 11))
         tokuPR_throw(T, TOKU_STATUS_EERROR);
 }

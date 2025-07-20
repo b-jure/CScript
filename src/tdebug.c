@@ -155,7 +155,7 @@ const char *tokuD_findlocal(toku_State *T, CallFrame *cf, int n, SPtr *pos) {
     if (name == NULL) {
         SPtr limit = (cf == T->cf) ? T->sp.p : cf->next->func.p;
         if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
-            name = isTokudae(cf) ? "(auto)" : "(T auto)";
+            name = isTokudae(cf) ? "(auto)" : "(C auto)";
         else
             return NULL;
     }
@@ -204,11 +204,11 @@ TOKU_API const char *toku_setlocal(toku_State *T, const toku_Debug *ar, int n) {
 
 static void getfuncinfo(Closure *cl, toku_Debug *ar) {
     if (!TokudaeClosure(cl)) {
-        ar->source = "=[T]";
-        ar->srclen = LL("=[T]");
+        ar->source = "=[C]";
+        ar->srclen = LL("=[C]");
         ar->defline = -1;
         ar->lastdefline = -1;
-        ar->what = "T";
+        ar->what = "C";
     } else {
         const Proto *p = cl->t.p;
         if (p->source) { /* have source? */

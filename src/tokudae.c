@@ -22,7 +22,7 @@
 
 
 #if !defined(TOKU_PROGNAME)
-#define TOKU_PROGNAME         "tokudae"
+#define TOKU_PROGNAME           "tokudae"
 #endif
 
 
@@ -72,7 +72,7 @@ static void cstop(toku_State *T, toku_Debug *ar) {
 
 
 /*
-** Function to be called at a T signal. Because a T signal cannot
+** Function to be called at a C signal. Because a C signal cannot
 ** just change a Tokudae state (as there is no proper synchronization),
 ** this function only sets a hook that, when called, will stop the
 ** interpreter.
@@ -225,7 +225,7 @@ static int msghandler(toku_State *T) {
             return 1; /* that is the message */
         else
             msg = toku_push_fstring(T, "(error object is a %s value)",
-                                     tokuL_typename(T, -1));
+                                       tokuL_typename(T, -1));
     }
     tokuL_traceback(T, T, 1, msg); /* append traceback */
     return 1; /* return the traceback */
@@ -239,9 +239,9 @@ static int docall(toku_State *T, int nargs, int nres) {
     toku_push_cfunction(T, msghandler); /* push 'msghandler' on top */
     toku_insert(T, base); /* insert 'msghandler' below the function */
     globalT = T; /* to be available to 'caction' */
-    setsignal(SIGINT, caction); /* set T-signal handler */
+    setsignal(SIGINT, caction); /* set C-signal handler */
     status = toku_pcall(T, nargs, nres, base);
-    setsignal(SIGINT, SIG_DFL); /* reset T-signal handler */
+    setsignal(SIGINT, SIG_DFL); /* reset C-signal handler */
     toku_remove(T, base); /* remove 'msghandler' */
     return status;
 }

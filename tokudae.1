@@ -1,0 +1,60 @@
+.TH tokudae 1 "20.07.2025" "version 1.0.0"
+
+.SH NAME
+tokudae \- Tokudae interpreter
+
+.SH SYNOPSIS
+.B tokudae [ \fIoptions\fP ] [ \fIscript\fP [ \fIargs\fP ] ] ]
+
+.SH DESCRIPTION
+\fBtokudae\fR is the standalone Tokudae interpreter.
+It loads and executes Tokudae programs in textual source form.
+\fBtokudae\fR can be used as a batch interpreter and also interactively.
+After handling the \fIoptions\fP, the Tokudae program in file \fIscript\fP
+is loaded and executed.
+The \fIargs\fP are available to \fIscript\fP as strings in a global list
+called '\fBargs\fR' and also as arguments to its main function.
+Additionally all the arguments up to \fIscript\fP argument are available
+as strings in global list called '\fBcliargs\fR'.
+When called without arguments, \fBtokudae\fR behaves as '\fBtokudae \-v \-i\fR'
+if the standard input is a terminal, and as '\fBtokudae \-\fR' otherwise.
+
+.SH OPTIONS
+.TP
+.B \-e stat
+Execute string \fIstat\fP.
+.TP
+.B \-i
+Enter interactive mode after executing \fIscript\fP.
+.TP
+.B \-l mod
+Import library \fImod\fP into global \fImod\fP.
+.TP
+.B \-l g=mod
+Import library \fImod\fP into global \fIg\fP.
+.TP
+.B \-v
+Show version information.
+.TP
+.B \-W
+Turn warnings on.
+.TP
+.B \-E
+Ignore environment variables.
+.TP
+.B \-h
+Show help.
+.TP
+.B \-\-
+Stop handling options.
+.TP
+.B \-
+Stop handling options and execute stdin.
+
+.SH EXIT STATUS
+\fBtokudae\fR exits with EXIT_SUCCESS (0 on POSIX systems) if there were no
+errors and with EXIT_FAILURE (1 on POSIX systems) if there were errors.
+Errors raised in interactive mode do not cause exits.
+
+.SH AUTHOR
+B. Jure.

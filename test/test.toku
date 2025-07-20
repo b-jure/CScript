@@ -1,4 +1,4 @@
-#!../cscript
+#!../tokudae
 
 /* Quick version check, keep this first! */
 local version = "Tokudae 1.0";
@@ -23,12 +23,12 @@ __opts = {
     abort_on_fail = true, /* -a (true) | -A (false) */
     run_isolated = true, /* -i (true) | -I (false) */
     enter_debug = false, /* -d (true) | -D (false) */
+    rebuild = true, /* -b (true) | -B (false) */
     testsuites_to_skip = [], /* -e testsuite */
     testsuites_to_run = [], /* non-flag arguments */
     cli_tests = [], /* -t test_file */
-    tests_script = "testsuites.cscript", /* -s tests_script */
+    tests_script = "testsuites.toku", /* -s tests_script */
 };
-
 
 /*
 ** {=====================================================================
@@ -42,6 +42,17 @@ __heavy = __G.__heavy or true; /* default is true */
 __port = __G.__port or !(__POSIX or __WINDOWS); /* default is false on windows and posix */
 /* false if not reporting messages of (parts of) tests not performed */
 __skipmsg = __G.__skipmsg or true; /* default is true */
+
+/*
+** Specific programs/devices/files used when rebuilding the
+** standalone executable or running non-portable options.
+*/
+local make_target = __POSIX and "linux-readline" or "guess";
+local make_threads = !__port and 12 or 1;
+local dev_null = __POSIX and "/dev/null" or "nul";
+local dev_null1 = " > " .. dev_null;
+local dev_null2 = " 2> " .. dev_null;
+local dev_null12 = dev_null1 .. "2>&1";
 
 /* }===================================================================== */
 
@@ -67,6 +78,7 @@ local expected_opts = {
     abort_on_fail = "boolean",
     run_isolated = "boolean",
     enter_debug = "boolean",
+    rebuild = "boolean",
     testsuites_to_skip = "list",
     testsuites_to_run = "list",
     cli_tests = "list",
@@ -89,6 +101,7 @@ local opts_desc = [
     ["abort_on_fail", "abort test script on failed test"],
     ["run_isolated", "run each test in isolation"],
     ["enter_debug", "enter interactive mode"],
+    ["rebuild", "rebuild standalone interpreter"],
 ];
 
 
@@ -114,11 +127,12 @@ __tests = nil;
 /* save command-line arguments and program name */
 __cliargs = cliargs;
 __args = args;
-__prog = "../cscript";
+__prog = "../tokudae";
 
 
 /* save program name */
-local prog = "../cscript";
+local prog = "../tokudae";
+local oldprog = prog .. ".old";
 
 
 /* copy over command-line arguments */
@@ -148,6 +162,7 @@ local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock
 local tmpname,pairs,gc,rm,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
 local exit,getinfo,enumerate = os.exit,debug.getinfo,list.enumerate;
 local char,dbg,gmatch,repeat = string.char,debug.debug,reg.gmatch,string.repeat;
+local rename,startswith = os.rename,string.startswith;
 
 
 /* tests should import debug library when needed */
@@ -226,7 +241,7 @@ local fn lscmd(what, path) {
     assert(__POSIX or __WINDOWS);
     if (what == "d") { /* list directories? */
         if (__POSIX) { /* posix environment? */
-            cmd = "ls -p "; /* use 'ls' */
+            cmd = ls .. " -p "; /* use 'ls' */
             if (path) cmd = cmd .. path .. " ";
             cmd = cmd .. "| grep /"; /* and 'grep' */
         } else { /* otherwise windows environment */
@@ -268,7 +283,7 @@ local fn verify_tests_table(tests) {
 /*
 ** Finds all testsuites and their tests in the current directory.
 ** First, the current directory is listed, each directory listed is
-** considered to be a testsuite, and each file ending with '.cscript'
+** considered to be a testsuite, and each file ending with '.toku'
 ** in that directory is considered as a test belonging to that testsuite.
 ** If we are not running in posix or windows environment, use hard-coded
 ** testsuites defined in '__opts.tests_script' file. Returned table contains
@@ -288,8 +303,8 @@ local fn get_tests(filename) {
             local n = 0; /* number of tests */
             f = assert(popen(lscmd("f", dir)), "can't list files");
             foreach file in f.lines() {
-                if (!find(file, "%.cscript$"))
-                    continue; /* skip files without '.cscript' suffix */
+                if (!find(file, "%.toku$"))
+                    continue; /* skip files without '.toku' suffix */
                 ltests[n] = dir .. file; /* store test path */
                 n = n + 1; /* inc. test count */
             }
@@ -402,16 +417,15 @@ local fn showmem() {
 };
 
 
-/* redirection string to null file, for posix and windows */
-local devnull = __POSIX and "> /dev/null 2>&1" or "> nul 2>&1";
-
-
 /*
 ** Removes temporary output file.
 */
 local fn rmtempfile() {
-    if (__c.out) /* have temporary file? */
-        rm(__c.out); /* remove it */
+    if (__c.out) {
+        printf("Removing temporary file '%'...", __c.out);
+        rm(__c.out);
+        print("Ok!");
+    }
 }
 
 
@@ -430,7 +444,7 @@ local fn run_test(filepath) {
     }
     local stat, msg, code;
     if (isolated) /* run isolated? */
-        stat, msg, code = execute(__prog .. " " .. filepath .. devnull);
+        stat, msg, code = execute(__prog .. " " .. filepath .. dev_null12);
     else /* otherwise run in the same global environment */
         stat, msg = xpcall(runfile, traceback, filepath);
     local c = clock();
@@ -565,17 +579,17 @@ local fn run_all_testsuites(tests_script) {
 ** Usage string.
 */
 local usage = [=[
-usage: ./test.cscript [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite ...]
-                      [-ttest_file | -t test_file]
-                      [-etestsuite_name | -e testsuite_name]
-                      [-stests_script | -s tests_script]
-                      [--minimal-flags]
-                      [--port-flags]
-                      [--verbose-flags]
-                      [--standard-flags]
-                      [--out-tests]
-                      [--gen-dir-tests]
-                      [--gen-script-tests]
+usage: ./test.toku [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite ...]
+                   [-ttest_file | -t test_file]
+                   [-etestsuite_name | -e testsuite_name]
+                   [-stests_script | -s tests_script]
+                   [--minimal-flags]
+                   [--port-flags]
+                   [--verbose-flags]
+                   [--standard-flags]
+                   [--out-tests]
+                   [--gen-dir-tests]
+                   [--gen-script-tests]
 
 Available options are:
     -h      Show usage (this), this must be the first option and argument.
@@ -633,7 +647,7 @@ Available options are:
     --out-tests         Outputs tests table to 'stdout', it first checks for the
                         already present tests table (if it was generated), if
                         missing, it tries to generate tests table from the
-                        {tests_script} (default script is 'testsuites.cscript').
+                        {tests_script} (default script is 'testsuites.toku').
                         After outputting, script returns and no tests are executed.
                         The default {tests_script} can be changed in '__opts' table.
 
@@ -660,13 +674,13 @@ Other:
     If you get error "can't open file...", and you haven't specified '-s' option
     and you are running only with portable options, it usually means the field
     '__opts.tests_script' in the script is set to non-existing file.
-    By default this is set to 'testsuites.cscript' which comes with the
+    By default this is set to 'testsuites.toku' which comes with the
     distribution, make sure you didn't delete this script, or if you moved
     it to another directory, adjust the filepath of '__opts.tests_script'.
     If that doesn't solve it, then the script '__opts.tests_script' contains
     invalid test filepath. You could always try to re-generate the tests script
     from the current directory with:
-    './test.cscript --out-tests --gen-dir-tests > {tests_script}'.
+    './test.toku --out-tests --gen-dir-tests > {tests_script}'.
 
     Note: If your system does not have access to 'system', you should use the
     default testsuites script that comes with the distribution or re-build it
@@ -795,7 +809,7 @@ local fn handle_multi_option(opt) {
 */
 local fn handle_flag_option(f) {
     assert(typeof(f) == "number" and 0 <= f and f <= 255);
-    local val = ((f&0x20) != 0) and true or false; /* lowercase is true */
+    local val = (f & 0x20) != 0;
     switch (f & ~0x20) {
         case 'C': __opts.termcodes = val; break;
         case 'W': __opts.warnings = val; break;
@@ -807,6 +821,7 @@ local fn handle_flag_option(f) {
         case 'A': __opts.abort_on_fail = val; break;
         case 'I': __opts.run_isolated = val; break;
         case 'D': __opts.enter_debug = val; break;
+        case 'B': __opts.rebuild = val; break;
         default: {
             print(usage);
             error("unknown option '" .. char(f) .. "'");
@@ -818,10 +833,10 @@ local fn handle_flag_option(f) {
 /*
 ** Handles command-line option.
 ** Flag options can be aggregated by a single '-', such as '-cWOz', and
-** can end with a non-flag option such as '-cWOzt example.cscript'.
+** can end with a non-flag option such as '-cWOzt example.toku'.
 ** Non-flag options require additional argument, this argument can be
 ** provided as separate argument or part of the same argument such as
-** '-texample.cscript'.
+** '-texample.toku'.
 ** @opt - string
 */
 local fn handle_option(opt) {
@@ -1065,19 +1080,60 @@ local fn set_options() {
     }
 }
 
-handle_cli_args();
-set_options();
+local fn report(msg, st, what, code) {
+    if !st print(fmt("Fail, %s (%s -> %d)", msg, what, code));
+    return st;
+}
 
-if gen_dir_tests
-    get_tests();
-else if gen_script_tests
-    get_tests(__opts.tests_script);
 
-if out_tests
-    output_tests_table(__opts.tests_script);
-else if !gen_dir_tests and !gen_script_tests
-    run_args();
+/*
+** Removes backup executable.
+*/
+local have_oldprog = false;
+local fn rmoldprog() {
+    if have_oldprog {
+        printf("Removing backup executable '%'...", oldprog);
+        rm(oldprog);
+        print("Ok!");
+    }
+}
 
-rmtempfile();
+
+if __opts.rebuild { /* rebuild standalone interpreter? */
+    print("Rebuilding Takudae standalone interpreter...");
+    report("can't create executable backup", rename(prog, oldprog));
+    have_oldprog = true;
+    local cmd = "make -j" .. tostr(make_threads or 1);
+    cmd = fmt("cd .. && %s clean && %s %s", cmd, cmd, make_target);
+    cmd ..= " > " .. null; /* redirect 'stdout' to null */
+    printf("+ %", cmd);
+    if !report(msg, execute(cmd)) { /* rebuild failed? */
+        printf("Rebuild failed, exiting...");
+        rmoldprog();
+        rmtempfile();
+        exit(1, true);
+    }
+    rmoldprog();
+    print("Ok, rebuild successful, executing it now...");
+    /* build command by passing all the arguments to new executable */
+    foreach _,arg in ipairs(__args)
+        cmd ..= " " .. arg;
+    cmd ..= " " .. "-B"; /* do not rebuild the second time */
+    assert(startswith(cmd, prog), "arguments must start with script name");
+    printf("+ %", cmd);
+    exit(execute(cmd), true);
+} else { /* otherwise execute arguments */
+    handle_cli_args();
+    set_options();
+    if gen_dir_tests
+        get_tests();
+    else if gen_script_tests
+        get_tests(__opts.tests_script);
+    if out_tests
+        output_tests_table(__opts.tests_script);
+    else if !gen_dir_tests and !gen_script_tests
+        run_args();
+    rmtempfile();
+}
 
 /* }==================================================================== */
