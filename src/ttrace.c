@@ -155,11 +155,11 @@ static void traceILLS(const Proto *p, const Instruction *pc) {
 /*
 ** Trace the current OpCode and its arguments.
 */
-void csTR_tracepc(toku_State *T, SPtr sp, const Proto *p,
+void tokuTR_tracepc(toku_State *T, SPtr sp, const Proto *p,
                   const Instruction *pc, int tolevel) {
-    SPtr oldsp = C->sp.p;
-    C->sp.p = sp; /* correct stack pointer */
-    csTR_dumpstack(C, tolevel, NULL); /* dump 'tolevel' stacks */
+    SPtr oldsp = T->sp.p;
+    T->sp.p = sp; /* correct stack pointer */
+    tokuTR_dumpstack(T, tolevel, NULL); /* dump 'tolevel' stacks */
     printf("------------------------------------------------------------\n");
     switch (getopFormat(*pc)) { /* trace the instruction */
         case FormatI: traceI(p, pc); break;
@@ -172,7 +172,7 @@ void csTR_tracepc(toku_State *T, SPtr sp, const Proto *p,
         case FormatILLL: traceILLL(p, pc); break;
         default: toku_assert(0 && "invalid OpCode format"); break;
     }
-    C->sp.p = oldsp; /* after this, the caller manages stack pointer */
+    T->sp.p = oldsp; /* after this, the caller manages stack pointer */
 }
 
 
@@ -372,7 +372,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 
 static void traceMetaName(toku_State *T, int mm) {
-    posfix_spaces(printf("%s", getstr(G(C)->mtnames[mm])));
+    posfix_spaces(printf("%s", getstr(G(T)->mtnames[mm])));
 }
 
 
@@ -384,7 +384,7 @@ static void traceSwap(int swap) {
 static void unasmMM(toku_State *T, const Proto *p, Instruction *pc) {
     prefix(p, pc);
     traceOp(*pc);
-    traceMetaName(C, GET_ARG_S(pc, 0));
+    traceMetaName(T, GET_ARG_S(pc, 0));
     posfix();
 }
 
@@ -392,7 +392,7 @@ static void unasmMM(toku_State *T, const Proto *p, Instruction *pc) {
 static void unasmMMBin(toku_State *T, const Proto *p, Instruction *pc) {
     prefix(p, pc);
     traceOp(*pc);
-    traceMetaName(C, GET_ARG_S(pc, 0));
+    traceMetaName(T, GET_ARG_S(pc, 0));
     posfix();
 }
 
@@ -603,10 +603,10 @@ static void printFunc(const Proto *p) {
 /*
 ** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed human readable information
-** compared to 'csTR_trace' when tracing OpCode and its arguments.
+** compared to 'tokuTR_trace' when tracing OpCode and its arguments.
 ** > ORDER OP (in case of changes to bytecode) <
 */
-void csTR_disassemble(toku_State *T, const Proto *p) {
+void tokuTR_disassemble(toku_State *T, const Proto *p) {
     printFunc(p);
     for (Instruction *pc = p->code; pc < &p->code[p->sizecode];) {
         printf("    ");
@@ -721,11 +721,11 @@ void csTR_disassemble(toku_State *T, const Proto *p) {
                 break;
             }
             case OP_MBIN: {
-                unasmMMBin(C, p, pc);
+                unasmMMBin(T, p, pc);
                 break;
             }
             case OP_SETMT: {
-                unasmMM(C, p, pc);
+                unasmMM(T, p, pc);
                 break;
             }
             case OP_CONSTI: unasmIMMint(p, pc, 0); break;
@@ -800,9 +800,9 @@ static const char *objtxt(const TValue *obj) {
 }
 
 
-void csTR_dumpstack(toku_State *T, int level, const char *fmt, ...) {
-    CallFrame *cf = C->cf;
-    SPtr prevtop = C->sp.p;
+void tokuTR_dumpstack(toku_State *T, int level, const char *fmt, ...) {
+    CallFrame *cf = T->cf;
+    SPtr prevtop = T->sp.p;
     if (fmt) {
         va_list ap;
         va_start(ap, fmt);
@@ -814,7 +814,7 @@ void csTR_dumpstack(toku_State *T, int level, const char *fmt, ...) {
     for (int i = 0; cf != NULL && level-- != 0; i++) {
         SPtr base = cf->func.p + 1;
         printf("[L %3d] %-25s %s ", i, objtxt(s2v(cf->func.p)),
-                                       (cf != C->cf) ? "--" : ">>");
+                                       (cf != T->cf) ? "--" : ">>");
         fflush(stdout);
         if (base < prevtop) {
             for (SPtr sp = base; sp < prevtop; sp++)

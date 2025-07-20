@@ -53,9 +53,9 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 
 
 t_sinline void *tryagain(toku_State *T, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     if (cantryagain(gs)) {
-        tokuG_fullinc(C, 1); /* try to reclaim some memory... */
+        tokuG_fullinc(T, 1); /* try to reclaim some memory... */
         return callfalloc(gs, ptr, osz, nsz); /* ...and try again */
     }
     return NULL; /* cannot run an emergency collection */
@@ -63,12 +63,12 @@ t_sinline void *tryagain(toku_State *T, void *ptr, size_t osz, size_t nsz) {
 
 
 void *tokuM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     void *block;
     toku_assert((osz == 0) == (ptr == NULL));
     block = firsttry(gs, ptr, osz, nsz);
     if (t_unlikely(!block && nsz != 0)) {
-        block = tryagain(C, ptr, osz, nsz);
+        block = tryagain(T, ptr, osz, nsz);
         if (t_unlikely(block == NULL)) /* still no memory? */
             return NULL; /* do not update 'gcdebt' */
     }
@@ -79,9 +79,9 @@ void *tokuM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
 
 
 void *tokuM_saferealloc(toku_State *T, void *ptr, size_t osz, size_t nsz) {
-    void *block = tokuM_reallot_(C, ptr, osz, nsz);
+    void *block = tokuM_reallot_(T, ptr, osz, nsz);
     if (t_unlikely(block == NULL && nsz != 0))
-        tokuM_error(C);
+        tokuM_error(T);
     return block;
 }
 
@@ -90,12 +90,12 @@ void *tokuM_mallot_(toku_State *T, size_t size, int tag) {
     if (size == 0) {
         return NULL;
     } else {
-        GState *gs = G(C);
+        GState *gs = G(T);
         void *block = firsttry(gs, NULL, tag, size);
         if (t_unlikely(block == NULL)) {
-            block = tryagain(C, NULL, tag, size);
+            block = tryagain(T, NULL, tag, size);
             if (t_unlikely(block == NULL))
-                tokuM_error(C);
+                tokuM_error(T);
         }
         gs->gcdebt += size;
         return block;
@@ -117,14 +117,14 @@ checkspace:
     } else { /* otherwise grow */
         if (t_unlikely(size >= limit / 2)) { /* cannot double it? */
             if (t_unlikely(size >= limit)) /* limit reached? */
-                tokuD_runerror(C, "too many %s (limit is %d)", what, limit);
+                tokuD_runerror(T, "too many %s (limit is %d)", what, limit);
             size = limit;
         } else {
             size *= 2;
             if (size < MINSIZEARRAY)
                 size = MINSIZEARRAY;
         }
-        block = tokuM_saferealloc(C, block, cast_sizet(*sizep) * elemsize,
+        block = tokuM_saferealloc(T, block, cast_sizet(*sizep) * elemsize,
                                           cast_sizet(size) * elemsize);
         *sizep = size;
         goto checkspace;
@@ -137,19 +137,19 @@ void *tokuM_shrinkarr_(toku_State *T, void *ptr, int *sizep, int nfinal,
     size_t osz = cast_sizet((*sizep) * elemsize);
     size_t nsz = cast_sizet(nfinal * elemsize);
     toku_assert(nsz <= osz);
-    ptr = tokuM_saferealloc(C, ptr, osz, nsz);
+    ptr = tokuM_saferealloc(T, ptr, osz, nsz);
     *sizep = nfinal;
     return ptr;
 }
 
 
 t_noret tokuM_toobig(toku_State *T) {
-    tokuD_runerror(C, "memory allocation error: block too big");
+    tokuD_runerror(T, "memory allocation error: block too big");
 }
 
 
 void tokuM_free_(toku_State *T, void *ptr, size_t osz) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
     gs->gcdebt -= osz;

@@ -120,7 +120,7 @@ static TValue *unwrapfunc(TValue *func) {
 
 
 t_sinline int currentpc(const CallFrame *cf) {
-    return relpc(cf->cs.pc, cf_func(cf)->p);
+    return relpc(cf->t.pc, cf_func(cf)->p);
 }
 
 
@@ -133,7 +133,7 @@ t_sinline int getcurrentline(CallFrame *cf) {
 
 static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
     if (cf_func(cf)->p->isvararg) {
-        int nextra = cf->cs.nvarargs;
+        int nextra = cf->t.nvarargs;
         if (n >= -nextra) {
             *pos = cf->func.p - nextra - (n + 1);
             return "(vararg)";
@@ -153,9 +153,9 @@ const char *tokuD_findlocal(toku_State *T, CallFrame *cf, int n, SPtr *pos) {
             name = tokuF_getlocalname(cf_func(cf)->p, n, currentpc(cf));
     }
     if (name == NULL) {
-        SPtr limit = (cf == C->cf) ? C->sp.p : cf->next->func.p;
+        SPtr limit = (cf == T->cf) ? T->sp.p : cf->next->func.p;
         if (limit - base >= n && n > 0) /* 'n' is in stack range ? */
-            name = isTokudae(cf) ? "(auto)" : "(C auto)";
+            name = isTokudae(cf) ? "(auto)" : "(T auto)";
         else
             return NULL;
     }
@@ -167,23 +167,23 @@ const char *tokuD_findlocal(toku_State *T, CallFrame *cf, int n, SPtr *pos) {
 
 TOKU_API const char *toku_getlocal(toku_State *T, const toku_Debug *ar, int n) {
     const char *name;
-    toku_lock(C);
+    toku_lock(T);
     if (ar == NULL) { /* information about non-active function? */
-        const TValue *func = unwrapfunc(s2v(C->sp.p - 1));
-        if (!ttisCSclosure(func)) /* not a Tokudae function? */
+        const TValue *func = unwrapfunc(s2v(T->sp.p - 1));
+        if (!ttisTclosure(func)) /* not a Tokudae function? */
             name = NULL;
         else /* consider live variables at function start (parameters) */
-            name = tokuF_getlocalname(clCSval(func)->p, n, 0);
+            name = tokuF_getlocalname(clTval(func)->p, n, 0);
     } else { /* active function; get information through 'ar' */
         SPtr pos = NULL; /* to avoid warnings */
-        name = tokuD_findlocal(C, ar->cf, n, &pos);
+        name = tokuD_findlocal(T, ar->cf, n, &pos);
         if (name) { /* found ? */
             /* push its value on top of the stack */
-            setobjs2s(C, C->sp.p, pos);
-            api_inctop(C);
+            setobjs2s(T, T->sp.p, pos);
+            api_inctop(T);
         }
     }
-    toku_unlock(C);
+    toku_unlock(T);
     return name;
 }
 
@@ -191,26 +191,26 @@ TOKU_API const char *toku_getlocal(toku_State *T, const toku_Debug *ar, int n) {
 TOKU_API const char *toku_setlocal(toku_State *T, const toku_Debug *ar, int n) {
     SPtr pos = NULL;
     const char *name;
-    toku_lock(C);
-    name = tokuD_findlocal(C, ar->cf, n, &pos);
+    toku_lock(T);
+    name = tokuD_findlocal(T, ar->cf, n, &pos);
     if (name) { /* found ? */
-        setobjs2s(C, pos, C->sp.p - 1);
-        C->sp.p--; /* pop value */
+        setobjs2s(T, pos, T->sp.p - 1);
+        T->sp.p--; /* pop value */
     }
-    toku_unlock(C);
+    toku_unlock(T);
     return name;
 }
 
 
 static void getfuncinfo(Closure *cl, toku_Debug *ar) {
     if (!TokudaeClosure(cl)) {
-        ar->source = "=[C]";
-        ar->srclen = LL("=[C]");
+        ar->source = "=[T]";
+        ar->srclen = LL("=[T]");
         ar->defline = -1;
         ar->lastdefline = -1;
-        ar->what = "C";
+        ar->what = "T";
     } else {
-        const Proto *p = cl->cs.p;
+        const Proto *p = cl->t.p;
         if (p->source) { /* have source? */
             ar->source = getstr(p->source);
             ar->srclen = getstrlen(p->source);
@@ -500,7 +500,7 @@ static const char *funcnamefromcode(toku_State *T, const Proto *p, int pc,
         case OP_EQ: mm = TOKU_MT_EQ; break;
         default: return NULL;
     }
-    *name = metaname(C, mm);
+    *name = metaname(T, mm);
     return "metamethod";
 }
 
@@ -515,7 +515,7 @@ static const char *funcnamefromcall(toku_State *T, CallFrame *cf,
         *name = "__gc";
         return "metamethod";
     } else if (isTokudae(cf))
-        return funcnamefromcode(C, cf_func(cf)->p, currentpc(cf), name);
+        return funcnamefromcode(T, cf_func(cf)->p, currentpc(cf), name);
     else
         return NULL;
 }
@@ -523,7 +523,7 @@ static const char *funcnamefromcall(toku_State *T, CallFrame *cf,
 
 static const char *getfuncname(toku_State *T, CallFrame *cf, const char **name) {
     if (cf != NULL)
-        return funcnamefromcall(C, cf->prev, name);
+        return funcnamefromcall(T, cf->prev, name);
     else
         return NULL;
 }
@@ -540,7 +540,7 @@ static int auxgetinfo(toku_State *T, const char *options, Closure *cl,
     for (; *options; options++) {
         switch (*options) {
             case 'n': {
-                ar->namewhat = getfuncname(C, cf, &ar->name);
+                ar->namewhat = getfuncname(T, cf, &ar->name);
                 if (ar->namewhat == NULL) { /* not found ? */
                     ar->namewhat = "";
                     ar->name = NULL;
@@ -558,8 +558,8 @@ static int auxgetinfo(toku_State *T, const char *options, Closure *cl,
             case 'u': {
                 ar->nupvals = (cl ? cl->c.nupvalues : 0);
                 if (TokudaeClosure(cl)) {
-                    ar->nparams = cl->cs.p->arity;
-                    ar->isvararg = cl->cs.p->isvararg;
+                    ar->nparams = cl->t.p->arity;
+                    ar->isvararg = cl->t.p->isvararg;
                 } else {
                     ar->nparams = 0;
                     ar->isvararg = 1;
@@ -570,8 +570,8 @@ static int auxgetinfo(toku_State *T, const char *options, Closure *cl,
                 if (cf == NULL || !(cf->status & CFST_HOOKED))
                     ar->ftransfer = ar->ntransfer = 0;
                 else {
-                    ar->ftransfer = C->transferinfo.ftransfer;
-                    ar->ntransfer = C->transferinfo.ntransfer;
+                    ar->ftransfer = T->transferinfo.ftransfer;
+                    ar->ntransfer = T->transferinfo.ntransfer;
                 }
                 break;
             }
@@ -598,16 +598,16 @@ static int nextline (const Proto *p, int currline, int pc) {
 
 static void collectvalidlines(toku_State *T, Closure *f) {
     if (!TokudaeClosure(f)) {
-        setnilval(s2v(C->sp.p));
-        api_inctop(C);
+        setnilval(s2v(T->sp.p));
+        api_inctop(T);
     } else {
         int i;
         TValue v;
-        const Proto *p = f->cs.p;
+        const Proto *p = f->t.p;
         int currline = p->defline;
-        Table *t = tokuH_new(C); /* new table to store active lines */
-        settval2s(C, C->sp.p, t); /* push it on stack */
-        api_inctop(C);
+        Table *t = tokuH_new(T); /* new table to store active lines */
+        settval2s(T, T->sp.p, t); /* push it on stack */
+        api_inctop(T);
         toku_assert(p->lineinfo != NULL); /* must have debug information */
         setbtval(&v); /* bool 'true' to be the value of all indices */
         if (!p->isvararg) /* regular function? */
@@ -619,7 +619,7 @@ static void collectvalidlines(toku_State *T, Closure *f) {
         }
         while (i < p->sizelineinfo) { /* for each instruction */
             currline = nextline(p, currline, i); /* get its line */
-            tokuH_setint(C, t, currline, &v); /* table[line] = true */
+            tokuH_setint(T, t, currline, &v); /* table[line] = true */
             i += getopSize(p->code[i]); /* get next instruction */
         }
     }
@@ -632,14 +632,14 @@ TOKU_API int toku_getinfo(toku_State *T, const char *options, toku_Debug *ar) {
     Closure *cl;
     TValue *func;
     int status = 1;
-    toku_lock(C);
-    api_check(C, options != NULL, "'options' can't be NULL");
+    toku_lock(T);
+    api_check(T, options != NULL, "'options' can't be NULL");
     if (*options == '>') {
         cf = NULL; /* not currently running */
-        func = s2v(C->sp.p - 1);
-        api_check(C, ttisfunction(func), "expect function");
+        func = s2v(T->sp.p - 1);
+        api_check(T, ttisfunction(func), "expect function");
         options++; /* skip '>' */
-        C->sp.p--; /* pop function */
+        T->sp.p--; /* pop function */
     } else {
         cf = ar->cf;
         func = s2v(cf->func.p);
@@ -647,14 +647,14 @@ TOKU_API int toku_getinfo(toku_State *T, const char *options, toku_Debug *ar) {
     }
     func = unwrapfunc(func);
     cl = (ttisclosure(func) ? clval(func) : NULL);
-    status = auxgetinfo(C, options, cl, cf, ar);
+    status = auxgetinfo(T, options, cl, cf, ar);
     if (strchr(options, 'f')) {
-        setobj2s(C, C->sp.p, func);
-        api_inctop(C);
+        setobj2s(T, T->sp.p, func);
+        api_inctop(T);
     }
     if (strchr(options, 'L'))
-        collectvalidlines(C, cl);
-    toku_unlock(C);
+        collectvalidlines(T, cl);
+    toku_unlock(T);
     return status;
 }
 
@@ -673,7 +673,7 @@ TOKU_API int toku_getinfo(toku_State *T, const char *options, toku_Debug *ar) {
 static void settraps(CallFrame *cf) {
     for (; cf != NULL; cf = cf->prev)
         if (isTokudae(cf))
-            cf->cs.trap = 1;
+            cf->t.trap = 1;
 }
 
 
@@ -692,30 +692,30 @@ TOKU_API void toku_sethook(toku_State *T, toku_Hook func, int mask, int count) {
         mask = 0;
         func = NULL;
     }
-    C->hook = func;
-    C->basehookcount = count;
-    resethookcount(C);
-    C->hookmask = cast_ubyte(mask);
+    T->hook = func;
+    T->basehookcount = count;
+    resethookcount(T);
+    T->hookmask = cast_ubyte(mask);
     if (mask)
-        settraps(C->cf); /* to trace inside 'tokuV_execute' */
+        settraps(T->cf); /* to trace inside 'tokuV_execute' */
 }
 
 
 // TODO: add docs
 TOKU_API toku_Hook toku_gethook(toku_State *T) {
-    return C->hook;
+    return T->hook;
 }
 
 
 // TODO: add docs
 TOKU_API int toku_gethookmask(toku_State *T) {
-    return C->hookmask;
+    return T->hookmask;
 }
 
 
 // TODO: add docs
 TOKU_API int toku_gethookcount(toku_State *T) {
-    return C->basehookcount;
+    return T->basehookcount;
 }
 
 
@@ -729,42 +729,42 @@ const char *tokuD_addinfo(toku_State *T, const char *msg, OString *src,
         buffer[0] = '?';
         buffer[1] = '\0';
     }
-    return tokuS_pushfstring(C, "%s:%d: %s", buffer, line, msg);
+    return tokuS_pushfstring(T, "%s:%d: %s", buffer, line, msg);
 }
 
 
 t_noret tokuD_errormsg(toku_State *T) {
-    if (C->errfunc != 0) { /* is there an error handling function? */
-        SPtr errfunc = restorestack(C, C->errfunc);
+    if (T->errfunc != 0) { /* is there an error handling function? */
+        SPtr errfunc = restorestack(T, T->errfunc);
         toku_assert(ttisfunction(s2v(errfunc)));
-        setobjs2s(C, C->sp.p, C->sp.p - 1); /* move argument */
-        setobjs2s(C, C->sp.p - 1, errfunc); /* push function */
-        C->sp.p++; /* assume EXTRA_STACK */
-        tokuV_call(C, C->sp.p - 2, 1); /* call it */
+        setobjs2s(T, T->sp.p, T->sp.p - 1); /* move argument */
+        setobjs2s(T, T->sp.p - 1, errfunc); /* push function */
+        T->sp.p++; /* assume EXTRA_STACK */
+        tokuV_call(T, T->sp.p - 2, 1); /* call it */
     }
-    if (ttisnil(s2v(C->sp.p - 1))) { /* error object is nil? */
+    if (ttisnil(s2v(T->sp.p - 1))) { /* error object is nil? */
         /* change it to a proper message */
-        setstrval2s(C, C->sp.p - 1, tokuS_newlit(C, "<no error object>"));
+        setstrval2s(T, T->sp.p - 1, tokuS_newlit(T, "<no error object>"));
     }
-    csPR_throw(C, TOKU_STATUS_ERUNTIME);
+    tokuPR_throw(T, TOKU_STATUS_ERUNTIME);
 }
 
 
 /* generic runtime error */
 t_noret tokuD_runerror(toku_State *T, const char *fmt, ...) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     const char *err;
     va_list ap;
-    tokuG_checkGC(C);
+    tokuG_checkGC(T);
     va_start(ap, fmt);
-    err = tokuS_pushvfstring(C, fmt, ap);
+    err = tokuS_pushvfstring(T, fmt, ap);
     va_end(ap);
     if (isTokudae(cf)) { /* can add source information? */
-        tokuD_addinfo(C, err, cf_func(cf)->p->source, getcurrentline(cf));
-        setobj2s(C, C->sp.p - 2, s2v(C->sp.p - 1)); /* remove 'err' */
-        C->sp.p--;
+        tokuD_addinfo(T, err, cf_func(cf)->p->source, getcurrentline(cf));
+        setobj2s(T, T->sp.p - 2, s2v(T->sp.p - 1)); /* remove 'err' */
+        T->sp.p--;
     }
-    tokuD_errormsg(C);
+    tokuD_errormsg(T);
 }
 
 
@@ -789,7 +789,7 @@ static int instack(CallFrame *cf, const TValue *o) {
 */
 static const char *getupvalname(CallFrame *cf, const TValue *o,
                                                const char **name) {
-    CSClosure *cl = cf_func(cf);
+    TClosure *cl = cf_func(cf);
     for (int i = 0; i < cl->nupvalues; i++) {
         if (cl->upvals[i]->v.p == o) {
             *name = upvalname(cl->p, i);
@@ -805,7 +805,7 @@ static const char *formatvarinfo(toku_State *T, const char *kind,
     if (kind == NULL)
         return ""; /* no information */
     else
-        return tokuS_pushfstring(C, " (%s '%s')", kind, name);
+        return tokuS_pushfstring(T, " (%s '%s')", kind, name);
 }
 
 
@@ -814,7 +814,7 @@ static const char *formatvarinfo(toku_State *T, const char *kind,
 ** "variable 'x'" or "upvalue 'y'".
 */
 static const char *varinfo(toku_State *T, const TValue *o) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     const char *name = NULL;  /* to avoid warnings */
     const char *kind = NULL;
     if (isTokudae(cf)) {
@@ -825,7 +825,7 @@ static const char *varinfo(toku_State *T, const TValue *o) {
                 kind = getobjname(cf_func(cf)->p, currentpc(cf), sp, &name);
         }
     }
-    return formatvarinfo(C, kind, name);
+    return formatvarinfo(T, kind, name);
 }
 
 
@@ -834,8 +834,8 @@ static const char *varinfo(toku_State *T, const TValue *o) {
 */
 static t_noret typeerror(toku_State *T, const TValue *o, const char *op,
                                                        const char *extra) {
-    const char *t = tokuMM_objtypename(C, o);
-    tokuD_runerror(C, "attempt to %s a %s value%s", op, t, extra);
+    const char *t = tokuMM_objtypename(T, o);
+    tokuD_runerror(T, "attempt to %s a %s value%s", op, t, extra);
 }
 
 
@@ -844,7 +844,7 @@ static t_noret typeerror(toku_State *T, const TValue *o, const char *op,
 ** object 'o' (using 'varinfo').
 */
 t_noret tokuD_typeerror(toku_State *T, const TValue *o, const char *op) {
-    typeerror(C, o, op, varinfo(C, o));
+    typeerror(T, o, op, varinfo(T, o));
 }
 
 
@@ -855,7 +855,7 @@ t_noret tokuD_opinterror(toku_State *T, const TValue *v1, const TValue *v2,
                                                       const char *msg) {
     if (!ttisnum(v1)) /* first operand is wrong? */
         v2 = v1; /* now second is wrong */
-    tokuD_typeerror(C, v2, msg);
+    tokuD_typeerror(T, v2, msg);
 }
 
 
@@ -866,7 +866,7 @@ t_noret tokuD_tointerror(toku_State *T, const TValue *v1, const TValue *v2) {
     toku_Integer temp;
     if (!tokuO_tointeger(v1, &temp, N2IEQ))
         v2 = v1;
-    tokuD_runerror(C, "number%s has no integer representation", varinfo(C, v2));
+    tokuD_runerror(T, "number%s has no integer representation", varinfo(T, v2));
 }
 
 
@@ -878,7 +878,7 @@ static int differentclasses(const TValue *v1, const TValue *v2) {
 
 
 static t_noret classerror(toku_State *T, const char *op) {
-    tokuD_runerror(C, "attempt to %s instances of different class", op);
+    tokuD_runerror(T, "attempt to %s instances of different class", op);
 }
 
 
@@ -888,38 +888,38 @@ t_noret tokuD_binoperror(toku_State *T, const TValue *v1,
         case TOKU_MT_BAND: case TOKU_MT_BOR: case TOKU_MT_BXOR:
         case TOKU_MT_BSHL: case TOKU_MT_BSHR: case TOKU_MT_BNOT: {
             if (ttisnum(v1) && ttisnum(v2))
-                tokuD_tointerror(C, v1, v2);
+                tokuD_tointerror(T, v1, v2);
             else
-                tokuD_opinterror(C, v1, v2, "perform bitwise operation on");
+                tokuD_opinterror(T, v1, v2, "perform bitwise operation on");
             break;
         }
         /* to avoid warnings *//* fall through */
         default:
-            tokuD_opinterror(C, v1, v2, "perform arithmetic on");
+            tokuD_opinterror(T, v1, v2, "perform arithmetic on");
     }
 }
 
 
 t_noret tokuD_ordererror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
-        classerror(C, "compare");
+        classerror(T, "compare");
     else {
-        const char *t1 = tokuMM_objtypename(C, v1);
-        const char *t2 = tokuMM_objtypename(C, v2);
+        const char *t1 = tokuMM_objtypename(T, v1);
+        const char *t2 = tokuMM_objtypename(T, v2);
         if (strcmp(t1, t2) == 0)
-            tokuD_runerror(C, "attempt to compare two %s values", t1);
+            tokuD_runerror(T, "attempt to compare two %s values", t1);
         else
-            tokuD_runerror(C, "attempt to compare %s with %s", t1, t2);
+            tokuD_runerror(T, "attempt to compare %s with %s", t1, t2);
     }
 }
 
 
 t_noret tokuD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
-        classerror(C, metaname(C, TOKU_MT_CONCAT));
+        classerror(T, metaname(T, TOKU_MT_CONCAT));
     else {
         if (ttisstring(v1)) v1 = v2;
-        tokuD_typeerror(C, v1, "concatenate");
+        tokuD_typeerror(T, v1, "concatenate");
     }
 }
 
@@ -930,11 +930,11 @@ t_noret tokuD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
 ** cannot get a name there, try 'varinfo'.
 */
 t_noret tokuD_callerror(toku_State *T, const TValue *o) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     const char *name = NULL; /* to avoid warnings */
-    const char *kind = funcnamefromcall(C, cf, &name);
-    const char *extra = kind ? formatvarinfo(C, kind, name) : varinfo(C, o);
-    typeerror(C, o, "call", extra);
+    const char *kind = funcnamefromcall(T, cf, &name);
+    const char *extra = kind ? formatvarinfo(T, kind, name) : varinfo(T, o);
+    typeerror(T, o, "call", extra);
 }
 
 
@@ -943,9 +943,9 @@ t_noret tokuD_callerror(toku_State *T, const TValue *o) {
 */
 t_noret tokuD_listerror(toku_State *T, const TValue *o, const char *what,
                                                     const char *msg) {
-    const char *t = tokuMM_objtypename(C, o);
-    const char *e = varinfo(C, o);
-    tokuD_runerror(C, "list %s %s value%s is %s", what, t, e, msg);
+    const char *t = tokuMM_objtypename(T, o);
+    const char *e = varinfo(T, o);
+    tokuD_runerror(T, "list %s %s value%s is %s", what, t, e, msg);
 }
 
 
@@ -983,30 +983,30 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
 
 /*
 ** Call a hook for the given event. Make sure there is a hook to be
-** called. (Both 'C->hook' and 'C->hookmask', which trigger this
+** called. (Both 'T->hook' and 'T->hookmask', which trigger this
 ** function, can be changed asynchronously by signals.)
 */
 void tokuD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer) {
-    toku_Hook hook = C->hook;
-    if (hook && C->allowhook) { /* make sure there is a hook */
-        CallFrame *cf = C->cf;
-        ptrdiff_t sp = savestack(C, C->sp.p); /* preserve original 'sp' */
-        ptrdiff_t cf_top = savestack(C, cf->top.p); /* idem for 'cf->top' */
+    toku_Hook hook = T->hook;
+    if (hook && T->allowhook) { /* make sure there is a hook */
+        CallFrame *cf = T->cf;
+        ptrdiff_t sp = savestack(T, T->sp.p); /* preserve original 'sp' */
+        ptrdiff_t cf_top = savestack(T, cf->top.p); /* idem for 'cf->top' */
         toku_Debug ar = { .event = event, .currline = line, .cf = cf };
-        C->transferinfo.ftransfer = ftransfer;
-        C->transferinfo.ntransfer = ntransfer;
-        csPR_checkstack(C, TOKU_MINSTACK); /* ensure minimum stack size */
-        if (cf->top.p < C->sp.p + TOKU_MINSTACK)
-            cf->top.p = C->sp.p + TOKU_MINSTACK;
-        C->allowhook = 0; /* cannot call hooks inside a hook */
+        T->transferinfo.ftransfer = ftransfer;
+        T->transferinfo.ntransfer = ntransfer;
+        tokuPR_checkstack(T, TOKU_MINSTACK); /* ensure minimum stack size */
+        if (cf->top.p < T->sp.p + TOKU_MINSTACK)
+            cf->top.p = T->sp.p + TOKU_MINSTACK;
+        T->allowhook = 0; /* cannot call hooks inside a hook */
         cf->status |= CFST_HOOKED;
-        toku_unlock(C);
-        (*hook)(C, &ar); /* call hook function */
-        toku_lock(C);
-        toku_assert(!C->allowhook);
-        C->allowhook = 1; /* hook finished; once again enable hooks */
-        cf->top.p = restorestack(C, cf_top);
-        C->sp.p = restorestack(C, sp);
+        toku_unlock(T);
+        (*hook)(T, &ar); /* call hook function */
+        toku_lock(T);
+        toku_assert(!T->allowhook);
+        T->allowhook = 1; /* hook finished; once again enable hooks */
+        cf->top.p = restorestack(T, cf_top);
+        T->sp.p = restorestack(T, sp);
         cf->status &= ~CFST_HOOKED;
     }
 }
@@ -1018,12 +1018,12 @@ void tokuD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer
 ** active.
 */
 void tokuD_hookcall(toku_State *T, CallFrame *cf, int delta) {
-    C->oldpc = 0; /* set 'oldpc' for new function */
-    if (C->hookmask & TOKU_MASK_CALL) { /* is call hook on? */
+    T->oldpc = 0; /* set 'oldpc' for new function */
+    if (T->hookmask & TOKU_MASK_CALL) { /* is call hook on? */
         toku_assert(delta > 0);
-        cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
-        tokuD_hook(C, TOKU_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
-        cf->cs.pc -= delta; /* correct 'pc' */
+        cf->t.pc += delta; /* hooks assume 'pc' is already incremented */
+        tokuD_hook(T, TOKU_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
+        cf->t.pc -= delta; /* correct 'pc' */
     }
 }
 
@@ -1036,14 +1036,14 @@ void tokuD_hookcall(toku_State *T, CallFrame *cf, int delta) {
 ** before the call hook.)
 */
 int tokuD_tracecall(toku_State *T, int delta) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     Proto *p = cf_func(cf)->p;
-    cf->cs.trap = 1; /* ensure hooks will be checked */
-    if (cf->cs.pc == p->code) {
+    cf->t.trap = 1; /* ensure hooks will be checked */
+    if (cf->t.pc == p->code) {
         if (p->isvararg)
             return 0; /* hooks will start at VARARGPREP instruction */
         else
-            tokuD_hookcall(C, cf, delta); /* check 'call' hook */
+            tokuD_hookcall(T, cf, delta); /* check 'call' hook */
     }
     return 1; /* keep 'trap' on */
 }
@@ -1051,7 +1051,7 @@ int tokuD_tracecall(toku_State *T, int delta) {
 
 /*
 ** Traces the execution of a Tokudae function. Called before the execution
-** of each opcode, when debug is on. 'C->oldpc' stores the last
+** of each opcode, when debug is on. 'T->oldpc' stores the last
 ** instruction traced, to detect line changes. When entering a new
 ** function, 'npci' will be zero and will test as a new line whatever
 ** the value of 'oldpc'. Some exceptional conditions may return to
@@ -1059,43 +1059,43 @@ int tokuD_tracecall(toku_State *T, int delta) {
 ** invalid; if so, use zero as a valid value. (A wrong but valid 'oldpc'
 ** at most causes an extra call to a line hook.)
 ** This function is not "Protected" when called, so it should correct
-** 'C->sp.p' before calling anything that can run the GC.
+** 'T->sp.p' before calling anything that can run the GC.
 */
 int tokuD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     const Proto *p = cf_func(cf)->p;
-    t_ubyte mask = C->hookmask;
+    t_ubyte mask = T->hookmask;
     int isize, extra, counthook;
     SPtr base;
     if (!(mask & (TOKU_MASK_LINE | TOKU_MASK_COUNT))) { /* no hooks? */
-        cf->cs.trap = 0; /* don't need to stop again */
+        cf->t.trap = 0; /* don't need to stop again */
         return 0; /* turn off 'trap' */
     }
     base = cf->func.p + 1;
     isize = getopSize(*pc);
     extra = (cast_int((pc + isize) - p->code) < p->sizecode) * isize;
     /* reference is always the next (or last) instruction + SIZE_INSTR */
-    cf->cs.pc = pc + extra + SIZE_INSTR;
-    counthook = (mask & TOKU_MASK_COUNT) && (--C->hookcount == 0);
+    cf->t.pc = pc + extra + SIZE_INSTR;
+    counthook = (mask & TOKU_MASK_COUNT) && (--T->hookcount == 0);
     if (counthook)
-        resethookcount(C); /* reset count */
+        resethookcount(T); /* reset count */
     else if (!(mask & TOKU_MASK_LINE))
         return 1; /* no line hook and count != 0; nothing to be done now */
     if (counthook) {
-        C->sp.p = base + stacksize; /* save 'sp' */
-        tokuD_hook(C, TOKU_HOOK_COUNT, -1, 0, 0); /* call count hook */
+        T->sp.p = base + stacksize; /* save 'sp' */
+        tokuD_hook(T, TOKU_HOOK_COUNT, -1, 0, 0); /* call count hook */
     }
     if (mask & TOKU_MASK_LINE) {
-        /* 'C->oldpc' may be invalid; use zero in this case */
-        int oldpc = (C->oldpc < p->sizecode) ? C->oldpc : 0;
+        /* 'T->oldpc' may be invalid; use zero in this case */
+        int oldpc = (T->oldpc < p->sizecode) ? T->oldpc : 0;
         int npci = cast_int(pc - p->code);
         if (npci <= oldpc || /* call hook when jump back (loop), */
                 changedline(p, oldpc, npci)) { /* or when enter new line */
             int newline = tokuD_getfuncline(p, npci);
-            C->sp.p = base + stacksize; /* save 'sp' */
-            tokuD_hook(C, TOKU_HOOK_LINE, newline, 0, 0); /* call line hook */
+            T->sp.p = base + stacksize; /* save 'sp' */
+            tokuD_hook(T, TOKU_HOOK_LINE, newline, 0, 0); /* call line hook */
         }
-        C->oldpc = npci; /* 'pc' of last call to line hook */
+        T->oldpc = npci; /* 'pc' of last call to line hook */
     }
     return 1; /* keep 'trap' on */
 }

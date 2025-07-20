@@ -23,99 +23,99 @@
 #define bcheck(idx)         (lbcheck(idx) && ubcheck(idx))
 
 
-#define checklist(C,n,p,b) \
-        (tokuL_check_type(C, n, TOKU_T_LIST), auxlen(C,n,p,b))
+#define checklist(T,n,p,b) \
+        (tokuL_check_type(T, n, TOKU_T_LIST), auxlen(T,n,p,b))
 
 
 static int auxlen(toku_State *T, int index, int push, int border) {
     int i;
     switch (border) {
         case 1: { /* respect border */
-            i = tokuL_find_index(C, index, TOKU_FI_NIL);
+            i = tokuL_find_index(T, index, TOKU_FI_NIL);
             if (i >= 0) break;
             /* else... */
         } /* fall through */
         default: { /* get regular length */
             toku_assert(border == 0 || i < 0);
-            i = toku_len(C, index);
+            i = toku_len(T, index);
         }
     }
-    if (push) toku_push_integer(C, i);
+    if (push) toku_push_integer(T, i);
     return i;
 }
 
 
 static int lst_len(toku_State *T) {
-    int border = tokuL_opt(C, toku_to_bool, 1, 1);
-    checklist(C, 0, 1, border);
+    int border = tokuL_opt(T, toku_to_bool, 1, 1);
+    checklist(T, 0, 1, border);
     return 1;
 }
 
 
 static int enumerateaux(toku_State *T) {
-    toku_Integer size = checklist(C, 0, 0, tokuL_opt(C, toku_to_bool, 2, 1));
-    toku_Integer i = tokuL_check_integer(C, 1);
+    toku_Integer size = checklist(T, 0, 0, tokuL_opt(T, toku_to_bool, 2, 1));
+    toku_Integer i = tokuL_check_integer(T, 1);
     i = tokuL_intop(+, i, 1);
-    toku_push_integer(C, i);
+    toku_push_integer(T, i);
     if (i < size) {
-        toku_get_index(C, 0, i);
+        toku_get_index(T, 0, i);
         return 2;
     }
     /* otherwise only return nil (next index might be non-nil) */
-    toku_push_nil(C);
+    toku_push_nil(T);
     return 1;
 }
 
 
 static int lst_enumerate(toku_State *T) {
-    tokuL_check_type(C, 0, TOKU_T_LIST);
-    toku_push_cfunction(C, enumerateaux); /* iteration function */
-    toku_push(C, 0); /* state */
-    toku_push_integer(C, -1); /* initial value */
+    tokuL_check_type(T, 0, TOKU_T_LIST);
+    toku_push_cfunction(T, enumerateaux); /* iteration function */
+    toku_push(T, 0); /* state */
+    toku_push_integer(T, -1); /* initial value */
     return 3;
 }
 
 
 static int lst_insert(toku_State *T) {
-    toku_Integer size = checklist(C, 0, 0, tokuL_opt(C, toku_to_bool, 3, 1));
+    toku_Integer size = checklist(T, 0, 0, tokuL_opt(T, toku_to_bool, 3, 1));
     toku_Integer pos = size;
-    switch (toku_getntop(C)) {
+    switch (toku_getntop(T)) {
         case 2: break; /* position is already set */
         case 4: {
-            toku_setntop(C, 3); /* remove optional bool (border flag) */
+            toku_setntop(T, 3); /* remove optional bool (border flag) */
         } /* fall through */
         case 3: { /* have position */
-            pos = tokuL_check_integer(C, 1);
-            tokuL_check_arg(C, 0 <= pos && pos <= size, 1,
+            pos = tokuL_check_integer(T, 1);
+            tokuL_check_arg(T, 0 <= pos && pos <= size, 1,
                              "position out of bounds");
             /* memmove(&l[pos+1], &l[pos], size-pos) */
             for (int i=size-1; pos <= i; i--) {
-                toku_get_index(C, 0, i);
-                toku_set_index(C, 0, i+1);
+                toku_get_index(T, 0, i);
+                toku_set_index(T, 0, i+1);
             }
             break;
         }
-        default: tokuL_error(C, "wrong number of arguments to 'insert'");
+        default: tokuL_error(T, "wrong number of arguments to 'insert'");
     }
-    toku_set_index(C, 0, pos);
+    toku_set_index(T, 0, pos);
     return 0;
 }
 
 
 static int lst_remove(toku_State *T) {
-    toku_Integer size = checklist(C, 0, 0, tokuL_opt(C, toku_to_bool, 2, 1));
-    toku_Integer pos = tokuL_opt_integer(C, 1, size-(size>0));
-    tokuL_check_arg(C, 0 <= pos && pos < size+(size==0), 1,
+    toku_Integer size = checklist(T, 0, 0, tokuL_opt(T, toku_to_bool, 2, 1));
+    toku_Integer pos = tokuL_opt_integer(T, 1, size-(size>0));
+    tokuL_check_arg(T, 0 <= pos && pos < size+(size==0), 1,
                      "position out of bounds");
-    toku_get_index(C, 0, pos); /* result = l[pos]; */
+    toku_get_index(T, 0, pos); /* result = l[pos]; */
     if (size != 0) { /* the list is not empty? */
         /* memcpy(&l[pos], &l[pos]+1, size-pos-1) */
         for (; pos < size-1; pos++) {
-            toku_get_index(C, 0, pos+1);
-            toku_set_index(C, 0, pos); /* l[pos] = l[pos+1]; */
+            toku_get_index(T, 0, pos+1);
+            toku_set_index(T, 0, pos); /* l[pos] = l[pos+1]; */
         }
-        toku_push_nil(C);
-        toku_set_index(C, 0, pos); /* remove slot l[pos] */
+        toku_push_nil(T);
+        toku_set_index(T, 0, pos); /* remove slot l[pos] */
     }
     return 1;
 }
@@ -124,8 +124,8 @@ static int lst_remove(toku_State *T) {
 /* check list start/end indices */
 static void check_bounds(toku_State *T, int idx1, toku_Integer i,
                                       int idx2, toku_Integer e) {
-    tokuL_check_arg(C, bcheck(i), idx1, "start index out of bounds");
-    tokuL_check_arg(C, bcheck(e), idx2, "end index out of bounds");
+    tokuL_check_arg(T, bcheck(i), idx1, "start index out of bounds");
+    tokuL_check_arg(T, bcheck(e), idx2, "end index out of bounds");
 }
 
 
@@ -133,104 +133,104 @@ static void check_bounds(toku_State *T, int idx1, toku_Integer i,
 ** Copy elements (0[f], ..., 0[e]) into (dl[d], dl[d+1], ...).
 */
 static int lst_move(toku_State *T) {
-    toku_Integer f = tokuL_check_integer(C, 1); /* from */
-    toku_Integer e = tokuL_check_integer(C, 2); /* end */
-    toku_Integer d = tokuL_check_integer(C, 3); /* destination */
-    int dl = !toku_is_noneornil(C, 4) ? 4 : 0; /* destination list */
-    tokuL_check_type(C, 0, TOKU_T_LIST);
-    tokuL_check_type(C, dl, TOKU_T_LIST);
-    check_bounds(C, 1, f, 2, e);
+    toku_Integer f = tokuL_check_integer(T, 1); /* from */
+    toku_Integer e = tokuL_check_integer(T, 2); /* end */
+    toku_Integer d = tokuL_check_integer(T, 3); /* destination */
+    int dl = !toku_is_noneornil(T, 4) ? 4 : 0; /* destination list */
+    tokuL_check_type(T, 0, TOKU_T_LIST);
+    tokuL_check_type(T, dl, TOKU_T_LIST);
+    check_bounds(T, 1, f, 2, e);
     if (e >= f) { /* otherwise, nothing to move */
         int n;
-        tokuL_check_arg(C, bcheck(d), 3, "destination index out of bounds");
+        tokuL_check_arg(T, bcheck(d), 3, "destination index out of bounds");
         n = cast_int(e) - cast_int(f) + 1; /* number of elements to move */
-        if (d > e || d <= f || (dl != 0 && !toku_compare(C, 0, dl, TOKU_ORD_EQ))) {
+        if (d > e || d <= f || (dl != 0 && !toku_compare(T, 0, dl, TOKU_ORD_EQ))) {
             for (int i = 0; i < n; i++) { /* lists are not overlapping */
-                toku_get_index(C, 0, f + i);
-                toku_set_index(C, dl, d + i);
+                toku_get_index(T, 0, f + i);
+                toku_set_index(T, dl, d + i);
             }
         } else { /* list are overlapping */
             for (int i = n - 1; i >= 0; i--) {
-                toku_get_index(C, 0, f + i);
-                toku_set_index(C, dl, d + i);
+                toku_get_index(T, 0, f + i);
+                toku_set_index(T, dl, d + i);
             }
         }
     }
-    toku_push(C, dl); /* return destination list */
+    toku_push(T, dl); /* return destination list */
     return 1;
 }
 
 
 static int lst_new(toku_State *T) {
-    toku_Unsigned size = (toku_Unsigned)tokuL_check_integer(C, 0);
-    tokuL_check_arg(C, size <= cast_uint(TOKU_MAXINT), 0, "out of range");
-    toku_push_list(C, cast_int(size));
+    toku_Unsigned size = (toku_Unsigned)tokuL_check_integer(T, 0);
+    tokuL_check_arg(T, size <= cast_uint(TOKU_MAXINT), 0, "out of range");
+    toku_push_list(T, cast_int(size));
     return 1;
 }
 
 
 static int lst_flatten(toku_State *T) {
     toku_Unsigned n;
-    toku_Integer l = checklist(C, 0, 0, 0);
-    toku_Integer i = tokuL_opt_integer(C, 1, 0);
-    toku_Integer e = tokuL_opt(C, tokuL_check_integer, 2, l-(l>0));
-    check_bounds(C, 1, i, 2, e);
+    toku_Integer l = checklist(T, 0, 0, 0);
+    toku_Integer i = tokuL_opt_integer(T, 1, 0);
+    toku_Integer e = tokuL_opt(T, tokuL_check_integer, 2, l-(l>0));
+    check_bounds(T, 1, i, 2, e);
     e = (e >= l) ? l-1 : e; /* clamp */
     if (e < i) return 0; /* empty range or empty list */
     n = t_castS2U(e) - t_castS2U(i); /* number of elements minus 1 */
-    if (t_unlikely(!toku_checkstack(C, cast_int(++n))))
-        return tokuL_error(C, "too many results");
+    if (t_unlikely(!toku_checkstack(T, cast_int(++n))))
+        return tokuL_error(T, "too many results");
     while (i < e) /* push l[i..e - 1] (to avoid overflows in 'i') */
-        toku_get_index(C, 0, i++);
-    toku_get_index(C, 0, e); /* push last element */
+        toku_get_index(T, 0, i++);
+    toku_get_index(T, 0, e); /* push last element */
     return n;
 }
 
 
 static void addvalue(toku_State *T, tokuL_Buffer *b, int i) {
     int t;
-    toku_get_index(C, 0, i);
-    t = toku_type(C, -1);
+    toku_get_index(T, 0, i);
+    t = toku_type(T, -1);
     if (t == TOKU_T_NUMBER) {
         char numbuff[TOKU_N2SBUFFSZ];
-        toku_numbertocstring(C, -1, numbuff); /* convert it to string */
-        toku_push_string(C, numbuff); /* push it on stack */
-        toku_replace(C, -2); /* and replace original value */
+        toku_numbertocstring(T, -1, numbuff); /* convert it to string */
+        toku_push_string(T, numbuff); /* push it on stack */
+        toku_replace(T, -2); /* and replace original value */
     } else if (t != TOKU_T_STRING) /* value is not a string? */
-        tokuL_error(C, "cannot concat value (%s) at index %d",
-                      toku_typename(C, t), i);
+        tokuL_error(T, "cannot concat value (%s) at index %d",
+                      toku_typename(T, t), i);
     tokuL_buff_push_stack(b);
 }
 
 
-#define getnexti(C,i,e,sn) \
+#define getnexti(T,i,e,sn) \
         (!(sn) ? cast_int(i) + 1 \
-               : toku_find_index(C, 0, 0, cast_int(i), cast_int(e)))
+               : toku_find_index(T, 0, 0, cast_int(i), cast_int(e)))
 
 
 static int lst_concat(toku_State *T) {
     size_t lsep;
-    toku_Integer l = checklist(C, 0, 0, 0);
-    const char *sep = tokuL_opt_lstring(C, 1, "", &lsep);
-    toku_Integer i = tokuL_opt_integer(C, 2, 0);
-    toku_Integer e = tokuL_opt_integer(C, 3, l - (l>0));
-    int sn = tokuL_opt(C, toku_to_bool, 4, 1);
-    check_bounds(C, 2, i, 3, e);
+    toku_Integer l = checklist(T, 0, 0, 0);
+    const char *sep = tokuL_opt_lstring(T, 1, "", &lsep);
+    toku_Integer i = tokuL_opt_integer(T, 2, 0);
+    toku_Integer e = tokuL_opt_integer(T, 3, l - (l>0));
+    int sn = tokuL_opt(T, toku_to_bool, 4, 1);
+    check_bounds(T, 2, i, 3, e);
     if (0 < l && i <= e) { /* list has elements and range is non-empty? */
         const int x = !sn; /* if using 'toku_find_index' go one index behind */
-        int next = getnexti(C, i-x, e, sn);
+        int next = getnexti(T, i-x, e, sn);
         tokuL_Buffer b;
-        tokuL_buff_init(C, &b);
+        tokuL_buff_init(T, &b);
         while (0 <= next && next < e) { /* l[next .. (next < e)] */
-            addvalue(C, &b, next);
+            addvalue(T, &b, next);
             tokuL_buff_push_lstring(&b, sep, lsep);
-            next = getnexti(C, next+1-x, e, sn);
+            next = getnexti(T, next+1-x, e, sn);
         }
-        if (next == e && (!sn || 0 <= toku_find_index(C, 0, 0, next, e)))
-            addvalue(C, &b, cast_int(e)); /* add last value */
+        if (next == e && (!sn || 0 <= toku_find_index(T, 0, 0, next, e)))
+            addvalue(T, &b, cast_int(e)); /* add last value */
         tokuL_buff_end(&b);
     } else /* otherwise nothing to concatenate */
-        toku_push_literal(C, "");
+        toku_push_literal(T, "");
     return 1;
 }
 
@@ -243,8 +243,8 @@ static int lst_concat(toku_State *T) {
 typedef unsigned int Idx;
 
 
-#define geti(C,idl,idx)     toku_get_index(C, idl, t_castU2S(idx))
-#define seti(C,idl,idx)     toku_set_index(C, idl, t_castU2S(idx))
+#define geti(T,idl,idx)     toku_get_index(T, idl, t_castU2S(idx))
+#define seti(T,idl,idx)     toku_set_index(T, idl, t_castU2S(idx))
 
 
 /*
@@ -260,28 +260,28 @@ typedef unsigned int Idx;
 
 
 static void get2(toku_State *T, Idx idx1, Idx idx2) {
-    geti(C, 0, idx1);
-    geti(C, 0, idx2);
+    geti(T, 0, idx1);
+    geti(T, 0, idx2);
 }
 
 
 static void set2(toku_State *T, Idx idx1, Idx idx2) {
-    seti(C, 0, idx1);
-    seti(C, 0, idx2);
+    seti(T, 0, idx1);
+    seti(T, 0, idx2);
 }
 
 
 static int sort_cmp(toku_State *T, Idx a, Idx b) {
-    if (toku_is_nil(C, 1)) /* no compare function? */
-        return toku_compare(C, a, b, TOKU_ORD_LT);
+    if (toku_is_nil(T, 1)) /* no compare function? */
+        return toku_compare(T, a, b, TOKU_ORD_LT);
     else { /* otherwise call compare function */
         int res;
-        toku_push(C, 1);          /* push function */
-        toku_push(C, a-1);        /* -1 to compensate for function */
-        toku_push(C, b-2);        /* -2 to compensate for function and 'a' */
-        toku_call(C, 2, 1);       /* call function */
-        res = toku_to_bool(C, -1); /* get result */
-        toku_pop(C, 1);           /* pop result */
+        toku_push(T, 1);          /* push function */
+        toku_push(T, a-1);        /* -1 to compensate for function */
+        toku_push(T, b-2);        /* -2 to compensate for function and 'a' */
+        toku_call(T, 2, 1);       /* call function */
+        res = toku_to_bool(T, -1); /* get result */
+        toku_pop(T, 1);           /* pop result */
         return res;
     }
 }
@@ -300,32 +300,32 @@ static Idx partition(toku_State *T, Idx lo, Idx hi) {
     /* loop invariant: l[lo .. i] <= P <= l[j .. hi] */
     for (;;) {
         /* next loop: repeat ++i while l[i] < P */
-        while ((void)geti(C, 0, ++i), sort_cmp(C, -1, -2)) {
+        while ((void)geti(T, 0, ++i), sort_cmp(T, -1, -2)) {
             if (t_unlikely(i == hi - 1)) { /* l[hi - 1] < P == l[hi - 1] */
                 /* (pivot element can't be less than itself...) */
-                tokuL_error(C, FNSORTERR);
+                tokuL_error(T, FNSORTERR);
             }
-            toku_pop(C, 1); /* remove l[i] */
+            toku_pop(T, 1); /* remove l[i] */
         }
         /* after the loop, l[i] >= P and l[lo .. i - 1] < P  (l) */
         /* next loop: repeat --j while P < l[j] */
-        while ((void)geti(C, 0, --j), sort_cmp(C, -3, -1)) {
+        while ((void)geti(T, 0, --j), sort_cmp(T, -3, -1)) {
             if (t_unlikely(j < i)) { /* j <= i-1 and l[j] > P, contradicts (l) */
                 /* (can't have P < l[j] <= l[i-1] and P < l[i-1] */
-                tokuL_error(C, FNSORTERR);
+                tokuL_error(T, FNSORTERR);
             }
-            toku_pop(C, 1); /* remove l[j] */
+            toku_pop(T, 1); /* remove l[j] */
         }
         /* after the loop, l[j] <= P and l[j + 1 .. hi] >= P */
         if (j < i) { /* no elements out of place? */
             /* l[lo .. i - 1] <= P <= l[j + 1 .. i .. hi] */
-            toku_pop(C, 1); /* pop l[j] */
+            toku_pop(T, 1); /* pop l[j] */
             /* swap pivot l[hi - 1] with l[i] to satisfy pos-condition */
-            set2(C, hi - 1, i);
+            set2(T, hi - 1, i);
             return i;
         }
         /* otherwise, swap l[i] with l[j] to restore invariant and repeat */
-        set2(C, i, j);
+        set2(T, i, j);
     }
 }
 
@@ -346,59 +346,59 @@ static void auxsort(toku_State *T, Idx lo, Idx hi, unsigned rnd) {
     while (lo < hi) {
         Idx n;
         Idx p; /* pivot index */
-        get2(C, lo, hi);
-        if (sort_cmp(C, -1, -2)) /* l[hi] < l[lo]? */
-            set2(C, lo, hi); /* swap l[hi] with l[lo] */
+        get2(T, lo, hi);
+        if (sort_cmp(T, -1, -2)) /* l[hi] < l[lo]? */
+            set2(T, lo, hi); /* swap l[hi] with l[lo] */
         else
-            toku_pop(C, 2);
+            toku_pop(T, 2);
         if (hi - lo == 1) /* only 2 elements? */
             return; /* done */
         if (hi - lo < RANLIMIT || !rnd) /* small interval or no randomize */
             p = lo + ((hi - lo) / 2); /* use middle element as pivot */
         else
             p = chose_pivot(lo, hi, rnd);
-        get2(C, p, lo);
-        if (sort_cmp(C, -2, -1)) /* l[p] < l[lo]? */
-            set2(C, p, lo); /* swap l[p] with l[lo] */
+        get2(T, p, lo);
+        if (sort_cmp(T, -2, -1)) /* l[p] < l[lo]? */
+            set2(T, p, lo); /* swap l[p] with l[lo] */
         else {
-            toku_pop(C, 1); /* remove l[lo] */
-            geti(C, 0, hi);
-            if (sort_cmp(C, -1, -2)) /* l[hi] < l[p] */ 
-                set2(C, p, hi); /* swap l[hi] with l[p] */
+            toku_pop(T, 1); /* remove l[lo] */
+            geti(T, 0, hi);
+            if (sort_cmp(T, -1, -2)) /* l[hi] < l[p] */ 
+                set2(T, p, hi); /* swap l[hi] with l[p] */
             else
-                toku_pop(C, 2);
+                toku_pop(T, 2);
         }
         if (hi - lo == 2) /* only 3 elements? */
             return; /* done */
-        geti(C, 0, p); /* get pivot */
-        toku_push(C, -1); /* push pivot */
-        geti(C, 0, hi - 1); /* push l[hi - 1] */
-        set2(C, p, hi - 1); /* swap pivot l[p] with l[hi - 1] */
-        p = partition(C, lo, hi);
+        geti(T, 0, p); /* get pivot */
+        toku_push(T, -1); /* push pivot */
+        geti(T, 0, hi - 1); /* push l[hi - 1] */
+        set2(T, p, hi - 1); /* swap pivot l[p] with l[hi - 1] */
+        p = partition(T, lo, hi);
         /* l[lo .. p - 1] <= l[p] == P <= l[p + 1 .. hi] */
         if (p - lo < hi - p) { /* lower interval is smaller? */
-            auxsort(C, lo, p-1, rnd); /* call recursively for lower interval */
+            auxsort(T, lo, p-1, rnd); /* call recursively for lower interval */
             n = p - lo; /* size of smaller interval */
             lo = p + 1; /* tail call for [p + 1 .. hi] (upper interval) */
         } else {
-            auxsort(C, p+1, hi, rnd); /* call recursively for upper interval */
+            auxsort(T, p+1, hi, rnd); /* call recursively for upper interval */
             n = hi - p; /* size of smaller interval */
             hi = p - 1; /* tail call for [lo .. p - 1]  (lower interval) */
         }
         if ((hi - lo) / 128 > n) /* partition too imbalanced? */
-            rnd = tokuL_makeseed(C); /* try a new randomization */
-    } /* tail call auxsort(C, lo, hi, rnd) */
+            rnd = tokuL_makeseed(T); /* try a new randomization */
+    } /* tail call auxsort(T, lo, hi, rnd) */
 }
 
 
 static int lst_sort(toku_State *T) {
-    toku_Integer size = checklist(C, 0, 0, tokuL_opt(C, toku_to_bool, 2, 1));
+    toku_Integer size = checklist(T, 0, 0, tokuL_opt(T, toku_to_bool, 2, 1));
     if (size > 1) { /* non trivial? */
-        tokuL_check_arg(C, size <= TOKU_MAXINT, 0, "list too big");
-        if (!toku_is_noneornil(C, 1)) /* is there a 2nd argument? */
-            tokuL_check_type(C, 1, TOKU_T_FUNCTION); /* it must be a function */
-        toku_setntop(C, 2); /* make sure there are two arguments */
-        auxsort(C, 0, (Idx)size-1u, 0);
+        tokuL_check_arg(T, size <= TOKU_MAXINT, 0, "list too big");
+        if (!toku_is_noneornil(T, 1)) /* is there a 2nd argument? */
+            tokuL_check_type(T, 1, TOKU_T_FUNCTION); /* it must be a function */
+        toku_setntop(T, 2); /* make sure there are two arguments */
+        auxsort(T, 0, (Idx)size-1u, 0);
     }
     return 0;
 }
@@ -407,8 +407,8 @@ static int lst_sort(toku_State *T) {
 
 
 static int lst_shrink(toku_State *T) {
-    tokuL_check_type(C, 0, TOKU_T_LIST);
-    toku_shrinklist(C, 0);
+    tokuL_check_type(T, 0, TOKU_T_LIST);
+    toku_shrinklist(T, 0);
     return 0;
 }
 
@@ -416,25 +416,25 @@ static int lst_shrink(toku_State *T) {
 static int lst_isordered(toku_State *T) {
     int sorted = 1;
     toku_Integer i, e;
-    toku_Integer size = checklist(C, 0, 0, tokuL_opt(C, toku_to_bool, 4, 1));
-    if (!toku_is_noneornil(C, 1)) /* is there a 2nd argument? */
-        tokuL_check_type(C, 1, TOKU_T_FUNCTION); /* must be a function */
-    i = tokuL_opt_integer(C, 2, 0); /* start index */
-    e = tokuL_opt_integer(C, 3, size-(size>0)); /* end index */
-    check_bounds(C, 2, i, 3, e);
+    toku_Integer size = checklist(T, 0, 0, tokuL_opt(T, toku_to_bool, 4, 1));
+    if (!toku_is_noneornil(T, 1)) /* is there a 2nd argument? */
+        tokuL_check_type(T, 1, TOKU_T_FUNCTION); /* must be a function */
+    i = tokuL_opt_integer(T, 2, 0); /* start index */
+    e = tokuL_opt_integer(T, 3, size-(size>0)); /* end index */
+    check_bounds(T, 2, i, 3, e);
     if (e > i) {
-        toku_setntop(C, 2); /* make sure there are two arguments */
+        toku_setntop(T, 2); /* make sure there are two arguments */
         while (sorted && i < e) {
-            toku_get_index(C, 0, cast_int(i));
-            toku_get_index(C, 0, cast_int(i)+1);
-            sorted = sort_cmp(C, -2, -1);
-            toku_pop(C, 2);
+            toku_get_index(T, 0, cast_int(i));
+            toku_get_index(T, 0, cast_int(i)+1);
+            sorted = sort_cmp(T, -2, -1);
+            toku_pop(T, 2);
             i++;
         }
     }
-    toku_push_bool(C, sorted);
+    toku_push_bool(T, sorted);
     if (!sorted) {
-        toku_push_integer(C, i-1);
+        toku_push_integer(T, i-1);
         return 2; /* return false and first index which breaks ordering */
     }
     return 1; /* return true */
@@ -460,8 +460,8 @@ static tokuL_Entry lstlib[] = {
 
 
 CSMOD_API int tokuopen_list(toku_State *T) {
-    tokuL_push_lib(C, lstlib);
-    toku_push_integer(C, TOKU_MAXLISTINDEX);
-    toku_set_fieldstr(C, -2, "maxindex");
+    tokuL_push_lib(T, lstlib);
+    toku_push_integer(T, TOKU_MAXLISTINDEX);
+    toku_set_fieldstr(T, -2, "maxindex");
     return 1;
 }

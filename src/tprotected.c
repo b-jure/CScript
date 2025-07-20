@@ -33,18 +33,18 @@
 /*
 ** TOKUI_THROW/TOKUI_TRY define how Tokudae does exception handling. By
 ** default, Tokudae handles errors with exceptions when compiling as
-** C++ code, with _longjmp/_setjmp when asked to use them, and with
+** T++ code, with _longjmp/_setjmp when asked to use them, and with
 ** longjmp/setjmp otherwise.
 */
-#if !defined(TOKUI_THROW)				        /* { */
+#if !defined(TOKUI_THROW)				/* { */
 
 #if defined(__cplusplus) && !defined(TOKU_USE_LONGJMP)	/* { */
 
-/* C++ exceptions */
-#define TOKUI_THROW(C,c)		throw(c)
-#define TOKUI_TRY(C,c,a) \
+/* T++ exceptions */
+#define TOKUI_THROW(T,c)	throw(c)
+#define TOKUI_TRY(T,c,a) \
 	try { a } catch(...) { if ((c)->status == 0) (c)->status = -1; }
-#define csi_jmpbuf	        int  /* dummy variable */
+#define tokui_jmpbuf	        int  /* dummy variable */
 
 #elif defined(TOKU_USE_POSIX)				/* }{ */
 
@@ -52,16 +52,16 @@
 ** In POSIX, try _longjmp/_setjmp
 ** (more efficient, does not manipulate signal mask).
 */
-#define TOKUI_THROW(C,c)		_longjmp((c)->buf, 1)
-#define TOKUI_TRY(C,c,a)		if (_setjmp((c)->buf) == 0) { a }
-#define csi_jmpbuf		jmp_buf
+#define TOKUI_THROW(T,c)	_longjmp((c)->buf, 1)
+#define TOKUI_TRY(T,c,a)	if (_setjmp((c)->buf) == 0) { a }
+#define tokui_jmpbuf		jmp_buf
 
 #else						        /* }{ */
 
 /* ISO C handling with long jumps */
-#define TOKUI_THROW(C,c)		longjmp((c)->buf, 1)
-#define TOKUI_TRY(C,c,a)		if (setjmp((c)->buf) == 0) { a }
-#define csi_jmpbuf		jmp_buf
+#define TOKUI_THROW(T,c)	longjmp((c)->buf, 1)
+#define TOKUI_TRY(T,c,a)	if (setjmp((c)->buf) == 0) { a }
+#define tokui_jmpbuf		jmp_buf
 
 #endif							/* } */
 
@@ -72,20 +72,20 @@
 /* chain list of long jump buffers */
 typedef struct toku_longjmp {
     struct toku_longjmp *prev;
-    csi_jmpbuf buf;
+    tokui_jmpbuf buf;
     volatile int status;
 } toku_longjmp;
 
 
 
-void csPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop) {
+void tokuPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop) {
     switch (errcode) {
         case TOKU_STATUS_EMEM: { /* memory error? */
-            setstrval2s(C, oldtop, G(C)->memerror);
+            setstrval2s(T, oldtop, G(T)->memerror);
             break;
         }
         case TOKU_STATUS_EERROR: { /* error while handling error? */
-            setstrval2s(C, oldtop, tokuS_newlit(C, "error in error handling"));
+            setstrval2s(T, oldtop, tokuS_newlit(T, "error in error handling"));
             break;
         }
         case TOKU_STATUS_OK: { /* closing upvalue? */
@@ -93,12 +93,12 @@ void csPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop) {
             break;
         }
         default: {
-            toku_assert(errcode > toku_STATUS_OK); /* real error */
-            setobjs2s(C, oldtop, C->sp.p - 1); /* error msg on current top */
+            toku_assert(errcode > TOKU_STATUS_OK); /* real error */
+            setobjs2s(T, oldtop, T->sp.p - 1); /* error msg on current top */
             break;
         }
     }
-    C->sp.p = oldtop + 1;
+    T->sp.p = oldtop + 1;
 }
 
 
@@ -107,21 +107,21 @@ void csPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop) {
 ** error handler or invoke panic if hook for it is present.
 ** In case none of the above occurs, program is aborted.
 */
-t_noret csPR_throw(toku_State *T, int errcode) {
-    if (C->errjmp) { /* thread has error handler? */
-        C->errjmp->status = errcode; /* set status */
-        TOKUI_THROW(C, C->errjmp); /* jump to it */
+t_noret tokuPR_throw(toku_State *T, int errcode) {
+    if (T->errjmp) { /* thread has error handler? */
+        T->errjmp->status = errcode; /* set status */
+        TOKUI_THROW(T, T->errjmp); /* jump to it */
     } else { /* thread has no error handler */
-        GState *gs = G(C);
-        tokuT_resetthread(C, errcode); /* close all */
+        GState *gs = G(T);
+        tokuT_resetthread(T, errcode); /* close all */
         if (gs->mainthread->errjmp) { /* mainthread has error handler? */
             /* copy over error object */
-            setobj2s(C, gs->mainthread->sp.p++, s2v(C->sp.p));
-            csPR_throw(C, errcode); /* re-throw in main thread */
+            setobjs2s(T, gs->mainthread->sp.p++, T->sp.p - 1);
+            tokuPR_throw(gs->mainthread, errcode); /* re-throw in main th. */
         } else { /* no error handlers, abort */
             if (gs->fpanic) { /* state has panic handler? */
-                toku_unlock(C); /* release the lock... */
-                gs->fpanic(C); /* ...and call it */
+                toku_unlock(T); /* release the lock... */
+                gs->fpanic(T); /* ...and call it */
             }
             abort();
         }
@@ -129,39 +129,39 @@ t_noret csPR_throw(toku_State *T, int errcode) {
 }
 
 
-int csPR_rawcall(toku_State *T, ProtectedFn fn, void *ud) {
-    t_uint32 old_nCcalls = C->nCcalls;
+int tokuPR_rawcall(toku_State *T, ProtectedFn fn, void *ud) {
+    t_uint32 old_nCcalls = T->nCcalls;
     toku_longjmp lj;
     lj.status = TOKU_STATUS_OK;
-    lj.prev = C->errjmp;
-    C->errjmp = &lj;
-    TOKUI_TRY(C, &lj, 
-        fn(C, ud);
+    lj.prev = T->errjmp;
+    T->errjmp = &lj;
+    TOKUI_TRY(T, &lj, 
+        fn(T, ud);
     );
-    C->errjmp = lj.prev;
-    C->nCcalls = old_nCcalls;
+    T->errjmp = lj.prev;
+    T->nCcalls = old_nCcalls;
     return lj.status;
 }
 
 /* }====================================================== */
 
 
-int csPR_call(toku_State *T, ProtectedFn fn, void *ud,
+int tokuPR_call(toku_State *T, ProtectedFn fn, void *ud,
               ptrdiff_t old_top, ptrdiff_t ef) {
     int status;
-    CallFrame *old_cf = C->cf;
-    t_ubyte old_allowhook = C->allowhook;
-    ptrdiff_t old_errfunc = C->errfunc;
-    C->errfunc = ef;
-    status = csPR_rawcall(C, fn, ud);
+    CallFrame *old_cf = T->cf;
+    t_ubyte old_allowhook = T->allowhook;
+    ptrdiff_t old_errfunc = T->errfunc;
+    T->errfunc = ef;
+    status = tokuPR_rawcall(T, fn, ud);
     if (t_unlikely(status != TOKU_STATUS_OK)) {
-        C->cf = old_cf;
-        C->allowhook = old_allowhook;
-        status = csPR_close(C, old_top, status);
-        csPR_seterrorobj(C, status, restorestack(C, old_top));
-        tokuT_shrinkstack(C); /* restore stack (overflow might of happened) */
+        T->cf = old_cf;
+        T->allowhook = old_allowhook;
+        status = tokuPR_close(T, old_top, status);
+        tokuPR_seterrorobj(T, status, restorestack(T, old_top));
+        tokuT_shrinkstack(T); /* restore stack (overflow might of happened) */
     }
-    C->errfunc = old_errfunc;
+    T->errfunc = old_errfunc;
     return status;
 }
 
@@ -176,24 +176,24 @@ struct PCloseData {
 /* auxiliary function to call 'tokuF_close' in protected mode */
 static void closep(toku_State *T, void *ud) {
     struct PCloseData *pcd = (struct PCloseData*)ud;
-    tokuF_close(C, pcd->level, pcd->status);
+    tokuF_close(T, pcd->level, pcd->status);
 }
 
 
 /* call 'tokuF_close' in protected mode */
-int csPR_close(toku_State *T, ptrdiff_t level, int status) {
-    CallFrame *old_cf = C->cf;
-    t_ubyte old_allowhook = C->allowhook;
+int tokuPR_close(toku_State *T, ptrdiff_t level, int status) {
+    CallFrame *old_cf = T->cf;
+    t_ubyte old_allowhook = T->allowhook;
     for (;;) { /* keep closing upvalues until no more errors */
         struct PCloseData pcd = {
-            .level = restorestack(C, level),
+            .level = restorestack(T, level),
             .status = status };
-        status = csPR_rawcall(C, closep, &pcd);
+        status = tokuPR_rawcall(T, closep, &pcd);
         if (t_likely(status == TOKU_STATUS_OK))
             return pcd.status;
         else { /* error occurred; restore saved state and repeat */
-            C->cf = old_cf;
-            C->allowhook = old_allowhook;
+            T->cf = old_cf;
+            T->allowhook = old_allowhook;
         }
     }
 }
@@ -211,22 +211,22 @@ struct PParseData {
 /* auxiliary function to call 'tokuP_pparse' in protected mode */
 static void pparse(toku_State *T, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
-    CSClosure *cl = tokuP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    TClosure *cl = tokuP_parse(T, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     toku_assert(cl->nupvalues == cl->p->sizeupvals);
-    tokuF_initupvals(C, cl);
+    tokuF_initupvals(T, cl);
 }
 
 
 /* call 'tokuP_parse' in protected mode */
-int csPR_parse(toku_State *T, BuffReader *br, const char *name) {
+int tokuPR_parse(toku_State *T, BuffReader *br, const char *name) {
     int status;
     struct PParseData pd = { .br = br, .source = name };
-    incnnyc(C);
-    status = csPR_call(C, pparse, &pd, savestack(C, C->sp.p), C->errfunc);
-    tokuR_freebuffer(C, &pd.buff);
-    tokuM_freearray(C, pd.ps.actlocals.arr, pd.ps.actlocals.size);
-    tokuM_freearray(C, pd.ps.literals.arr, pd.ps.literals.size);
-    tokuM_freearray(C, pd.ps.gt.arr, pd.ps.gt.size);
-    decnnyc(C);
+    incnnyc(T);
+    status = tokuPR_call(T, pparse, &pd, savestack(T, T->sp.p), T->errfunc);
+    tokuR_freebuffer(T, &pd.buff);
+    tokuM_freearray(T, pd.ps.actlocals.arr, pd.ps.actlocals.size);
+    tokuM_freearray(T, pd.ps.literals.arr, pd.ps.literals.size);
+    tokuM_freearray(T, pd.ps.gt.arr, pd.ps.gt.size);
+    decnnyc(T);
     return status;
 }

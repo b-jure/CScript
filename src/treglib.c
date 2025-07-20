@@ -10,7 +10,7 @@
 #include "tokudaeprefix.h"
 
 #include <stdio.h>
-#include <ttype.h>
+#include <ctype.h>
 #include <stddef.h>
 
 #include "tokudae.h"
@@ -66,7 +66,7 @@ static int check_capture(MatchState *ms, int l) {
     l -= '1';
     if (t_unlikely(l < 0 || l >= ms->level ||
                    ms->capture[l].len == CAP_UNFINISHED))
-        return tokuL_error(ms->C, "invalid capture index %%%d", l + 1);
+        return tokuL_error(ms->T, "invalid capture index %%%d", l + 1);
     return l;
 }
 
@@ -75,7 +75,7 @@ static int capture_to_close(MatchState *ms) {
     int level = ms->level;
     for (level--; level>=0; level--)
         if (ms->capture[level].len == CAP_UNFINISHED) return level;
-    return tokuL_error(ms->C, "invalid pattern capture");
+    return tokuL_error(ms->T, "invalid pattern capture");
 }
 
 
@@ -83,14 +83,14 @@ static const char *class_end(MatchState *ms, const char *p) {
     switch (*p++) {
         case T_ESC: {
             if (t_unlikely(p == ms->p_end))
-                tokuL_error(ms->C, "malformed pattern (ends with '%%')");
+                tokuL_error(ms->T, "malformed pattern (ends with '%%')");
             return p+1;
         }
         case '[': {
             if (*p == '^') p++;
             do { /* look for a ']' */
                 if (t_unlikely(p == ms->p_end))
-                    tokuL_error(ms->C, "malformed pattern (missing ']')");
+                    tokuL_error(ms->T, "malformed pattern (missing ']')");
                 if (*(p++) == T_ESC && p < ms->p_end)
                     p++; /* skip escapes (e.g. '%]') */
             } while (*p != ']');
@@ -164,7 +164,7 @@ static int single_match(MatchState *ms, const char *s, const char *p,
 static const char *match_balance(MatchState *ms, const char *s,
                                 const char *p) {
     if (t_unlikely(p >= ms->p_end - 1))
-        tokuL_error(ms->C, "malformed pattern (missing arguments to '%%b')");
+        tokuL_error(ms->T, "malformed pattern (missing arguments to '%%b')");
     if (*s != *p)
         return NULL;
     else {
@@ -215,7 +215,7 @@ static const char *start_capture(MatchState *ms, const char *s,
     const char *res;
     int level = ms->level;
     if (level >= TOKU_MAXCAPTURES)
-        tokuL_error(ms->C, "too many captures");
+        tokuL_error(ms->T, "too many captures");
     ms->capture[level].init = s;
     ms->capture[level].len = what;
     ms->level = level+1;
@@ -249,7 +249,7 @@ static const char *match_capture(MatchState *ms, const char *s, int l) {
 
 static const char *match(MatchState *ms, const char *s, const char *p) {
     if (t_unlikely(ms->matchdepth-- == 0))
-        tokuL_error(ms->C, "pattern too complex");
+        tokuL_error(ms->T, "pattern too complex");
 init: /* using goto to optimize tail recursion */
     if (p != ms->p_end) { /* not end of pattern? */
         switch (*p) {
@@ -283,7 +283,7 @@ init: /* using goto to optimize tail recursion */
                         const char *ep; char previous;
                         p += 2;
                         if (t_unlikely(*p != '['))
-                            tokuL_error(ms->C, "missing '[' after '%%f' in pattern");
+                            tokuL_error(ms->T, "missing '[' after '%%f' in pattern");
                         ep = class_end(ms, p); /* points to what is next */
                         previous = (s == ms->srt_init) ? '\0' : *(s - 1);
                         if (!match_bracket_class(uchar(previous), p, ep - 1) &&
@@ -361,16 +361,16 @@ static size_t get_onecapture(MatchState *ms, int i, const char *s,
                              const char *e, const char **cap) {
     if (i >= ms->level) {
         if (t_unlikely(i != 0))
-            tokuL_error(ms->C, "invalid capture index %%%d", i + 1);
+            tokuL_error(ms->T, "invalid capture index %%%d", i + 1);
         *cap = s;
         return e - s;
     } else {
         ptrdiff_t capl = ms->capture[i].len;
         *cap = ms->capture[i].init;
         if (t_unlikely(capl == CAP_UNFINISHED))
-            tokuL_error(ms->C, "unfinished capture");
+            tokuL_error(ms->T, "unfinished capture");
         else if (capl == CAP_POSITION)
-            toku_push_integer(ms->C, ms->capture[i].init - ms->srt_init);
+            toku_push_integer(ms->T, ms->capture[i].init - ms->srt_init);
         return capl;
     }
 }
@@ -384,7 +384,7 @@ static void push_onecapture(MatchState *ms, int i, const char *s,
     const char *cap;
     ptrdiff_t l = get_onecapture(ms, i, s, e, &cap);
     if (l != CAP_POSITION)
-        toku_push_lstring(ms->C, cap, l);
+        toku_push_lstring(ms->T, cap, l);
     /* else position was already pushed */
 }
 
@@ -392,7 +392,7 @@ static void push_onecapture(MatchState *ms, int i, const char *s,
 static int push_captures(MatchState *ms, const char *s, const char *e) {
     int i;
     int nlevels = (ms->level == 0 && s) ? 1 : ms->level;
-    tokuL_check_stack(ms->C, nlevels, "too many captures");
+    tokuL_check_stack(ms->T, nlevels, "too many captures");
     for (i = 0; i < nlevels; i++)
         push_onecapture(ms, i, s, e);
     return nlevels; /* number of strings pushed */
@@ -413,7 +413,7 @@ static int nospecials(const char *p, size_t l) {
 
 static void prep_state(MatchState *ms, toku_State *T,
                       const char *s, size_t ls, const char *p, size_t lp) {
-    ms->C = C;
+    ms->T = T;
     ms->matchdepth = MAXCCALLS;
     ms->srt_init = s;
     ms->srt_end = s + ls;
@@ -429,20 +429,20 @@ static void re_prep_state(MatchState *ms) {
 
 static int find_aux(toku_State *T, int find) {
     size_t ls, lp;
-    const char *s = tokuL_check_lstring(C, 0, &ls);
-    const char *p = tokuL_check_lstring(C, 1, &lp);
-    size_t init = posrelStart(tokuL_opt_integer(C, 2, 0), ls);
+    const char *s = tokuL_check_lstring(T, 0, &ls);
+    const char *p = tokuL_check_lstring(T, 1, &lp);
+    size_t init = posrelStart(tokuL_opt_integer(T, 2, 0), ls);
     if (init > ls || (ls != 0 && init == ls)) { /* start after string's end? */
-        tokuL_push_fail(C); /* cannot find anything */
+        tokuL_push_fail(T); /* cannot find anything */
         return 1;
     }
     /* explicit request or no special characters? */
-    if (find && (toku_to_bool(C, 3) || nospecials(p, lp))) {
+    if (find && (toku_to_bool(T, 3) || nospecials(p, lp))) {
         /* do a plain search */
         const char *s2 = findstr(s + init, ls - init, p, lp, 0);
         if (s2) {
-            toku_push_integer(C, (s2 - s));
-            toku_push_integer(C, (s2 - s) + lp - 1);
+            toku_push_integer(T, (s2 - s));
+            toku_push_integer(T, (s2 - s) + lp - 1);
             return 2;
         }
     } else {
@@ -452,32 +452,32 @@ static int find_aux(toku_State *T, int find) {
         if (anchor) {
             p++; lp--; /* skip anchor character */
         }
-        prep_state(&ms, C, s, ls, p, lp);
+        prep_state(&ms, T, s, ls, p, lp);
         do {
             const char *res;
             re_prep_state(&ms);
             if ((res=match(&ms, s1, p)) != NULL) {
                 if (find) {
-                    toku_push_integer(C, s1 - s); /* start */
-                    toku_push_integer(C, (res - s) - 1); /* end */
+                    toku_push_integer(T, s1 - s); /* start */
+                    toku_push_integer(T, (res - s) - 1); /* end */
                     return push_captures(&ms, NULL, 0) + 2;
                 } else
                     return push_captures(&ms, s1, res);
             }
         } while (s1++ < ms.srt_end && !anchor);
     }
-    tokuL_push_fail(C); /* not found */
+    tokuL_push_fail(T); /* not found */
     return 1;
 }
 
 
 static int reg_find(toku_State *T) {
-    return find_aux(C, 1);
+    return find_aux(T, 1);
 }
 
 
 static int reg_match(toku_State *T) {
-    return find_aux(C, 0);
+    return find_aux(T, 0);
 }
 
 
@@ -491,9 +491,9 @@ typedef struct GMatchState {
 
 
 static int gmatch_aux(toku_State *T) {
-    GMatchState *gm = (GMatchState *)toku_to_userdata(C, toku_upvalueindex(2));
+    GMatchState *gm = (GMatchState *)toku_to_userdata(T, toku_upvalueindex(2));
     const char *src;
-    gm->ms.C = C;
+    gm->ms.T = T;
     for (src = gm->src; src <= gm->ms.srt_end; src++) {
         const char *e;
         re_prep_state(&gm->ms);
@@ -508,17 +508,17 @@ static int gmatch_aux(toku_State *T) {
 
 static int reg_gmatch(toku_State *T) {
     size_t ls, lp;
-    const char *s = tokuL_check_lstring(C, 0, &ls);
-    const char *p = tokuL_check_lstring(C, 1, &lp);
-    size_t init = posrelStart(tokuL_opt_integer(C, 2, 0), ls);
+    const char *s = tokuL_check_lstring(T, 0, &ls);
+    const char *p = tokuL_check_lstring(T, 1, &lp);
+    size_t init = posrelStart(tokuL_opt_integer(T, 2, 0), ls);
     GMatchState *gm;
-    toku_setntop(C, 2); /* keep strings on closure to avoid being collected */
-    gm = (GMatchState *)toku_push_userdata(C, sizeof(GMatchState), 0);
+    toku_setntop(T, 2); /* keep strings on closure to avoid being collected */
+    gm = (GMatchState *)toku_push_userdata(T, sizeof(GMatchState), 0);
     if (init > ls) /* start after string's end? */
         init = ls + 1; /* avoid overflows in 's + init' */
-    prep_state(&gm->ms, C, s, ls, p, lp);
+    prep_state(&gm->ms, T, s, ls, p, lp);
     gm->src = s + init; gm->p = p; gm->lastmatch = NULL;
-    toku_push_cclosure(C, gmatch_aux, 3);
+    toku_push_cclosure(T, gmatch_aux, 3);
     return 1;
 }
 
@@ -526,8 +526,8 @@ static int reg_gmatch(toku_State *T) {
 static void add_s(MatchState *ms, tokuL_Buffer *b, const char *s,
                                                  const char *e) {
     size_t l;
-    toku_State *T = ms->C;
-    const char *news = toku_to_lstring(C, 2, &l);
+    toku_State *T = ms->T;
+    const char *news = toku_to_lstring(T, 2, &l);
     const char *p;
     while ((p = cast_charp(memchr(news, T_ESC, l))) != NULL) {
         tokuL_buff_push_lstring(b, news, cast_sizet(p - news));
@@ -540,13 +540,13 @@ static void add_s(MatchState *ms, tokuL_Buffer *b, const char *s,
             const char *cap;
             ptrdiff_t resl = get_onecapture(ms, *p - '1', s, e, &cap);
             if (resl == CAP_POSITION) {
-                tokuL_to_lstring(C, -1, NULL); /* conv. position to string */
-                toku_remove(C, -2); /* remove position */
+                tokuL_to_lstring(T, -1, NULL); /* conv. position to string */
+                toku_remove(T, -2); /* remove position */
                 tokuL_buff_push_stack(b); /* add pos. to accumulated result */
             } else
                 tokuL_buff_push_lstring(b, cap, cast_sizet(resl));
         } else
-            tokuL_error(C, "invalid use of '%c' in replacement string", T_ESC);
+            tokuL_error(T, "invalid use of '%c' in replacement string", T_ESC);
         l -= p + 1 - news;
         news = p + 1;
     }
@@ -561,19 +561,19 @@ static void add_s(MatchState *ms, tokuL_Buffer *b, const char *s,
 */
 static int add_value(MatchState *ms, tokuL_Buffer *b, const char *s,
                                      const char *e, int tr) {
-    toku_State *T = ms->C;
+    toku_State *T = ms->T;
     switch (tr) {
         case TOKU_T_FUNCTION: { /* call the function */
             int n;
-            toku_push(C, 2); /* push the function */
+            toku_push(T, 2); /* push the function */
             n = push_captures(ms, s, e); /* all captures as arguments */
-            toku_call(C, n, 1); /* call it */
+            toku_call(T, n, 1); /* call it */
             break;
         }
         case TOKU_T_LIST: case TOKU_T_INSTANCE: case TOKU_T_TABLE: {
             /* index the list/instance/table */
             push_onecapture(ms, 0, s, e); /* first capture is the index */
-            toku_get(C, 2);
+            toku_get(T, 2);
             break;
         }
         default: { /* TOKU_T_STRING */
@@ -581,13 +581,13 @@ static int add_value(MatchState *ms, tokuL_Buffer *b, const char *s,
             return 1; /* something changed */
         }
     }
-    if (!toku_to_bool(C, -1)) { /* nil or false? */
-        toku_pop(C, 1); /* remove value */
+    if (!toku_to_bool(T, -1)) { /* nil or false? */
+        toku_pop(T, 1); /* remove value */
         tokuL_buff_push_lstring(b, s, cast_sizet(e-s)); /* keep original text */
         return 0; /* no changes */
-    } else if (t_unlikely(!toku_is_string(C, -1))) {
-        return tokuL_error(C, "invalid replacement value (a %s)",
-                            tokuL_typename(C, -1));
+    } else if (t_unlikely(!toku_is_string(T, -1))) {
+        return tokuL_error(T, "invalid replacement value (a %s)",
+                            tokuL_typename(T, -1));
     } else {
         tokuL_buff_push_stack(b); /* add result to accumulator */
         return 1; /* something changed */
@@ -597,23 +597,23 @@ static int add_value(MatchState *ms, tokuL_Buffer *b, const char *s,
 
 static int reg_gsub(toku_State *T) {
     size_t srcl, lp;
-    const char *src = tokuL_check_lstring(C, 0, &srcl); /* subject */
-    const char *p = tokuL_check_lstring(C, 1, &lp); /* pattern */
+    const char *src = tokuL_check_lstring(T, 0, &srcl); /* subject */
+    const char *p = tokuL_check_lstring(T, 1, &lp); /* pattern */
     const char *lastmatch = NULL; /* end of last match */
-    int tr = toku_type(C, 2); /* replacement type */
-    toku_Integer max_s = tokuL_opt_integer(C, 3, (toku_Integer)srcl + 1);
+    int tr = toku_type(T, 2); /* replacement type */
+    toku_Integer max_s = tokuL_opt_integer(T, 3, (toku_Integer)srcl + 1);
     int anchor = (*p == '^');
     toku_Integer n = 0; /* replacement count */
     int changed = 0; /* change flag */
     MatchState ms;
     tokuL_Buffer b;
-    tokuL_expect_arg(C, tr == TOKU_T_STRING || tr == TOKU_T_FUNCTION ||
+    tokuL_expect_arg(T, tr == TOKU_T_STRING || tr == TOKU_T_FUNCTION ||
                       tr == TOKU_T_TABLE ||  tr == TOKU_T_INSTANCE ||
                       tr == TOKU_T_LIST, 2, "string/function/table/instance/list");
-    tokuL_buff_init(C, &b);
+    tokuL_buff_init(T, &b);
     if (anchor)
         p++, lp--; /* skip anchor character */
-    prep_state(&ms, C, src, srcl, p, lp);
+    prep_state(&ms, T, src, srcl, p, lp);
     while (n < max_s) {
         const char *e;
         re_prep_state(&ms); /* (re)prepare state for new match */
@@ -627,12 +627,12 @@ static int reg_gsub(toku_State *T) {
         if (anchor) break;
     }
     if (!changed) /* no changes? */
-        toku_push(C, 0); /* return original string */
+        toku_push(T, 0); /* return original string */
     else { /* something changed */
         tokuL_buff_push_lstring(&b, src, cast_sizet(ms.srt_end-src));
         tokuL_buff_end(&b); /* create and return new string */
     }
-    toku_push_integer(C, n); /* number of substitutions */
+    toku_push_integer(T, n); /* number of substitutions */
     return 2;
 }
 
@@ -648,6 +648,6 @@ static const tokuL_Entry reglib[] = {
 
 
 CSMOD_API int tokuopen_reg(toku_State *T) {
-    tokuL_push_lib(C, reglib);
+    tokuL_push_lib(T, reglib);
     return 1;
 }

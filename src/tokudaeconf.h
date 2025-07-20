@@ -16,13 +16,19 @@
 #include <math.h>
 
 
-#if SIZE_MAX < UTOKU_MAXINT
-#error SIZE_MAX must be greater or equal UTOKU_MAXINT
+/* {====================================================================== 
+** Some hard limits to current Tokudae implementation
+** ======================================================================= */
+
+#if SIZE_MAX < UINT_MAX
+#error SIZE_MAX must be greater or equal UINT_MAX
 #endif
 
 #if ((UINT_MAX >> 30) < 3)
 #error 'int' has to have at least 32 bits
 #endif
+
+/* }===================================================================== */
 
 
 /* {====================================================================== 
@@ -31,26 +37,26 @@
 ** ======================================================================= */
 
 #if defined(_WIN32) && !defined(_WIN32_WCE)
-#define TOKU_USE_WINDOWS      /* enable goodies for regular Windows */
+#define TOKU_USE_WINDOWS    /* enable goodies for regular Windows */
 #endif
 
 
 #if defined(TOKU_USE_WINDOWS)
-#define TOKU_DL_DLL           /* enable support for DLL */
+#define TOKU_DL_DLL         /* enable support for DLL */
 #endif
 
 
 #if defined(TOKU_USE_LINUX)
 #define TOKU_USE_POSIX
 #define TOKU_USE_DLOPEN
-#define TOKU_READLINELIB	        "libreadline.so"
+#define TOKU_READLINELIB	    "libreadline.so"
 #endif
 
 
 #if defined(TOKU_USE_MACOSX)
 #define TOKU_USE_POSIX
 #define TOKU_USE_DLOPEN
-#define TOKU_READLINELIB	        "libedit.dylib"
+#define TOKU_READLINELIB	    "libedit.dylib"
 #endif
 
 
@@ -70,24 +76,24 @@
 */
 
 /* predefined options for TOKU_INT_TYPE */
-#define TOKU_INT_INT                  1
-#define TOKU_INT_LONG                 2
-#define TOKU_INT_LONGLONG             3
+#define TOKU_INT_INT                1
+#define TOKU_INT_LONG               2
+#define TOKU_INT_LONGLONG           3
 
 /* predefined options for TOKU_FLOAT_TYPE */
-#define TOKU_FLOAT_FLOAT              1
-#define TOKU_FLOAT_DOUBLE             2
-#define TOKU_FLOAT_LONGDOUBLE         3
+#define TOKU_FLOAT_FLOAT            1
+#define TOKU_FLOAT_DOUBLE           2
+#define TOKU_FLOAT_LONGDOUBLE       3
 
 
 /* default configuration ('long long' and 'double', for 64-bit) */
-#define TOKU_INT_DEFAULT              TOKU_INT_LONGLONG
-#define TOKU_FLOAT_DEFAULT            TOKU_FLOAT_DOUBLE
+#define TOKU_INT_DEFAULT        TOKU_INT_LONGLONG
+#define TOKU_FLOAT_DEFAULT      TOKU_FLOAT_DOUBLE
 
 
 /* types for integers and floats */
-#define TOKU_INT_TYPE                 TOKU_INT_DEFAULT
-#define TOKU_FLOAT_TYPE               TOKU_FLOAT_DEFAULT
+#define TOKU_INT_TYPE           TOKU_INT_DEFAULT
+#define TOKU_FLOAT_TYPE         TOKU_FLOAT_DEFAULT
 
 /* }===================================================================== */
 
@@ -104,9 +110,9 @@
 ** @TOKU_EXEC_DIR - in a Windows path is replaced by the executable's
 ** directory.
 */
-#define TOKU_PATH_SEP             ";"
-#define TOKU_PATH_MARK            "?"
-#define TOKU_EXEC_DIR             "!"
+#define TOKU_PATH_SEP       ";"
+#define TOKU_PATH_MARK      "?"
+#define TOKU_EXEC_DIR       "!"
 
 
 /*
@@ -119,15 +125,15 @@
 ** non-conventional directories.
 */
 
-#define TOKU_VDIR         TOKU_VERSION_MAJOR "." TOKU_VERSION_MINOR
+#define TOKU_VDIR       TOKU_VERSION_MAJOR "." TOKU_VERSION_MINOR
 #if defined(_WIN32)     /* { */
 /*
 ** In Windows, any exclamation mark ('!') in the path is replaced by the
 ** path of the directory of the executable file of the current process.
 */
-#define TOKU_CSDIR    "!\\tokudae\\"
-#define TOKU_CDIR     "!\\"
-#define TOKU_SHRDIR   "!\\..\\share\\tokudae\\" TOKU_VDIR "\\"
+#define TOKU_CSDIR      "!\\tokudae\\"
+#define TOKU_CDIR       "!\\"
+#define TOKU_SHRDIR     "!\\..\\share\\tokudae\\" TOKU_VDIR "\\"
 
 #if !defined(TOKU_PATH_DEFAULT)
 #define TOKU_PATH_DEFAULT \
@@ -146,9 +152,9 @@
 
 #else                   /* }{ */
 
-#define TOKU_ROOT     "/usr/local/"
-#define TOKU_CSDIR    TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
-#define TOKU_CDIR     TOKU_ROOT "lib/tokudae/" TOKU_VDIR "/"
+#define TOKU_ROOT       "/usr/local/"
+#define TOKU_CSDIR      TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
+#define TOKU_CDIR       TOKU_ROOT "lib/tokudae/" TOKU_VDIR "/"
 
 #if !defined(TOKU_PATH_DEFAULT)
 #define TOKU_PATH_DEFAULT \
@@ -173,9 +179,9 @@
 #if !defined(TOKU_DIRSEP)
 
 #if defined(_WIN32)
-#define TOKU_DIRSEP       "\\"
+#define TOKU_DIRSEP     "\\"
 #else
-#define TOKU_DIRSEP       "/"
+#define TOKU_DIRSEP     "/"
 #endif
 
 #endif
@@ -187,7 +193,7 @@
 ** Typically, the suffix after the mark is the module version,
 ** as in "mod-v1.2.so".
 */
-#define TOKU_IGMARK               "-"
+#define TOKU_IGMARK     "-"
 
 /* }===================================================================== */
 
@@ -206,18 +212,18 @@
 ** the libraries, you may want to use the following definition (define
 ** TOKU_BUILD_AS_DLL to get it).
 */
-#if defined(TOKU_BUILD_AS_DLL)    /* { */
-#if defined(TOKU_CORE) || defined(TOKU_LIB)         /* { */
-#define TOKU_API      __declspec(dllexport)
+#if defined(TOKU_BUILD_AS_DLL)  /* { */
+#if defined(TOKU_CORE) || defined(TOKU_LIB)     /* { */
+#define TOKU_API    __declspec(dllexport)
 #else                                           /* }{ */
-#define TOKU_API      __declspec(dllimport)
+#define TOKU_API    __declspec(dllimport)
 #endif                                          /* } */
 #else                           /* }{ */
-#define TOKU_API      extern
+#define TOKU_API    extern
 #endif                          /* } */
 
 
-#define TOKULIB_API       TOKU_API
+#define TOKULIB_API     TOKU_API
 #define CSMOD_API       TOKU_API
 
 
@@ -259,7 +265,7 @@
 */
 
 
-#define t_floor(n)          (t_mathop(floor)(n))
+#define t_floor(n)      (t_mathop(floor)(n))
 
 #define toku_number2str(s,sz,n) \
         t_snprintf((s), (sz), TOKU_NUMBER_FMT, (TOKU_NUMBER)(n))
@@ -270,37 +276,37 @@
      (*(p) = (TOKU_INTEGER)(n), 1))
 
 
-#if TOKU_FLOAT_TYPE == TOKU_FLOAT_FLOAT                 /* { single precision */
+#if TOKU_FLOAT_TYPE == TOKU_FLOAT_FLOAT             /* { single precision */
 
 #error 'float' as 'TOKU_NUMBER' is not supported.
 
-#elif TOKU_FLOAT_TYPE == TOKU_FLOAT_DOUBLE              /* }{ double precision */
+#elif TOKU_FLOAT_TYPE == TOKU_FLOAT_DOUBLE          /* }{ double precision */
 
-#define TOKU_NUMBER               double
+#define TOKU_NUMBER             double
 
-#define TOKU_NUMBER_FMTLEN        ""
-#define TOKU_NUMBER_FMT           "%.15g"
+#define TOKU_NUMBER_FMTLEN      ""
+#define TOKU_NUMBER_FMT         "%.15g"
 
 #define t_floatatt(n)           (DBL_##n)
 
-#define TOKU_NUMBER_MIN           t_floatatt(MIN)
-#define TOKU_NUMBER_MAX           t_floatatt(MAX)
+#define TOKU_NUMBER_MIN         t_floatatt(MIN)
+#define TOKU_NUMBER_MAX         t_floatatt(MAX)
 
-#define TOKU_HUGE_VAL             ((toku_Number)HUGE_VAL)
+#define TOKU_HUGE_VAL           ((toku_Number)HUGE_VAL)
 
 #define t_mathop(op)            op
 
-#define toku_str2number(s,p)      strtod((s), (p))
+#define toku_str2number(s,p)    strtod((s), (p))
 
 #elif TOKU_FLOAT_TYPE == TOKU_FLOAT_LONG_DOUBLE_TYPE
 
 #error 'long double' as 'TOKU_NUMBER' is not supported.
 
-#else                                               /* }{ */
+#else                                           /* }{ */
 
 #error Unrecognized or undefined float type.
 
-#endif                                              /* } */
+#endif                                          /* } */
 
 
 #if !defined(toku_str2number)
@@ -358,7 +364,7 @@
 
 #else                           /* }{ */
 
-#error Compiler does not support 'long long'.
+#error Implementation does not support 'long long'.
 
 #endif                          /* } */
 
@@ -385,7 +391,7 @@
 /* 
 ** @toku_pointer2str - converts a pointer to a string.
 */
-#define toku_pointer2str(buff,sz,p)       t_snprintf(buff,sz,"%p",p)
+#define toku_pointer2str(buff,sz,p)     t_snprintf(buff,sz,"%p",p)
 
 
 /*
@@ -401,23 +407,23 @@
 ** macro must include the header 'locale.h'.)
 */
 #if !defined(toku_getlocaledecpoint)
-#define toku_getlocaledecpoint()      (localeconv()->decimal_point[0])
+#define toku_getlocaledecpoint()    (localeconv()->decimal_point[0])
 #endif
 
 
 /*
-** @csi_likely - likely branch to be taken.
-** @csi_unlikely - unlikely branch to be taken.
+** @tokui_likely - likely branch to be taken.
+** @tokui_unlikely - unlikely branch to be taken.
 ** Jump prediction macros.
 */
-#if !defined(csi_likely)
+#if !defined(tokui_likely)
 
 #if defined(__GNUC__) && !defined(TOKU_NOBUILTIN)
-#define csi_likely(cond)        __builtin_expect((cond) != 0, 1)
-#define csi_unlikely(cond)      __builtin_expect((cond) != 0, 0)
+#define tokui_likely(cond)      __builtin_expect((cond) != 0, 1)
+#define tokui_unlikely(cond)    __builtin_expect((cond) != 0, 0)
 #else
-#define csi_likely(cond)        cond
-#define csi_unlikely(cond)      cond
+#define tokui_likely(cond)      cond
+#define tokui_unlikely(cond)    cond
 #endif
 
 #endif
@@ -425,8 +431,8 @@
 
 #if defined(TOKU_CORE) || defined(TOKU_LIB)
 /* shorter names for internal use */
-#define t_likely(cond)      csi_likely(cond)
-#define t_unlikely(cond)    csi_unlikely(cond)
+#define t_likely(cond)      tokui_likely(cond)
+#define t_unlikely(cond)    tokui_unlikely(cond)
 #endif
 
 /* }===================================================================== */
@@ -446,7 +452,7 @@
 ** space (and to reserve some numbers for pseudo-indices).
 ** (It must fit into max(size_t)/32 and max(int)/2.)
 */
-#define TOKUI_MAXSTACK        (1 << 23)
+#define TOKUI_MAXSTACK      (1 << 23)
 
 
 /*
@@ -454,7 +460,7 @@
 ** the Tokudae state with very fast access (memory chunk before state).
 ** CHANGE if you need a different size.
 */
-#define TOKU_EXTRASPACE       sizeof(void *)
+#define TOKU_EXTRASPACE     sizeof(void *)
 
 
 /*
@@ -462,21 +468,22 @@
 ** of a function in debug information.
 ** CHANGE it if you want a different size.
 */
-#define TOKU_IDSIZE           60
+#define TOKU_IDSIZE         60
 
 
 /*
-** @CSL_BUFFERSIZE is the initial buffer size used by the tokudaeaux
+** @TOKUL_BUFFERSIZE is the initial buffer size used by the 'tokudaeaux.h'
 ** buffer system.
 */
-#define CSL_BUFFERSIZE      1024
+#define TOKUL_BUFFERSIZE    1024
 
 
 /*
 ** @TOKUI_MAXALIGN - defines fields that, when used in a union, ensure maximum
 ** alignment for the other items in that union.
 */
-#define TOKUI_MAXALIGN    long l; toku_Integer i; double d; toku_Number n; void *p
+#define TOKUI_MAXALIGN \
+        long l; toku_Integer i; double d; toku_Number n; void *p
 
 
 /* 
@@ -485,7 +492,7 @@
 */
 #if defined(TOKU_USE_APICHECK)
 #include <assert.h>
-#define csi_checkapi(C,e)       assert(e)
+#define tokui_checkapi(C,e)       assert(e)
 #endif
 
 /* }====================================================================== */

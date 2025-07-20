@@ -14,7 +14,7 @@
 
 #include "tstring.h"
 #include "ttable.h"
-#include "tokudaetonf.h"
+#include "tokudaeconf.h"
 #include "tgc.h"
 #include "tokudae.h"
 #include "tokudaelimits.h"
@@ -23,9 +23,6 @@
 #include "tobject.h"
 #include "tobject.h"
 #include "tstate.h"
-
-
-#include "tmeta.h"
 
 
 /* largest integer such that 2^MAXHBITS fits in 'int' */
@@ -115,30 +112,30 @@ t_sinline void htpreinit(Table *t) {
 
 /* create new table of specific size */
 Table *tokuH_newsz(toku_State *T, int size) {
-    GCObject *o = tokuG_new(C, sizeof(Table), TOKU_VTABLE);
+    GCObject *o = tokuG_new(T, sizeof(Table), TOKU_VTABLE);
     Table *t = gco2ht(o);
     htpreinit(t);
-    settval2s(C, C->sp.p++, t); /* assume EXTRA_STACK */
-    newhasharray(C, t, size);
-    C->sp.p--; /* remove t */
+    settval2s(T, T->sp.p++, t); /* assume EXTRA_STACK */
+    newhasharray(T, t, size);
+    T->sp.p--; /* remove t */
     return t;
 }
 
 
 /* create new hashtable with minimum size */
 Table *tokuH_new(toku_State *T) {
-    return tokuH_newsz(C, MINHSIZE);
+    return tokuH_newsz(T, MINHSIZE);
 }
 
 
 static inline void freehash(toku_State *T, Table *t) {
-    tokuM_freearray(C, t->node, htsize(t));
+    tokuM_freearray(T, t->node, htsize(t));
 }
 
 
 void tokuH_free(toku_State *T, Table *t) {
-    freehash(C, t);
-    tokuM_free(C, t);
+    freehash(T, t);
+    tokuM_free(T, t);
 }
 
 
@@ -223,8 +220,8 @@ static void insertfrom(toku_State *T, Table *src, Table *dest) {
         Node *oldn = htnode(src, i);
         if (!isempty(nodeval(oldn))) {
             TValue key;
-            getnodekey(C, &key, oldn);
-            tokuH_set(C, dest, &key, nodeval(oldn));
+            getnodekey(T, &key, oldn);
+            tokuH_set(T, dest, &key, nodeval(oldn));
         }
     }
 }
@@ -235,10 +232,10 @@ void tokuH_resize(toku_State *T, Table *t, t_uint newsize) {
     Table newht;
     if (t_unlikely(newsize < MINHSIZE))
         newsize = MINHSIZE;
-    newhasharray(C, &newht, newsize);
+    newhasharray(T, &newht, newsize);
     exchangehashes(t, &newht);
-    insertfrom(C, &newht, t);
-    freehash(C, &newht);
+    insertfrom(T, &newht, t);
+    freehash(T, &newht);
 }
 
 
@@ -251,7 +248,7 @@ static void rehash(toku_State *T, Table *t) {
         usednodes += !isempty(nodeval(n));
     }
     usednodes++; /* for one extra key */
-    tokuH_resize(C, t, usednodes);
+    tokuH_resize(T, t, usednodes);
 }
 
 
@@ -263,7 +260,7 @@ void tokuH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val)
     Node *mp;
     TValue aux;
     if (t_unlikely(ttisnil(key))) {
-        tokuD_runerror(C, "index is nil");
+        tokuD_runerror(T, "index is nil");
     } else if (ttisflt(key)) {
         toku_Number f = fval(key);
         toku_Integer k;
@@ -272,7 +269,7 @@ void tokuH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val)
             key = &aux; /* insert it as an integer */
         }
         else if (t_unlikely(t_numisnan(f))) /* float is NaN? */
-            tokuD_runerror(C, "index is NaN");
+            tokuD_runerror(T, "index is NaN");
         /* else */
     } /* fall through */
     if (ttisnil(val))
@@ -282,8 +279,8 @@ void tokuH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val)
         Node *othern;
         Node *f = getfreepos(t); /* get next free position */
         if (f == NULL) { /* no free position ? */
-            rehash(C, t); /* grow table */
-            tokuH_set(C, t, key, val); /* insert key */
+            rehash(T, t); /* grow table */
+            tokuH_set(T, t, key, val); /* insert key */
             return; /* done, key must be a new key */
         }
         othern = mainposfromnode(t, mp);
@@ -308,10 +305,10 @@ void tokuH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val)
             mp = f;
         }
     }
-    setnodekey(C, mp, key); /* set key */
-    tokuG_barrierback(C, obj2gco(t), key); /* set 't' as gray */
+    setnodekey(T, mp, key); /* set key */
+    tokuG_barrierback(T, obj2gco(t), key); /* set 't' as gray */
     toku_assert(isempty(nodeval(mp))); /* value slot must be empty */
-    setobj(C, nodeval(mp), val); /* set value */
+    setobj(T, nodeval(mp), val); /* set value */
 }
 
 
@@ -387,7 +384,7 @@ static t_uint getindex(toku_State *T, Table *t, const TValue *k) {
     slot = getgeneric(t, k, 1);
     if (t_unlikely(isabstkey(slot))) {
         toku_assert(0);
-        tokuD_runerror(C, "invalid key passed to 'nextfield'"); /* not found */
+        tokuD_runerror(T, "invalid key passed to 'nextfield'"); /* not found */
     }
     t_uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
@@ -395,12 +392,12 @@ static t_uint getindex(toku_State *T, Table *t, const TValue *k) {
 
 
 int tokuH_next(toku_State *T, Table *t, SPtr key) {
-    t_uint i = getindex(C, t, s2v(key));
+    t_uint i = getindex(T, t, s2v(key));
     for (; cast_int(i) < htsize(t); i++) {
         Node *slot = htnode(t, i);
         if (!isempty(nodeval(slot))) {
-            getnodekey(C, s2v(key), slot);
-            setobj2s(C, key + 1, nodeval(slot));
+            getnodekey(T, s2v(key), slot);
+            setobj2s(T, key + 1, nodeval(slot));
             return 1;
         }
     }
@@ -415,9 +412,9 @@ void tokuH_copykeys(toku_State *T, Table *dest, Table *src) {
     for (int i = 0; i < sz; i++) {
         Node *n = htnode(src, i);
         if (!isempty(nodeval(n))) {
-            getnodekey(C, &k, n);
-            tokuH_set(C, dest, &k, nodeval(n));
-            tokuG_barrierback(C, obj2gco(dest), nodeval(n));
+            getnodekey(T, &k, n);
+            tokuH_set(T, dest, &k, nodeval(n));
+            tokuG_barrierback(T, obj2gco(dest), nodeval(n));
         }
     }
 }
@@ -489,9 +486,9 @@ const TValue *tokuH_get(Table *t, const TValue *key) {
 void tokuH_finishset(toku_State *T, Table *t, const TValue *slot,
                                 const TValue *key, const TValue *val) {
     if (isabstkey(slot))
-        tokuH_newkey(C, t, key, val);
+        tokuH_newkey(T, t, key, val);
     else
-        setobj(C, cast(TValue *, slot), val);
+        setobj(T, cast(TValue *, slot), val);
 }
 
 
@@ -500,7 +497,7 @@ void tokuH_finishset(toku_State *T, Table *t, const TValue *slot,
 */
 void tokuH_set(toku_State *T, Table *t, const TValue *key, const TValue *val) {
     const TValue *slot = tokuH_get(t, key);
-    tokuH_finishset(C, t, slot, key, val);
+    tokuH_finishset(T, t, slot, key, val);
 }
 
 
@@ -511,10 +508,10 @@ void tokuH_setstr(toku_State *T, Table *t, OString *key, const TValue *val) {
     const TValue *slot = tokuH_getstr(t, key);
     if (isabstkey(slot)) {
         TValue k;
-        setstrval(C, &k, key);
-        tokuH_newkey(C, t, &k, val);
+        setstrval(T, &k, key);
+        tokuH_newkey(T, t, &k, val);
     } else
-        setobj(C, cast(TValue *, slot), val);
+        setobj(T, cast(TValue *, slot), val);
 }
 
 
@@ -526,9 +523,9 @@ void tokuH_setint(toku_State *T, Table *t, toku_Integer key, const TValue *val) 
     if (isabstkey(slot)) {
         TValue k;
         setival(&k, key);
-        tokuH_newkey(C, t, &k, val);
+        tokuH_newkey(T, t, &k, val);
     } else
-        setobj(C, cast(TValue *, slot), val);
+        setobj(T, cast(TValue *, slot), val);
 }
 
 

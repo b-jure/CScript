@@ -164,7 +164,7 @@ TOKULIB_API void tokuL_unref(toku_State *T, int a, int ref);
 #define tokuL_check_string(C,idx)   tokuL_check_lstring(C, idx, NULL)
 
 #define tokuL_check_arg(C,cond,idx,extramsg) \
-        ((void)(csi_likely(cond) || tokuL_error_arg(C, (idx), (extramsg))))
+        ((void)(tokui_likely(cond) || tokuL_error_arg(C, (idx), (extramsg))))
 
 #define tokuL_opt_string(C,idx,dfl)     tokuL_opt_lstring(C, idx, dfl, NULL)
 
@@ -172,7 +172,7 @@ TOKULIB_API void tokuL_unref(toku_State *T, int a, int ref);
         (toku_is_noneornil(C, idx) ? (dfl) : fn(C, idx))
 
 #define tokuL_expect_arg(C,cond,idx,tname) \
-        ((void)(csi_likely(cond) || tokuL_error_type(C, (idx), (tname))))
+        ((void)(tokui_likely(cond) || tokuL_error_type(C, (idx), (tname))))
 
 #define tokuL_typename(C,idx)   toku_typename(C, toku_type(C, idx))
 
@@ -228,15 +228,15 @@ struct tokuL_Buffer {
     toku_State *T;
     union {
         TOKUI_MAXALIGN; /* ensure maximum alignment for buffer */
-        char b[CSL_BUFFERSIZE]; /* initial buffer */
+        char b[TOKUL_BUFFERSIZE]; /* initial buffer */
     } init;
 };
 
-#define tokuL_buffptr(B)      ((B)->b)
-#define tokuL_bufflen(B)      ((B)->n)
+#define tokuL_buffptr(B)    ((B)->b)
+#define tokuL_bufflen(B)    ((B)->n)
 
-#define tokuL_buffadd(B, sz)      ((B)->n += (sz))
-#define tokuL_buffsub(B, sz)      ((B)->n -= (sz))
+#define tokuL_buffadd(B, sz)    ((B)->n += (sz))
+#define tokuL_buffsub(B, sz)    ((B)->n -= (sz))
 
 #define tokuL_buff_push(B, c) \
         ((void)((B)->n < (B)->sz || tokuL_buff_ensure((B), 1)), \
@@ -254,7 +254,7 @@ TOKULIB_API void  tokuL_buff_push_gsub(tokuL_Buffer *B, const char *s,
 TOKULIB_API void  tokuL_buff_end(tokuL_Buffer *B);
 TOKULIB_API void  tokuL_buff_endsz(tokuL_Buffer *B, size_t sz);
 
-#define tokuL_buff_prep(B)    tokuL_buff_ensure(B, CSL_BUFFERSIZE)
+#define tokuL_buff_prep(B)      tokuL_buff_ensure(B, TOKUL_BUFFERSIZE)
 /* }======================================================================= */
 
 /* {=======================================================================

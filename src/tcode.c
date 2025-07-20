@@ -250,14 +250,14 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     int opsize = getopSize(p->code[pc]); /* size of last coded instruction */
     toku_assert(pc < currPC); /* must of emitted instruction */
     if (t_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
-        tokuM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
+        tokuM_growarray(fs->lx->T, p->abslineinfo, p->sizeabslineinfo,
                       fs->nabslineinfo, TOKU_MAXINT, "lines", AbsLineInfo);
         p->abslineinfo[fs->nabslineinfo].pc = pc;
         p->abslineinfo[fs->nabslineinfo++].line = line;
         linedif = ABSLINEINFO; /* signal the absolute line info entry */
         fs->iwthabs = 1; /* reset counter */
     }
-    tokuM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
+    tokuM_ensurearray(fs->lx->T, p->lineinfo, p->sizelineinfo, pc, opsize,
                     TOKU_MAXINT, "opcodes", t_byte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
@@ -331,7 +331,7 @@ void tokuC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    tokuM_growarray(fs->lx->C, p->code, p->sizecode, currPC, TOKU_MAXINT,
+    tokuM_growarray(fs->lx->T, p->code, p->sizecode, currPC, TOKU_MAXINT,
                   "instructions", Instruction);
     p->code[currPC++] = cast_ubyte(code);
 }
@@ -339,7 +339,7 @@ static void emitbyte(FunctionState *fs, int code) {
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    tokuM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
+    tokuM_ensurearray(fs->lx->T, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
                     "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZE_ARG_L;
@@ -348,7 +348,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
-    tokuM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, TOKU_MAXINT,
+    tokuM_growarray(fs->lx->T, p->instpc, p->sizeinstpc, fs->ninstpc, TOKU_MAXINT,
                   "instructions", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }
@@ -430,7 +430,7 @@ int tokuC_vararg(FunctionState *fs, int nreturns) {
 /* add constant value to the function */
 static int addK(FunctionState *fs, TValue *key, TValue *v) {
     TValue val;
-    toku_State *T = fs->lx->C;
+    toku_State *T = fs->lx->T;
     Proto *p = fs->p;
     const TValue *index = tokuH_get(fs->lx->tab, key); /* from scanner table */
     int k, oldsz;
@@ -444,13 +444,13 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
     oldsz = p->sizek;
     k = fs->nk;
     setival(&val, k);
-    tokuH_finishset(C, fs->lx->tab, index, key, &val);
-    tokuM_growarray(C, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
+    tokuH_finishset(T, fs->lx->tab, index, key, &val);
+    tokuM_growarray(T, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
     while (oldsz < p->sizek) /* nil out the new part */
         setnilval(&p->k[oldsz++]);
-    setobj(C, &p->k[k], v);
+    setobj(T, &p->k[k], v);
     fs->nk++;
-    tokuG_barrier(C, p, v);
+    tokuG_barrier(T, p, v);
     return k; /* new index */
 }
 
@@ -459,7 +459,7 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
 static int nilK(FunctionState *fs) {
     TValue nv, key;
     setnilval(&nv);
-    settval(fs->lx->C, &key, fs->lx->tab);
+    settval(fs->lx->T, &key, fs->lx->tab);
     return addK(fs, &key, &nv);
 }
 
@@ -483,7 +483,7 @@ static int falseK(FunctionState *fs) {
 /* add string constant to 'constants' */
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
-    setstrval(fs->lx->C, &vs, s);
+    setstrval(fs->lx->T, &vs, s);
     return addK(fs, &vs, &vs);
 }
 
@@ -557,7 +557,7 @@ void tokuC_reserveslots(FunctionState *fs, int n) {
 #define mulretinvariant(fs) { \
     Instruction *pi = prevOP(fs); UNUSED(pi); \
     toku_assert((*pi == OP_VARARG && GET_ARG_L(pi, 0) == 0) || \
-              (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0)); }
+                (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0)); }
 
 
 /* finalize open call or vararg expression */
@@ -1240,7 +1240,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(&v1, &v2, op))
         return 0;
-    tokuO_arithmraw(fs->lx->C, &v1, &v2, &res, op);
+    tokuO_arithmraw(fs->lx->T, &v1, &v2, &res, op);
     if (ttisint(&res)) {
         e1->et = EXP_INT;
         e1->u.i = ival(&res);

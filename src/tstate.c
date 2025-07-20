@@ -32,71 +32,71 @@
 ** errors.
 */
 static void preinit_thread(toku_State *T, GState *gs) {
-    C->ncf = 0;
-    C->status = TOKU_STATUS_OK;
-    C->errfunc = 0;
-    C->nCcalls = 0;
-    C->gclist = NULL;
-    C->twups = C; /* if ('C->twups' == 'C') then no upvalues */
-    G(C) = gs;
-    C->errjmp = NULL;
-    C->hook = NULL;
-    C->hookmask = 0;
-    C->oldpc = 0;
-    C->basehookcount = 0;
-    C->allowhook = 1;
-    resethookcount(C);
-    C->stack.p = C->sp.p = C->stackend.p = NULL;
-    C->cf = NULL;
-    C->openupval = NULL;
-    C->tbclist.p = NULL;
-    C->basecf.prev = C->basecf.next = NULL;
-    C->transferinfo.ftransfer = C->transferinfo.ntransfer = 0;
+    T->ncf = 0;
+    T->status = TOKU_STATUS_OK;
+    T->errfunc = 0;
+    T->nCcalls = 0;
+    T->gclist = NULL;
+    T->twups = T; /* if ('T->twups' == 'T') then no upvalues */
+    G(T) = gs;
+    T->errjmp = NULL;
+    T->hook = NULL;
+    T->hookmask = 0;
+    T->oldpc = 0;
+    T->basehookcount = 0;
+    T->allowhook = 1;
+    resethookcount(T);
+    T->stack.p = T->sp.p = T->stackend.p = NULL;
+    T->cf = NULL;
+    T->openupval = NULL;
+    T->tbclist.p = NULL;
+    T->basecf.prev = T->basecf.next = NULL;
+    T->transferinfo.ftransfer = T->transferinfo.ntransfer = 0;
 }
 
 
 static void resetCF(toku_State *T) {
-    CallFrame *cf = C->cf = &C->basecf;
-    cf->func.p = C->stack.p;
+    CallFrame *cf = T->cf = &T->basecf;
+    cf->func.p = T->stack.p;
     setnilval(s2v(cf->func.p)); /* 'function' entry for basic 'cf' */
     cf->top.p = cf->func.p + 1 + TOKU_MINSTACK; /* +1 for 'function' entry */
     cf->status = CFST_CCALL;
-    cf->cs.pc = cf->cs.pcret = NULL;
-    cf->cs.trap = 0;
-    cf->cs.nvarargs = 0;
+    cf->t.pc = cf->t.pcret = NULL;
+    cf->t.trap = 0;
+    cf->t.nvarargs = 0;
     cf->nresults = 0;
-    C->status = TOKU_STATUS_OK;
-    C->errfunc = 0; /* stack unwind can "throw away" the error function */
+    T->status = TOKU_STATUS_OK;
+    T->errfunc = 0; /* stack unwind can "throw away" the error function */
 }
 
 
 /*
-** Initialize stack and base call frame for 'C'.
-** 'C' is a main thread state ('C1' == 'C' only when creating new
+** Initialize stack and base call frame for 'T'.
+** 'T' is a main thread state ('T1' == 'T' only when creating new
 ** state).
 */
 static void stackinit(toku_State *T1, toku_State *T) {
-    toku_assert(!statefullybuilt(G(C1)) == (C1 == C));
-    C1->stack.p = tokuM_newarray(C, INIT_STACKSIZE + EXTRA_STACK, SValue);
-    C1->tbclist.p = C1->stack.p;
+    toku_assert(!statefullybuilt(G(T1)) == (T1 == T));
+    T1->stack.p = tokuM_newarray(T, INIT_STACKSIZE + EXTRA_STACK, SValue);
+    T1->tbclist.p = T1->stack.p;
     for (int i = 0; i < INIT_STACKSIZE + EXTRA_STACK; i++)
-        setnilval(s2v(C1->stack.p + i));
-    C1->stackend.p = C1->stack.p + INIT_STACKSIZE;
-    resetCF(C1);
-    C1->sp.p = C1->stack.p + 1; /* +1 for function */
+        setnilval(s2v(T1->stack.p + i));
+    T1->stackend.p = T1->stack.p + INIT_STACKSIZE;
+    resetCF(T1);
+    T1->sp.p = T1->stack.p + 1; /* +1 for function */
 }
 
 
 static void init_cstorage(toku_State *T, GState *gs) {
-    List *clist = tokuA_newl(C, TOKU_CLIST_LAST + 1); 
-    /* gs->t_list = list */
-    setlistval(C, &gs->t_list, clist);
-    /* clist[TOKU_CLIST_MAINTHREAD] = C (mainthread) */
-    setthval(C, &clist->arr[TOKU_CLIST_MAINTHREAD], C);
+    List *clist = tokuA_newl(T, TOKU_CLIST_LAST + 1); 
+    /* gs->c_list = list */
+    setlistval(T, &gs->c_list, clist);
+    /* clist[TOKU_CLIST_MAINTHREAD] = T (mainthread) */
+    setthval(T, &clist->arr[TOKU_CLIST_MAINTHREAD], T);
     /* clist[TOKU_CLIST_GLOBALS] = global table */
-    settval(C, &clist->arr[TOKU_CLIST_GLOBALS], tokuH_new(C));
-    /* gs->t_table = table */
-    settval(C, &gs->t_table, tokuH_new(C));
+    settval(T, &clist->arr[TOKU_CLIST_GLOBALS], tokuH_new(T));
+    /* gs->c_table = table */
+    settval(T, &gs->c_table, tokuH_new(T));
 }
 
 
@@ -105,17 +105,17 @@ static void init_cstorage(toku_State *T, GState *gs) {
 ** errors.
 */
 static void f_newstate(toku_State *T, void *ud) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     UNUSED(ud);
-    stackinit(C, C);
-    init_cstorage(C, gs);
-    tokuS_init(C); /* keep this init first */
-    tokuY_init(C);
-    tokuMM_init(C);
-    tokuA_init(C);
+    stackinit(T, T);
+    init_cstorage(T, gs);
+    tokuS_init(T); /* keep this init first */
+    tokuY_init(T);
+    tokuMM_init(T);
+    tokuA_init(T);
     gs->gcstop = 0;
     setnilval(&gs->nil); /* signal that state is fully built */
-    csi_userstateopen(C);
+    tokui_userstateopen(T);
 }
 
 
@@ -123,13 +123,13 @@ static void f_newstate(toku_State *T, void *ud) {
 ** Free all 'CallFrame' structures NOT in use by a thread.
 */
 static void freeCF(toku_State *T) {
-    CallFrame *cf = C->cf;
+    CallFrame *cf = T->cf;
     CallFrame *next = cf->next;
     cf->next = NULL;
     while ((cf = next) != NULL) {
         next = cf->next;
-        tokuM_free(C, cf);
-        C->ncf--;
+        tokuM_free(T, cf);
+        T->ncf--;
     }
 }
 
@@ -138,31 +138,31 @@ static void freeCF(toku_State *T) {
 ** Free thread stack and the call frames.
 */
 static void freestack(toku_State *T) {
-    if (C->stack.p != NULL) { /* stack fully built? */
-        C->cf = &C->basecf; /* free the entire 'cf' list */
-        freeCF(C);
-        toku_assert(C->ncf == 0 && C->basecf.next == NULL);
-        tokuM_freearray(C, C->stack.p, cast_sizet(stacksize(C) + EXTRA_STACK));
+    if (T->stack.p != NULL) { /* stack fully built? */
+        T->cf = &T->basecf; /* free the entire 'cf' list */
+        freeCF(T);
+        toku_assert(T->ncf == 0 && T->basecf.next == NULL);
+        tokuM_freearray(T, T->stack.p, cast_sizet(stacksize(T) + EXTRA_STACK));
     }
 }
 
 
 static void freestate(toku_State *T) {
-    GState *gs = G(C);
-    toku_assert(C == G(C)->mainthread);
+    GState *gs = G(T);
+    toku_assert(T == G(T)->mainthread);
     if (!statefullybuilt(gs)) /* closing partially built state? */
-        tokuG_freeallobjects(C); /* collect only objects */
+        tokuG_freeallobjects(T); /* collect only objects */
     else { /* otherwise closing a fully built state */
-        resetCF(C); /* undwind call stack */
-        csPR_close(C, 1, TOKU_STATUS_OK); /* close all upvalues */
-        C->sp.p = C->stack.p + 1; /* empty the stack to run finalizers */
-        tokuG_freeallobjects(C); /* collect all objects */
-        csi_userstateclose(C);
+        resetCF(T); /* undwind call stack */
+        tokuPR_close(T, 1, TOKU_STATUS_OK); /* close all upvalues */
+        T->sp.p = T->stack.p + 1; /* empty the stack to run finalizers */
+        tokuG_freeallobjects(T); /* collect all objects */
+        tokui_userstateclose(T);
     }
-    tokuM_freearray(C, G(C)->strtab.hash, cast_sizet(G(C)->strtab.size));
-    freestack(C);
+    tokuM_freearray(T, G(T)->strtab.hash, cast_sizet(G(T)->strtab.size));
+    freestack(T);
     toku_assert(gettotalbytes(gs) == sizeof(XSG));
-    gs->falloc(fromstate(C), sizeof(XSG), 0, gs->ud_alloc); /* free state */
+    gs->falloc(fromstate(T), sizeof(XSG), 0, gs->ud_alloc); /* free state */
 }
 
 
@@ -188,14 +188,14 @@ TOKU_API toku_State *toku_newstate(toku_Alloc falloc, void *ud, unsigned seed) {
     XSG *xsg = falloc(NULL, 0, sizeof(XSG), ud);
     if (t_unlikely(xsg == NULL)) return NULL;
     gs = &xsg->gs;
-    C = &xsg->xs.c;
-    C->tt_ = TOKU_VTHREAD;
+    T = &xsg->xs.t;
+    T->tt_ = TOKU_VTHREAD;
     gs->whitebit = bitmask(WHITEBIT0);
-    C->mark = tokuG_white(gs);
-    preinit_thread(C, gs);
-    C->next = NULL;
-    incnnyc(C);
-    gs->objects = obj2gco(C);
+    T->mark = tokuG_white(gs);
+    preinit_thread(T, gs);
+    T->next = NULL;
+    incnnyc(T);
+    gs->objects = obj2gco(T);
     gs->totalbytes = sizeof(XSG);
     gs->seed = seed; /* initial seed for hashing */
     gs->strtab.hash = NULL;
@@ -211,28 +211,28 @@ TOKU_API toku_State *toku_newstate(toku_Alloc falloc, void *ud, unsigned seed) {
     gs->fixed = gs->fin = gs->tobefin = NULL;
     gs->graylist = gs->grayagain = NULL;
     gs->weak = NULL;
-    setnilval(&gs->t_list);
-    setnilval(&gs->t_table);
+    setnilval(&gs->c_list);
+    setnilval(&gs->c_table);
     gs->falloc = falloc;
     gs->ud_alloc = ud;
     gs->fpanic = NULL; /* no panic handler by default */
     setival(&gs->nil, 0); /* signals that state is not yet fully initialized */
-    gs->mainthread = C;
+    gs->mainthread = T;
     gs->twups = NULL;
     gs->fwarn = NULL; gs->ud_warn = NULL;
     toku_assert(gs->totalbytes == sizeof(XSG) && gs->gcdebt == 0);
-    if (csPR_rawcall(C, f_newstate, NULL) != TOKU_STATUS_OK) {
-        freestate(C);
-        C = NULL;
+    if (tokuPR_rawcall(T, f_newstate, NULL) != TOKU_STATUS_OK) {
+        freestate(T);
+        T = NULL;
     }
-    return C;
+    return T;
 }
 
 
 /* free state (global state + mainthread) */
 TOKU_API void toku_close(toku_State *T) {
-    toku_lock(C);
-    toku_State *mt = G(C)->mainthread;
+    toku_lock(T);
+    toku_State *mt = G(T)->mainthread;
     freestate(mt);
 }
 
@@ -241,48 +241,48 @@ TOKU_API void toku_close(toku_State *T) {
 ** Create new thread state.
 */
 TOKU_API toku_State *toku_newthread(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     GCObject *o;
     toku_State *T1;
-    toku_lock(C);
-    tokuG_checkGC(C);
-    o = tokuG_newoff(C, sizeof(XS), TOKU_VTHREAD, offsetof(XS, c));
-    C1 = gco2th(o);
-    setthval2s(C, C->sp.p, C1);
-    api_inctop(C);
-    preinit_thread(C1, gs);
-    C1->hookmask = C->hookmask;
-    C1->basehookcount = C->basehookcount;
-    C1->hook = C->hook;
-    resethookcount(C1);
-    memcpy(toku_getextraspace(C1), toku_getextraspace(gs->mainthread),
+    toku_lock(T);
+    tokuG_checkGC(T);
+    o = tokuG_newoff(T, sizeof(XS), TOKU_VTHREAD, offsetof(XS, t));
+    T1 = gco2th(o);
+    setthval2s(T, T->sp.p, T1);
+    api_inctop(T);
+    preinit_thread(T1, gs);
+    T1->hookmask = T->hookmask;
+    T1->basehookcount = T->basehookcount;
+    T1->hook = T->hook;
+    resethookcount(T1);
+    memcpy(toku_getextraspace(T1), toku_getextraspace(gs->mainthread),
            TOKU_EXTRASPACE);
-    csi_userstatethread(C, C1);
-    stackinit(C1, C);
-    toku_unlock(C);
-    return C1;
+    tokui_userstatethread(T, T1);
+    stackinit(T1, T);
+    toku_unlock(T);
+    return T1;
 }
 
 
 int tokuT_resetthread(toku_State *T, int status) {
-    CallFrame *cf = C->cf = &C->basecf;
-    setnilval(s2v(C->stack.p)); /* 'basecf' func */
-    cf->func.p = C->stack.p;
+    CallFrame *cf = T->cf = &T->basecf;
+    setnilval(s2v(T->stack.p)); /* 'basecf' func */
+    cf->func.p = T->stack.p;
     cf->status = CFST_CCALL;
-    C->status = TOKU_STATUS_OK; /* so we can run '__close' */
-    status = csPR_close(C, 1, status);
+    T->status = TOKU_STATUS_OK; /* so we can run '__close' */
+    status = tokuPR_close(T, 1, status);
     if (status != TOKU_STATUS_OK) /* error? */
-        csPR_seterrorobj(C, status, C->stack.p + 1);
+        tokuPR_seterrorobj(T, status, T->stack.p + 1);
     else
-        C->sp.p = C->stack.p + 1;
-    cf->top.p = C->sp.p + TOKU_MINSTACK;
-    tokuT_reallocstack(C, cf->top.p - C->sp.p, 0);
+        T->sp.p = T->stack.p + 1;
+    cf->top.p = T->sp.p + TOKU_MINSTACK;
+    tokuT_reallocstack(T, cf->top.p - T->sp.p, 0);
     return status;
 }
 
 
 /*
-** Reset thread state 'C' by unwinding `CallFrame` list,
+** Reset thread state 'T' by unwinding `CallFrame` list,
 ** closing all upvalues (and to-be-closed variables) and
 ** reseting the stack.
 ** In case of errors, error object is placed on top of the
@@ -291,9 +291,9 @@ int tokuT_resetthread(toku_State *T, int status) {
 */
 TOKU_API int toku_resetthread(toku_State *T) {
     int status;
-    toku_lock(C);
-    status = tokuT_resetthread(C, C->status);
-    toku_unlock(C);
+    toku_lock(T);
+    status = tokuT_resetthread(T, T->status);
+    toku_unlock(T);
     return status;
 }
 
@@ -304,66 +304,66 @@ TOKU_API int toku_resetthread(toku_State *T) {
 
 CallFrame *tokuT_newcf(toku_State *T) {
     CallFrame *cf;
-    toku_assert(C->cf->next == NULL);
-    cf = tokuM_new(C, CallFrame);
-    toku_assert(C->cf->next == NULL);
-    C->cf->next = cf;
-    cf->prev = C->cf;
+    toku_assert(T->cf->next == NULL);
+    cf = tokuM_new(T, CallFrame);
+    toku_assert(T->cf->next == NULL);
+    T->cf->next = cf;
+    cf->prev = T->cf;
     cf->next = NULL;
-    cf->cs.trap = 0;
-    C->ncf++;
+    cf->t.trap = 0;
+    T->ncf++;
     return cf;
 }
 
 
 /* convert stack pointers into relative stack offsets */
 static void relstack(toku_State *T) {
-    C->sp.offset = savestack(C, C->sp.p);
-    C->tbclist.offset = savestack(C, C->tbclist.p);
-    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.offset = savestack(C, uvlevel(uv));
-    for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
-        cf->func.offset = savestack(C, cf->func.p);
-        cf->top.offset = savestack(C, cf->top.p);
+    T->sp.offset = savestack(T, T->sp.p);
+    T->tbclist.offset = savestack(T, T->tbclist.p);
+    for (UpVal *uv = T->openupval; uv != NULL; uv = uv->u.open.next)
+        uv->v.offset = savestack(T, uvlevel(uv));
+    for (CallFrame *cf = T->cf; cf != NULL; cf = cf->prev) {
+        cf->func.offset = savestack(T, cf->func.p);
+        cf->top.offset = savestack(T, cf->top.p);
     }
 }
 
 
 /* convert relative stack offsets into stack pointers */
 static void correctstack(toku_State *T) {
-    C->sp.p = restorestack(C, C->sp.offset);
-    C->tbclist.p = restorestack(C, C->tbclist.offset);
-    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
-        uv->v.p = s2v(restorestack(C, uv->v.offset));
-    for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
-        cf->func.p = restorestack(C, cf->func.offset);
-        cf->top.p = restorestack(C, cf->top.offset);
+    T->sp.p = restorestack(T, T->sp.offset);
+    T->tbclist.p = restorestack(T, T->tbclist.offset);
+    for (UpVal *uv = T->openupval; uv != NULL; uv = uv->u.open.next)
+        uv->v.p = s2v(restorestack(T, uv->v.offset));
+    for (CallFrame *cf = T->cf; cf != NULL; cf = cf->prev) {
+        cf->func.p = restorestack(T, cf->func.offset);
+        cf->top.p = restorestack(T, cf->top.offset);
         if (isTokudae(cf))
-            cf->cs.trap = 1; /* signal to update 'trap' in 'tokuV_execute' */
+            cf->t.trap = 1; /* signal to update 'trap' in 'tokuV_execute' */
     }
 }
 
 
 /* reallocate stack to new size */
 int tokuT_reallocstack(toku_State *T, int newsize, int raiseerr) {
-    int osz = stacksize(C);
-    int old_stopem = G(C)->gcstopem;
+    int osz = stacksize(T);
+    int old_stopem = G(T)->gcstopem;
     SPtr newstack;
     toku_assert(newsize <= TOKUI_MAXSTACK || newsize == ERRORSTACKSIZE);
-    relstack(C); /* change pointers to offsets */
-    G(C)->gcstopem = 1; /* no emergency collection when reallocating stack */
-    newstack = tokuM_reallocarray(C, C->stack.p, osz + EXTRA_STACK,
+    relstack(T); /* change pointers to offsets */
+    G(T)->gcstopem = 1; /* no emergency collection when reallocating stack */
+    newstack = tokuM_reallocarray(T, T->stack.p, osz + EXTRA_STACK,
                                                newsize + EXTRA_STACK, SValue);
-    G(C)->gcstopem = old_stopem;
+    G(T)->gcstopem = old_stopem;
     if (t_unlikely(newstack == NULL)) {
-        correctstack(C); /* change offsets back to pointers */
+        correctstack(T); /* change offsets back to pointers */
         if (raiseerr)
-            tokuM_error(C);
+            tokuM_error(T);
         else return 0;
     }
-    C->stack.p = newstack;
-    correctstack(C); /* change offsets back to pointers */
-    C->stackend.p = C->stack.p + newsize;
+    T->stack.p = newstack;
+    correctstack(T); /* change offsets back to pointers */
+    T->stackend.p = T->stack.p + newsize;
     for (int i = osz + EXTRA_STACK; i < newsize + EXTRA_STACK; i++)
         setnilval(s2v(newstack + i)); /* erase new segment */
     return 1;
@@ -375,43 +375,43 @@ int tokuT_reallocstack(toku_State *T, int newsize, int raiseerr) {
 ** raises any error; otherwise, return 0 in case of errors.
 */
 int tokuT_growstack(toku_State *T, int n, int raiseerr) {
-    int size = stacksize(C);
+    int size = stacksize(T);
     if (t_unlikely(size > TOKUI_MAXSTACK)) { /* overflowed already ? */
         /* if stack is larger than maximum, thread is already using the
         ** extra space reserved for errors, that is, thread is handling
         ** a stack error; cannot grow further than that. */
         toku_assert(size == ERRORSTACKSIZE);
         if (raiseerr)
-            csPR_throw(C, TOKU_STATUS_EERROR);
+            tokuPR_throw(T, TOKU_STATUS_EERROR);
         return 0;
     } else if (n < TOKUI_MAXSTACK) { /* avoid arithmetic overflow */
         int nsize = size * 2;
-        int needed = cast_int((C)->sp.p - (C)->stack.p) + n;
+        int needed = cast_int((T)->sp.p - (T)->stack.p) + n;
         if (nsize > TOKUI_MAXSTACK)
             nsize = TOKUI_MAXSTACK; /* clamp it */
         if (nsize < needed) /* size still too small? */
             nsize = needed; /* grow to needed size */
         if (t_likely(nsize <= TOKUI_MAXSTACK)) /* new size is ok? */
-            return tokuT_reallocstack(C, nsize, raiseerr);
+            return tokuT_reallocstack(T, nsize, raiseerr);
     }
     /* else stack overflow */
     /* add extra size to be able to handle the error message */
-    tokuT_reallocstack(C, ERRORSTACKSIZE, raiseerr);
+    tokuT_reallocstack(T, ERRORSTACKSIZE, raiseerr);
     if (raiseerr)
-        tokuD_runerror(C, "stack overflow");
+        tokuD_runerror(T, "stack overflow");
     return 0;
 }
 
 
 static int stackinuse(toku_State *T) {
     int res;
-    SPtr lim = C->sp.p;
-    for (CallFrame *cf = C->cf; cf != NULL; cf = cf->prev) {
+    SPtr lim = T->sp.p;
+    for (CallFrame *cf = T->cf; cf != NULL; cf = cf->prev) {
         if (lim < cf->top.p)
             lim = cf->top.p;
     }
-    toku_assert(lim <= C->stackend.p + EXTRA_STACK);
-    res = cast_int(lim - C->stack.p) + 1; /* part of stack in use */
+    toku_assert(lim <= T->stackend.p + EXTRA_STACK);
+    res = cast_int(lim - T->stack.p) + 1; /* part of stack in use */
     if (res < TOKU_MINSTACK)
         res = TOKU_MINSTACK; /* ensure a minimum size */
     return res;
@@ -425,19 +425,19 @@ static int stackinuse(toku_State *T) {
 ** overflow.
 */
 void tokuT_shrinkstack(toku_State *T) {
-    int inuse = stackinuse(C);
+    int inuse = stackinuse(T);
     int limit = (inuse >= TOKUI_MAXSTACK / 3 ? TOKUI_MAXSTACK : inuse * 3);
-    if (inuse <= TOKUI_MAXSTACK && stacksize(C) > limit) {
+    if (inuse <= TOKUI_MAXSTACK && stacksize(T) > limit) {
         int nsize = (inuse < (TOKUI_MAXSTACK / 2) ? (inuse * 2) : TOKUI_MAXSTACK);
-        tokuT_reallocstack(C, nsize, 0); /* this can fail */
+        tokuT_reallocstack(T, nsize, 0); /* this can fail */
     }
 }
 
 
 /* increment stack pointer */
 void tokuT_incsp(toku_State *T) {
-    csPR_checkstack(C, 1);
-    C->sp.p++;
+    tokuPR_checkstack(T, 1);
+    T->sp.p++;
 }
 
 
@@ -449,47 +449,47 @@ void tokuT_incsp(toku_State *T) {
 ** higher than TOKUI_MAXCCALLS.
 */
 void tokuT_checkCstack(toku_State *T) {
-    if (getCcalls(C) == TOKUI_MAXCCALLS) /* not handling error ? */
-        tokuD_runerror(C, "C stack overflow");
-    else if (getCcalls(C) >= (TOKUI_MAXCCALLS / 10 * 11))
-        csPR_throw(C, TOKU_STATUS_EERROR);
+    if (getCcalls(T) == TOKUI_MAXCCALLS) /* not handling error ? */
+        tokuD_runerror(T, "T stack overflow");
+    else if (getCcalls(T) >= (TOKUI_MAXCCALLS / 10 * 11))
+        tokuPR_throw(T, TOKU_STATUS_EERROR);
 }
 
 
-/* Increment number of C calls and check for overflow. */
+/* Increment number of T calls and check for overflow. */
 void tokuT_incCstack(toku_State *T) {
-    C->nCcalls++;
-    if (getCcalls(C) >= TOKUI_MAXCCALLS)
-        tokuT_checkCstack(C);
+    T->nCcalls++;
+    if (getCcalls(T) >= TOKUI_MAXCCALLS)
+        tokuT_checkCstack(T);
 }
 
 
 void tokuT_warning(toku_State *T, const char *msg, int cont) {
-    toku_WarnFunction fwarn = G(C)->fwarn;
+    toku_WarnFunction fwarn = G(T)->fwarn;
     if (fwarn)
-        fwarn(G(C)->ud_warn, msg, cont);
+        fwarn(G(T)->ud_warn, msg, cont);
 }
 
 
 /* generate a warning from an error message */
 void tokuT_warnerror(toku_State *T, const char *where) {
-    TValue *errobj = s2v(C->sp.p - 1);
+    TValue *errobj = s2v(T->sp.p - 1);
     const char *msg = (ttisstring(errobj))
                       ? getstr(strval(errobj))
                       : "error object is not a string";
-    tokuT_warning(C, "error in ", 1);
-    tokuT_warning(C, where, 1);
-    tokuT_warning(C, " (", 1);
-    tokuT_warning(C, msg, 1);
-    tokuT_warning(C, ")", 0);
+    tokuT_warning(T, "error in ", 1);
+    tokuT_warning(T, where, 1);
+    tokuT_warning(T, " (", 1);
+    tokuT_warning(T, msg, 1);
+    tokuT_warning(T, ")", 0);
 }
 
 
 void tokuT_free(toku_State *T, toku_State *T1) {
-    XS *xs = fromstate(C1);
-    tokuF_closeupval(C1, C1->stack.p);  /* close all upvalues */
-    toku_assert(C1->openupval == NULL);
-    csi_userstatefree(C, C1);
-    freestack(C1);
-    tokuM_free(C, xs);
+    XS *xs = fromstate(T1);
+    tokuF_closeupval(T1, T1->stack.p);  /* close all upvalues */
+    toku_assert(T1->openupval == NULL);
+    tokui_userstatefree(T, T1);
+    freestack(T1);
+    tokuM_free(T, xs);
 }

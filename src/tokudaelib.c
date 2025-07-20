@@ -30,7 +30,7 @@ static const tokuL_Entry loadedlibs[] = {
 
 TOKULIB_API void tokuL_openlibs(toku_State *T) {
     for (const tokuL_Entry *lib = loadedlibs; lib->func != NULL; lib++) {
-        tokuL_importf(C, lib->name, lib->func, 1);
-        toku_pop(C, 1); /* remove module */
+        tokuL_importf(T, lib->name, lib->func, 1);
+        toku_pop(T, 1); /* remove module */
     }
 }

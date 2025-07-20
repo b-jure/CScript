@@ -7,22 +7,22 @@
 #ifndef tmeta_h
 #define tmeta_h
 
-#include "tokudaetonf.h"
+#include "tokudaeconf.h"
 #include "tokudae.h"
 #include "tobject.h"
 
 
 TOKUI_DEC(const char *const tokuO_typenames[TOKUI_TOTALTYPES]);
 
-#define typename(t)     ctO_typenames[(t) + 1]
+#define typename(t)     tokuO_typenames[(t) + 1]
 
 
-#define metaname(C,mm)      (getttr(G(C)->mtnames[mm]) + 2)
+#define metaname(T,mm)      (getstr(G(T)->mtnames[mm]) + 2)
 
 
 TOKUI_FUNC void tokuMM_init(toku_State *T);
 TOKUI_FUNC const TValue *tokuMM_get(toku_State *T, const TValue *v, int mm);
-TOKUI_FUNC OClats *tokuMM_newclass(toku_State *T);
+TOKUI_FUNC OClass *tokuMM_newclass(toku_State *T);
 TOKUI_FUNC Instance *tokuMM_newinstance(toku_State *T, OClass *cls);
 TOKUI_FUNC UserData *tokuMM_newuserdata(toku_State *T, size_t size, int nuv);
 TOKUI_FUNC IMethod *tokuMM_newinsmethod(toku_State *T,

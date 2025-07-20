@@ -25,7 +25,7 @@
 
 #define currIsNewline(lx)       ((lx)->c == '\r' || (lx)->c == '\n')
 
-#define currIsEnd(lx)           ((lx)->c == CSEOF)
+#define currIsEnd(lx)           ((lx)->c == TOKUEOF)
 
 
 /* fetch the next character and store it as current char */
@@ -62,25 +62,25 @@ void tokuY_setinput(toku_State *T, Lexer *lx, BuffReader *br, OString *source) {
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
     lx->lastline = 1;
-    lx->C = C;
+    lx->T = T;
     lx->fs = NULL;
     lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
-    lx->envn = tokuS_newlit(C, TOKU_ENV);
-    tokuR_buffresize(C, lx->buff, TOKUI_MINBUFFER);
+    lx->envn = tokuS_newlit(T, TOKU_ENV);
+    tokuR_buffresize(T, lx->buff, TOKUI_MINBUFFER);
 }
 
 
 void tokuY_init(toku_State *T) {
-    OString *e = tokuS_newlit(C, TOKU_ENV); /* create env name */
-    tokuG_fix(C, obj2gco(e)); /* never collect this name */
+    OString *e = tokuS_newlit(T, TOKU_ENV); /* create env name */
+    tokuG_fix(T, obj2gco(e)); /* never collect this name */
     /* create keyword names and never collect them */
     toku_assert(NUM_KEYWORDS <= TOKU_MAXUBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
-        OString *s = tokuS_new(C, tkstr[i]);
+        OString *s = tokuS_new(T, tkstr[i]);
         s->extra = cast_ubyte(i + 1);
-        tokuG_fix(C, obj2gco(s));
+        tokuG_fix(T, obj2gco(s));
     }
 }
 
@@ -96,7 +96,7 @@ t_sinline void savec(Lexer *lx, int c) {
         if (tokuR_buffsize(lx->buff) >= TOKU_MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
         newsize = tokuR_buffsize(lx->buff) * 2;
-        tokuR_buffresize(lx->C, lx->buff, newsize);
+        tokuR_buffresize(lx->T, lx->buff, newsize);
     }
     tokuR_buff(lx->buff)[tokuR_bufflen(lx->buff)++] = cast_char(c);
 }
@@ -117,13 +117,13 @@ const char *tokuY_tok2str(Lexer *lx, int t) {
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)
-            return tokuS_pushfstring(lx->C, "'%s'", str);
+            return tokuS_pushfstring(lx->T, "'%s'", str);
         return str;
     } else {
         if (cisprint(t))
-            return tokuS_pushfstring(lx->C, "'%c'", t);
+            return tokuS_pushfstring(lx->T, "'%c'", t);
         else
-            return tokuS_pushfstring(lx->C, "'<\\%d>'", t);
+            return tokuS_pushfstring(lx->T, "'<\\%d>'", t);
     }
 }
 
@@ -133,7 +133,7 @@ static const char *lextok2str(Lexer *lx, int t) {
         case TK_FLT: case TK_INT:
         case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
-            return tokuS_pushfstring(lx->C, "'%s'", tokuR_buff(lx->buff));
+            return tokuS_pushfstring(lx->T, "'%s'", tokuR_buff(lx->buff));
         }
         default: return tokuY_tok2str(lx, t);
     }
@@ -141,25 +141,25 @@ static const char *lextok2str(Lexer *lx, int t) {
 
 
 static const char *lexmsg(Lexer *lx, const char *msg, int token) {
-    toku_State *T = lx->C;
-    msg = tokuD_addinfo(C, msg, lx->src, lx->line);
+    toku_State *T = lx->T;
+    msg = tokuD_addinfo(T, msg, lx->src, lx->line);
     if (token)
-        msg = tokuS_pushfstring(C, "%s near %s", msg, lextok2str(lx, token));
+        msg = tokuS_pushfstring(T, "%s near %s", msg, lextok2str(lx, token));
     return msg;
 }
 
 
 static void lexwarn(Lexer *lx, const char *msg, int token) {
-    toku_State *T = lx->C;
-    SPtr oldsp = C->sp.p;
-    tokuT_warning(C, lexmsg(lx, msg, token), 0);
-    C->sp.p = oldsp; /* remove warning messages */
+    toku_State *T = lx->T;
+    SPtr oldsp = T->sp.p;
+    tokuT_warning(T, lexmsg(lx, msg, token), 0);
+    T->sp.p = oldsp; /* remove warning messages */
 }
 
 
 static t_noret lexerror(Lexer *lx, const char *err, int token) {
     lexmsg(lx, err, token);
-    csPR_throw(lx->C, TOKU_STATUS_ESYNTAX);
+    tokuPR_throw(lx->T, TOKU_STATUS_ESYNTAX);
 }
 
 
@@ -182,17 +182,17 @@ static void inclinenr(Lexer *lx) {
 
 /* create new string and fix it inside of lexer htable */
 OString *tokuY_newstring(Lexer *lx, const char *str, size_t l) {
-    toku_State *T = lx->C;
-    OString *s = tokuS_newl(C, str, l);
+    toku_State *T = lx->T;
+    OString *s = tokuS_newl(T, str, l);
     const TValue *o = tokuH_getstr(lx->tab, s);
     if (!ttisnil(o)) /* string already present? */
         s = keystrval(cast(Node *, o));
     else {
-        TValue *stkv = s2v(C->sp.p++); /* reserve stack space for string */
-        setstrval(C, stkv, s); /* anchor */
-        tokuH_setstr(C, lx->tab, strval(stkv), stkv); /* t[string] = string */
-        tokuG_checkGC(C);
-        C->sp.p--; /* remove string from stack */
+        TValue *stkv = s2v(T->sp.p++); /* reserve stack space for string */
+        setstrval(T, stkv, s); /* anchor */
+        tokuH_setstr(T, lx->tab, strval(stkv), stkv); /* t[string] = string */
+        tokuG_checkGC(T);
+        T->sp.p--; /* remove string from stack */
     }
     return s;
 }
@@ -213,7 +213,7 @@ static void read_comment(Lexer *lx) {
 static void read_longcomment(Lexer *lx) {
     for (;;) {
         switch (lx->c) {
-            case CSEOF: return;
+            case TOKUEOF: return;
             case '\r': case '\n':
                 inclinenr(lx); break;
             case '*':
@@ -234,7 +234,7 @@ static void read_longcomment(Lexer *lx) {
 
 static void checkcond(Lexer *lx, int cond, const char *msg) {
     if (t_unlikely(!cond)) { /* condition fails? */
-        if (lx->c != CSEOF) /* not end-of-file? */
+        if (lx->c != TOKUEOF) /* not end-of-file? */
             save_and_advance(lx); /* add current char to buffer for err msg */
         lexerror(lx, msg, TK_STRING); /* invoke syntax error */
     }
@@ -391,8 +391,8 @@ static void read_long_string(Lexer *lx, Literal *k, size_t sep) {
         inclinenr(lx); /* skip it */
     for (;;) {
         switch (lx->c) {
-            case CSEOF: { /* error */
-                const char *msg = tokuS_pushfstring(lx->C,
+            case TOKUEOF: { /* error */
+                const char *msg = tokuS_pushfstring(lx->T,
                     "unterminated long string (starting at line %d)", line);
                 lexerror(lx, msg, TK_EOS);
                 break; /* to avoid warnings */
@@ -426,7 +426,7 @@ static void read_string(Lexer *lx, Literal *k) {
     save_and_advance(lx); /* skip '"' */
     while (lx->c != '"') {
         switch (lx->c) {
-            case CSEOF: /* end of file */
+            case TOKUEOF: /* end of file */
                 lexerror(lx, "unterminated string", TK_EOS);
                 break; /* to avoid warnings */
             case '\r': case '\n': /* newline */
@@ -454,7 +454,7 @@ static void read_string(Lexer *lx, Literal *k) {
                         c = lx->c;
                         goto read_save;
                     }
-                    case CSEOF: goto no_save; /* raise err on next iteration */
+                    case TOKUEOF: goto no_save; /* raise err on next iteration */
                     default: {
                         checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
                         c = read_decesc(lx); /* '\ddd' */
@@ -490,11 +490,12 @@ static int read_char(Lexer *lx, Literal *k) {
     save_and_advance(lx); /* skip ' */
 repeat:
     switch (lx->c) {
-        case CSEOF:
+        case TOKUEOF:
             lexerror(lx, "unterminated character constant", TK_EOS);
             break; /* to avoid warnings */
         case '\r': case '\n':
             lexerror(lx, "unterminated character constant", TK_INT);
+            break; /* to avoid warnings */
         case '\\': {
             save_and_advance(lx); /* keep '\\' for error messages */
             switch (lx->c) {
@@ -508,7 +509,7 @@ repeat:
                 case 'x': c = read_hexesc(lx); break;
                 case '\"': case '\'': case '\\':
                     c = lx->c; break;
-                case CSEOF: goto repeat;
+                case TOKUEOF: goto repeat;
                 default: { /* error */
                     printf("iNOTOK\n");
                     checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
@@ -606,17 +607,17 @@ static int read_exponent(Lexer *lx) {
         while (lx->c == '_' || lx->c == '0')
             advance(lx); /* skip separators and leading zeros */
     }
-    if (cisalpha(lx->c)) { /* exponent touching a letter? */
+    if (cisalpha(lx->c)) /* exponent touching a letter? */
         save_and_advance(lx); /* force an error */
-        return 0; /* no digits */
-    } else if (cisdigit(lx->c)) { /* got at least one non-zero digit? */
+    else if (cisdigit(lx->c)) /* got at least one non-zero digit? */
         return read_digits(lx, DigDec, 0);
-    } else if (t_unlikely(!gotzero)) { /* no digits? */
+    else if (t_unlikely(!gotzero)) /* no digits? */
         lexerror(lx, "at least one exponent digit expected", TK_FLT);
-    } else { /* one or more leading zeros */
+    else { /* one or more leading zeros */
         savec(lx, '0'); /* save only one leading zero */
         return 1; /* (one zero) */
     }
+    return 0;
 }
 
 
@@ -796,7 +797,7 @@ static int scan(Lexer *lx, Literal *k) {
                 else
                     return read_decnum(lx, k, '.');
             }
-            case CSEOF: {
+            case TOKUEOF: {
                 return TK_EOS;
             }
             default: {

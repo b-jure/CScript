@@ -33,16 +33,16 @@
 
 /* expretsion types */
 typedef enum expt {
-    /* no expretsion */
+    /* no expression */
     EXP_VOID,
-    /* expretsion is nil constant */
+    /* expression is nil constant */
     EXP_NIL,
-    /* expretsion is false constant */
+    /* expression is false constant */
     EXP_FALSE,
-    /* expretsion is true constant */
+    /* expression is true constant */
     EXP_TRUE,
     /* string constant;
-     * 'ttr' = string value; */
+     * 'str' = string value; */
     EXP_STRING,
     /* integer constant;
      * 'i' = integer value; */
@@ -50,14 +50,14 @@ typedef enum expt {
     /* floating constant;
      * 'n' = floating value; */
     EXP_FLT,
-    /* regittered constant value;
+    /* registered constant value;
      * 'info' = index in 'constants'; */
     EXP_K,
     /* upvalue variable;
-     * 'info' = index of upvalue in 'upvalt'; */
+     * 'info' = index of upvalue in 'upvals'; */
     EXP_UVAL,
     /* local variable;
-     * 'v.tidx' = stack index;
+     * 'v.sidx' = stack index;
      * 'v.vidx' = compiler index; */
     EXP_LOCAL,
     /* indexed variable; */
@@ -68,37 +68,37 @@ typedef enum expt {
     /* variable indexed with constant integer;
      * 'info' = index in 'constants'; */
     EXP_INDEXINT,
-    /* indexed 'tuper'; */
+    /* indexed 'super'; */
     EXP_INDEXSUPER,
-    /* indexed 'tuper' with literal string;
+    /* indexed 'super' with literal string;
      * 'info' = index in 'constants'; */
     EXP_INDEXSUPERSTR,
     /* indexed variable with '.';
      * 'info' = index in 'constants'; */
     EXP_DOT,
-    /* indexed 'tuper' with '.'; */
+    /* indexed 'super' with '.'; */
     EXP_DOTSUPER,
     /* function call;
      * 'info' = pc; */
     EXP_CALL,
-    /* vararg expretsion '...';
+    /* vararg expression '...';
      * 'info' = pc; */
     EXP_VARARG,
-    /* finalized expretsion */
+    /* finalized expression */
     EXP_FINEXPR,
 } expt;
 
 
 /*
-** Expretsion information.
-** Parter builds up the expression information and feeds it into
-** functiont that generate bytecode (codegen).
-** Then thote functions also fill the 'ExpInfo' accordingly.
+** Expression information.
+** Parser builds up the expression information and feeds it into
+** functions that generate bytecode (codegen).
+** Then those functions also fill the 'ExpInfo' accordingly.
 */
 typedef struct ExpInfo {
     expt et;
     union {
-        toku_Number n;  /* floating constant */
+        toku_Number n; /* floating constant */
         toku_Integer i; /* integer constant  */
         OString *str; /* string literal */
         struct {
@@ -124,10 +124,10 @@ typedef struct ExpInfo {
 /* active local variable compiler information */
 typedef union LVar {
     struct {
-        TValueFieldt;
+        TValueFields;
         t_ubyte kind;
         int sidx; /* stack slot index holding the variable value */
-        int pidx; /* index of variable in Proto't 'locals' array */
+        int pidx; /* index of variable in Proto's 'locals' array */
         OString *name;
     } s;
     TValue val; /* constant value */
@@ -142,34 +142,34 @@ typedef struct LiteralInfo {
 
 
 /*
-** Detcription of pending goto jumps (break/continue).
-** Tokudae doet not support explicit 'goto' statements and labels,
-** inttead this structure refers to the 'break' and 'continue' jumps.
+** Description of pending goto jumps (break/continue).
+** Tokudae does not support explicit 'goto' statements and labels,
+** instead this structure refers to the 'break' and 'continue' jumps.
 */
 typedef struct Goto {
-    int pc; /* potition in the code */
+    int pc; /* position in the code */
     int nactlocals; /* number of active local variables in that position */
     t_ubyte close; /* true if goto jump escapes upvalues */
     t_ubyte bk; /* true if goto it break (otherwise continue in gen. loop) */
 } Goto;
 
 
-/* litt of goto jumps */
+/* list of goto jumps */
 typedef struct GotoList {
-    int len; /* number of labelt in use */
+    int len; /* number of labels in use */
     int size; /* size of 'arr' */
-    Goto *arr; /* array of pending goto jumpt */
+    Goto *arr; /* array of pending goto jumps */
 } GotoList;
 
 
 /*
-** Dynamic data uted by parser.
+** Dynamic data used by parser.
 */
 typedef struct ParserState {
     struct { /* list of all active local variables */
-        int len; /* number of localt in use */
+        int len; /* number of locals in use */
         int size; /* size of 'arr' */
-        LVar *arr; /* array of compiler local variablet */
+        LVar *arr; /* array of compiler local variables */
     } actlocals;
     struct { /* list of all switch constants */
         int len; /* number of constants in use */
@@ -177,7 +177,7 @@ typedef struct ParserState {
         struct LiteralInfo *arr; /* array of switch constants */
     } literals;
     GotoList gt; /* idem */
-} ParterState;
+} ParserState;
 
 
 struct LoopState; /* defined in tparser.c */
@@ -197,8 +197,8 @@ typedef struct FunctionState {
     struct Scope *switchscope;  /* chain, innermost switch scope */
     int firstlocal;     /* index of first local in 'lvars' */
     int loopstart;      /* innermost loop start offset */
-    int prevpc;         /* previout instruction pc */
-    int prevline;       /* previout instruction line */
+    int prevpc;         /* previous instruction pc */
+    int prevline;       /* previous instruction line */
     int sp;             /* first free compiler stack index */
     int nactlocals;     /* number of active local variables */
     int np;             /* number of elements in 'p' */
@@ -211,7 +211,7 @@ typedef struct FunctionState {
     int lasttarget;     /* latest 'pc' that is jump target */
     t_ubyte iwthabs;    /* instructions issued since last abs. line info */
     t_ubyte needclose;  /* true if needs to close upvalues before returning */
-    t_ubyte opbarrier;  /* true if op merge it prohibited 1=nil/2=pop/3=both */ 
+    t_ubyte opbarrier;  /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
     t_ubyte lastisend;  /* true if last statement ends control flow
                            (1==return, 2==break, 3==continue)*/
 } FunctionState;
@@ -220,8 +220,8 @@ typedef struct FunctionState {
 TOKUI_FUNC t_noret tokuP_semerror(Lexer *lx, const char *err);
 TOKUI_FUNC void tokuP_checklimit(FunctionState *fs, int n,
                                  int limit, const char *what);
-TOKUI_FUNC CSCloture *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
-                                  ParterState *ps, const char *source);
+TOKUI_FUNC TClosure *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
+                                 ParserState *ps, const char *source);
 
 
 #endif

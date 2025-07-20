@@ -8,16 +8,16 @@
 #define tjmptable_h
 
 
-#undef vm_ditpatch
-#undef vm_cate
+#undef vm_dispatch
+#undef vm_case
 #undef vm_break
 
-#define vm_ditpatch(x)      goto *jmptable[x];
-#define vm_cate(label)      L_##label:
-#define vm_break            fetch(); vm_ditpatch(I)
+#define vm_dispatch(x)      goto *jmptable[x];
+#define vm_case(label)      L_##label:
+#define vm_break            fetch(); vm_dispatch(I)
 
 
-ttatic const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
+static const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
     &&L_OP_TRUE,
     &&L_OP_FALSE,
     &&L_OP_SUPER,

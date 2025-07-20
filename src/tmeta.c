@@ -7,12 +7,12 @@
 #define tmeta_c
 #define TOKU_CORE
 
-#include "tscriptprefix.h"
+#include "tokudaeprefix.h"
 
 #include "tmeta.h"
 #include "tlist.h"
 #include "tlexer.h"
-#include "tscriptconf.h"
+#include "tokudaeconf.h"
 #include "tstring.h"
 #include "tdebug.h"
 #include "tstate.h"
@@ -39,18 +39,18 @@ void tokuMM_init(toku_State *T) {
         "__pow", "__shl", "__shr", "__band", "__bor", "__bxor", "__unm",
         "__bnot", "__eq", "__lt", "__le", "__name", "__metalist"
     };
-    toku_assert(FIRSTMM + toku_MT_NUM <= toku_MAXUBYTE);
+    toku_assert(FIRSTMM + TOKU_MT_NUM <= TOKU_MAXUBYTE);
     for (int i = 0; i < TOKU_MT_NUM; i++) {
-        OString *s = tokuS_new(C, mtnames[i]);
+        OString *s = tokuS_new(T, mtnames[i]);
         s->extra = cast_ubyte(i + FIRSTMM);
-        G(C)->mtnames[i] = s;
-        tokuG_fix(C, obj2gco(G(C)->mtnames[i]));
+        G(T)->mtnames[i] = s;
+        tokuG_fix(T, obj2gco(G(T)->mtnames[i]));
     }
 }
 
 
 OClass *tokuMM_newclass(toku_State *T) {
-    GCObject *o = tokuG_new(C, sizeof(OClass), TOKU_VCLASS);
+    GCObject *o = tokuG_new(T, sizeof(OClass), TOKU_VCLASS);
     OClass *cls = gco2cls(o);
     cls->sclass = NULL;
     cls->metalist = NULL;
@@ -60,13 +60,13 @@ OClass *tokuMM_newclass(toku_State *T) {
 
 
 Instance *tokuMM_newinstance(toku_State *T, OClass *cls) {
-    GCObject *o = tokuG_new(C, sizeof(Instance), TOKU_VINSTANCE);
+    GCObject *o = tokuG_new(T, sizeof(Instance), TOKU_VINSTANCE);
     Instance *ins = gco2ins(o);
     ins->oclass = cls;
     ins->fields = NULL; /* to not confuse GC */
-    setinsval2s(C, C->sp.p++, ins); /* anchor instance */
-    ins->fields = tokuH_new(C);
-    C->sp.p--; /* remove instance */
+    setinsval2s(T, T->sp.p++, ins); /* anchor instance */
+    ins->fields = tokuH_new(T);
+    T->sp.p--; /* remove instance */
     return ins;
 }
 
@@ -75,8 +75,8 @@ UserData *tokuMM_newuserdata(toku_State *T, size_t size, int nuv) {
     GCObject *o;
     UserData *ud;
     if (t_unlikely(size > TOKU_MAXSIZE - udmemoffset(nuv)))
-        tokuM_toobig(C);
-    o = tokuG_new(C, sizeofuserdata(nuv, size), TOKU_VUSERDATA);
+        tokuM_toobig(T);
+    o = tokuG_new(T, sizeofuserdata(nuv, size), TOKU_VUSERDATA);
     ud = gco2u(o);
     ud->metalist = NULL;
     ud->methods = NULL;
@@ -89,10 +89,10 @@ UserData *tokuMM_newuserdata(toku_State *T, size_t size, int nuv) {
 
 
 IMethod *tokuMM_newinsmethod(toku_State *T, Instance *ins, const TValue *method) {
-    GCObject *o = tokuG_new(C, sizeof(IMethod), TOKU_VIMETHOD);
+    GCObject *o = tokuG_new(T, sizeof(IMethod), TOKU_VIMETHOD);
     IMethod *im = gco2im(o);
     im->ins = ins;
-    setobj(C, &im->method, method);
+    setobj(T, &im->method, method);
     return im;
 }
 
@@ -105,10 +105,10 @@ int tokuMM_eqim(const IMethod *v1, const IMethod *v2) {
 
 
 UMethod *tokuMM_newudmethod(toku_State *T, UserData *ud, const TValue *method) {
-    GCObject *o = tokuG_new(C, sizeof(UMethod), TOKU_VUMETHOD);
+    GCObject *o = tokuG_new(T, sizeof(UMethod), TOKU_VUMETHOD);
     UMethod *um = gco2um(o);
     um->ud = ud;
-    setobj(C, &um->method, method);
+    setobj(T, &um->method, method);
     return um;
 }
 
@@ -123,13 +123,13 @@ int tokuMM_equm(const UMethod *v1, const UMethod *v2) {
 /* get method 'mm' */
 const TValue *tokuMM_get(toku_State *T, const TValue *v, int mm) {
     List *ml;
-    toku_assert(0 <= mm && mm < toku_MT_NUM);
+    toku_assert(0 <= mm && mm < TOKU_MT_NUM);
     switch (ttypetag(v)) {
         case TOKU_VINSTANCE: ml = insval(v)->oclass->metalist; break;
         case TOKU_VUSERDATA: ml = udval(v)->metalist; break;
         default: ml = NULL; break;
     }
-    return (ml ? tokuA_getival(C, ml, mm) : &G(C)->nil);
+    return (ml ? tokuA_getival(T, ml, mm) : &G(T)->nil);
 }
 
 
@@ -141,7 +141,7 @@ const char *tokuMM_objtypename(toku_State *T, const TValue *o) {
     List *ml;
     if ((ttisinstance(o) && (ml = insval(o)->oclass->metalist)) ||
         (ttisfulluserdata(o) && (ml = udval(o)->metalist))) {
-        const TValue *v = tokuA_getival(C, ml, TOKU_MT_NAME);
+        const TValue *v = tokuA_getival(T, ml, TOKU_MT_NAME);
         if (ttisstring(v))
             return getstr(strval(v));
         /* else fall through */
@@ -153,43 +153,43 @@ const char *tokuMM_objtypename(toku_State *T, const TValue *o) {
 /* call __setidx metamethod */
 void tokuMM_callset(toku_State *T, const TValue *f, const TValue *o,
                                const TValue *k, const TValue *v) {
-    SPtr func = C->sp.p;
-    setobj2s(C, func, f);
-    setobj2s(C, func + 1, o);
-    setobj2s(C, func + 2, k);
-    setobj2s(C, func + 3, v);
-    C->sp.p = func + 4;
-    tokuV_call(C, func, 0);
+    SPtr func = T->sp.p;
+    setobj2s(T, func, f);
+    setobj2s(T, func + 1, o);
+    setobj2s(T, func + 2, k);
+    setobj2s(T, func + 3, v);
+    T->sp.p = func + 4;
+    tokuV_call(T, func, 0);
 }
 
 
 /* call __getidx metamethod */
 void tokuMM_callgetres(toku_State *T, const TValue *f, const TValue *o,
                                   const TValue *k, SPtr res) {
-    ptrdiff_t result = savestack(C, res);
-    SPtr func = C->sp.p;
-    setobj2s(C, func, f);
-    setobj2s(C, func + 1, o);
-    setobj2s(C, func + 2, k);
-    C->sp.p = func + 3;
-    tokuV_call(C, func, 1);
-    res = restorestack(C, result);
-    setobjs2s(C, res, --C->sp.p);
+    ptrdiff_t result = savestack(T, res);
+    SPtr func = T->sp.p;
+    setobj2s(T, func, f);
+    setobj2s(T, func + 1, o);
+    setobj2s(T, func + 2, k);
+    T->sp.p = func + 3;
+    tokuV_call(T, func, 1);
+    res = restorestack(T, result);
+    setobjs2s(T, res, --T->sp.p);
 }
 
 
 /* call binary method and store the result in 'res' */
 void tokuMM_callbinres(toku_State *T, const TValue *f, const TValue *o1,
                                   const TValue *o2, SPtr res) {
-    ptrdiff_t result = savestack(C, res);
-    SPtr func = C->sp.p;
-    setobj2s(C, func, f);
-    setobj2s(C, func + 1, o1);
-    setobj2s(C, func + 2, o2);
-    C->sp.p += 3; /* assuming EXTRA_STACK */
-    tokuV_call(C, func, 1);
-    res = restorestack(C, result);
-    setobj2s(C, res, s2v(--C->sp.p));
+    ptrdiff_t result = savestack(T, res);
+    SPtr func = T->sp.p;
+    setobj2s(T, func, f);
+    setobj2s(T, func + 1, o1);
+    setobj2s(T, func + 2, o2);
+    T->sp.p += 3; /* assuming EXTRA_STACK */
+    tokuV_call(T, func, 1);
+    res = restorestack(T, result);
+    setobj2s(T, res, s2v(--T->sp.p));
 }
 
 
@@ -200,12 +200,12 @@ static int callbinMM(toku_State *T, const TValue *v1, const TValue *v2,
             (t1 == TOKU_VINSTANCE && insval(v1)->oclass != insval(v2)->oclass)) {
         return 0; /* different types or different classes */
     } else {
-        const TValue *fn = tokuMM_get(C, v1, mm);
+        const TValue *fn = tokuMM_get(T, v1, mm);
         if (ttisnil(fn)) { /* metamethod not found? */
-            fn = tokuMM_get(C, v2, mm); /* try other instance */
+            fn = tokuMM_get(T, v2, mm); /* try other instance */
             if (ttisnil(fn)) return 0; /* no metamethod entry */
         }
-        tokuMM_callbinres(C, fn, v1, v2, res);
+        tokuMM_callbinres(T, fn, v1, v2, res);
         return 1; /* ok */
     }
 }
@@ -213,28 +213,28 @@ static int callbinMM(toku_State *T, const TValue *v1, const TValue *v2,
 
 void tokuMM_trybin(toku_State *T, const TValue *v1, const TValue *v2,
                               SPtr res, int mm) {
-    if (t_unlikely(!callbinMM(C, v1, v2, res, mm)))
-        tokuD_binoperror(C, v1, v2, mm);
+    if (t_unlikely(!callbinMM(T, v1, v2, res, mm)))
+        tokuD_binoperror(T, v1, v2, mm);
 }
 
 
 void tokuMM_callunaryres(toku_State *T, const TValue *fn,
                                     const TValue *o, SPtr res) {
-    ptrdiff_t result = savestack(C, res);
-    SPtr func = C->sp.p;
-    setobj2s(C, func, fn);
-    setobj2s(C, func + 1, o);
-    C->sp.p += 2; /* assuming EXTRA_STACK */
-    tokuV_call(C, func, 1);
-    res = restorestack(C, result);
-    setobj2s(C, res, s2v(--C->sp.p));
+    ptrdiff_t result = savestack(T, res);
+    SPtr func = T->sp.p;
+    setobj2s(T, func, fn);
+    setobj2s(T, func + 1, o);
+    T->sp.p += 2; /* assuming EXTRA_STACK */
+    tokuV_call(T, func, 1);
+    res = restorestack(T, result);
+    setobj2s(T, res, s2v(--T->sp.p));
 }
 
 
 static int callunMM(toku_State *T, const TValue *o, SPtr res, int mt) {
-    const TValue *fn = tokuMM_get(C, o, mt);
+    const TValue *fn = tokuMM_get(T, o, mt);
     if (t_likely(!ttisnil(fn))) {
-        tokuMM_callunaryres(C, fn, o, res);
+        tokuMM_callunaryres(T, fn, o, res);
         return 1;
     }
     return 0;
@@ -242,27 +242,27 @@ static int callunMM(toku_State *T, const TValue *o, SPtr res, int mt) {
 
 
 void tokuMM_tryunary(toku_State *T, const TValue *o, SPtr res, int mm) {
-    if (t_unlikely(!callunMM(C, o, res, mm))) {
+    if (t_unlikely(!callunMM(T, o, res, mm))) {
         TValue dummy;
         setival(&dummy, 0);
-        tokuD_binoperror(C, o, &dummy, mm);
+        tokuD_binoperror(T, o, &dummy, mm);
     }
 }
 
 
 void tokuMM_tryconcat(toku_State *T) {
-    SPtr p1 = C->sp.p - 2; /* first argument */
-    if (t_unlikely(!callbinMM(C, s2v(p1), s2v(p1 + 1), p1, TOKU_MT_CONCAT)))
-        tokuD_concaterror(C, s2v(p1), s2v(p1 + 1));
+    SPtr p1 = T->sp.p - 2; /* first argument */
+    if (t_unlikely(!callbinMM(T, s2v(p1), s2v(p1 + 1), p1, TOKU_MT_CONCAT)))
+        tokuD_concaterror(T, s2v(p1), s2v(p1 + 1));
 }
 
 
 /* call order method */
 int tokuMM_order(toku_State *T, const TValue *v1, const TValue *v2, int mm) {
-    toku_assert(toku_MT_EQ <= mm && mm <= toku_MT_NUM);
-    if (t_likely(callbinMM(C, v1, v2, C->sp.p, mm)))
-        return !t_isfalse(s2v(C->sp.p));
-    tokuD_ordererror(C, v1, v2);
+    toku_assert(TOKU_MT_EQ <= mm && mm <= TOKU_MT_NUM);
+    if (t_likely(callbinMM(T, v1, v2, T->sp.p, mm)))
+        return !t_isfalse(s2v(T->sp.p));
+    tokuD_ordererror(T, v1, v2);
     /* UNREACHED */
     return 0;
 }
@@ -281,5 +281,5 @@ int tokuMM_orderI(toku_State *T, const TValue *v1, int v2, int flip, int isflt,
     } else
         setival(&aux, v2);
     v2_ = (flip ? v1 : &aux);
-    return tokuMM_order(C, v1, v2_, mm);
+    return tokuMM_order(T, v1, v2_, mm);
 }

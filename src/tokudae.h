@@ -285,7 +285,7 @@ TOKU_API void toku_set_metalist(toku_State *T, int idx);
 TOKU_API int  toku_set_uservalue(toku_State *T, int idx, unsigned short n); 
 TOKU_API void toku_set_methods(toku_State *T, int idx); 
 TOKU_API void toku_set_fields(toku_State *T, int idx);
-TOKU_API void toku_set_listlen(toku_State *T, int idx, int len);
+TOKU_API void toku_sec_listlen(toku_State *T, int idx, int len);
 /* }====================================================================== */
 
 /* {======================================================================

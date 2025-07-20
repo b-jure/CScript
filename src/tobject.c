@@ -50,14 +50,14 @@ toku_Integer tokuO_shiftl(toku_Integer x, toku_Integer y) {
 
 static toku_Number numarithm(toku_State *T, toku_Number x, toku_Number y, int op) {
     switch(op) {
-        case TOKU_OP_ADD: return t_numadd(C, x, y);
-        case TOKU_OP_SUB: return t_numsub(C, x, y);
-        case TOKU_OP_MUL: return t_nummul(C, x, y);
-        case TOKU_OP_DIV: return t_numdiv(C, x, y);
-        case TOKU_OP_IDIV: return t_numidiv(C, x, y);
-        case TOKU_OP_MOD: return tokuV_modf(C, x, y);
-        case TOKU_OP_POW: return t_numpow(C, x, y);
-        case TOKU_OP_UNM: return t_numunm(C, x);
+        case TOKU_OP_ADD: return t_numadd(T, x, y);
+        case TOKU_OP_SUB: return t_numsub(T, x, y);
+        case TOKU_OP_MUL: return t_nummul(T, x, y);
+        case TOKU_OP_DIV: return t_numdiv(T, x, y);
+        case TOKU_OP_IDIV: return t_numidiv(T, x, y);
+        case TOKU_OP_MOD: return tokuV_modf(T, x, y);
+        case TOKU_OP_POW: return t_numpow(T, x, y);
+        case TOKU_OP_UNM: return t_numunm(T, x);
         default: toku_assert(0); return 0.0;
     }
 }
@@ -68,8 +68,8 @@ static toku_Integer intarithm(toku_State *T, toku_Integer x, toku_Integer y, int
         case TOKU_OP_ADD: return intop(+, x, y);
         case TOKU_OP_SUB: return intop(-, x, y);
         case TOKU_OP_MUL: return intop(*, x, y);
-        case TOKU_OP_IDIV: return tokuV_divi(C, x, y);
-        case TOKU_OP_MOD: return tokuV_modi(C, x, y);
+        case TOKU_OP_IDIV: return tokuV_divi(T, x, y);
+        case TOKU_OP_MOD: return tokuV_modi(T, x, y);
         case TOKU_OP_UNM: return intop(-, 0, x);
         case TOKU_OP_BSHL: return tokuO_shiftl(x, y);
         case TOKU_OP_BSHR: return tokuO_shiftr(x, y);
@@ -118,7 +118,7 @@ int tokuO_arithmraw(toku_State *T, const TValue *a, const TValue *b,
         case TOKU_OP_BSHR: case TOKU_OP_BOR: case TOKU_OP_BAND: { /* for integers */
             toku_Integer i1, i2;
             if (tointeger(a, &i1) && tointeger(b, &i2)) {
-                setival(res, intarithm(C, i1, i2, op));
+                setival(res, intarithm(T, i1, i2, op));
                 return 1;
             }
             return 0; /* fail */
@@ -126,7 +126,7 @@ int tokuO_arithmraw(toku_State *T, const TValue *a, const TValue *b,
         case TOKU_OP_DIV: case TOKU_OP_POW: { /* for floats */
             toku_Number n1, n2;
             if (tonumber(a, n1) && tonumber(b, n2)) {
-                setfval(res, numarithm(C, n1, n2, op));
+                setfval(res, numarithm(T, n1, n2, op));
                 return 1;
             }
             return 0; /* fail */
@@ -134,10 +134,10 @@ int tokuO_arithmraw(toku_State *T, const TValue *a, const TValue *b,
         default: { /* other operations */
             toku_Number n1, n2;
             if (ttisint(a) && ttisint(b)) {
-                setival(res, intarithm(C, ival(a), ival(b), op));
+                setival(res, intarithm(T, ival(a), ival(b), op));
                 return 1;
             } else if (tonumber(a, n1) && tonumber(b, n2)) {
-                setfval(res, numarithm(C, n1, n2, op));
+                setfval(res, numarithm(T, n1, n2, op));
                 return 1;
             } else
                 return 0; /* fail */

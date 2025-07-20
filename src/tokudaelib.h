@@ -12,7 +12,7 @@
 
 
 /* version suffix for environment variable names */
-#define TOKU_VERSUFFIX          "_" TOKU_VERSION_MAJOR "_" TOKU_VERSION_MINOR
+#define TOKU_VERSUFFIX      "_" TOKU_VERSION_MAJOR "_" TOKU_VERSION_MINOR
 
 
 // TODO: update docs

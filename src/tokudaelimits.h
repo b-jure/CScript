@@ -74,11 +74,11 @@ typedef unsigned long   t_ulong;
 #endif
 
 /* C API assertions */
-#if !defined(csi_checkapi)
-#define csi_checkapi(C,e)       ((void)C, toku_assert(e))
+#if !defined(tokui_checkapi)
+#define tokui_checkapi(C,e)       ((void)C, toku_assert(e))
 #endif
 
-#define api_check(C,e,err)      csi_checkapi(C,(e) && err)
+#define api_check(C,e,err)      tokui_checkapi(C,(e) && err)
 
 
 
@@ -88,14 +88,14 @@ typedef unsigned long   t_ulong;
 ** local labels inside arrays, making instruction dispatch O(1)
 ** inside the interpreter loop.
 */
-#if defined(__GNUT__)
+#if defined(__GNUC__)
 #define PRECOMPUTED_GOTO
 #endif
 
 
 
 /* inline functions */
-#if defined(__GNUT__)
+#if defined(__GNUC__)
 #define t_inline        __inline__
 #else
 #define t_inline        inline
@@ -107,7 +107,7 @@ typedef unsigned long   t_ulong;
 
 
 /* non-return type */
-#if defined(__GNUT__)
+#if defined(__GNUC__)
 #define t_noret         void __attribute__((noreturn))
 #elif defined(_MST_VER) && _MST_VER >= 1200
 #define t_noret         void __declspec(noreturn)
@@ -205,20 +205,20 @@ typedef t_ubyte Instruction;
 ** These macros allow user-defined action to be taken each time
 ** thread is created/deleted and/or state is opened/closed.
 */
-#if !defined(csi_userstateopen)
-#define csi_userstateopen(C)        ((void)(C))
+#if !defined(tokui_userstateopen)
+#define tokui_userstateopen(C)        ((void)(C))
 #endif
 
-#if !defined(csi_userstateclose)
-#define csi_userstateclose(C)       ((void)(C))
+#if !defined(tokui_userstateclose)
+#define tokui_userstateclose(C)       ((void)(C))
 #endif
 
-#if !defined(csi_userstatethread)
-#define csi_userstatethread(C,C1)   ((void)(C))
+#if !defined(tokui_userstatethread)
+#define tokui_userstatethread(C,C1)   ((void)(C))
 #endif
 
-#if !defined(csi_userstatefree)
-#define csi_userstatefree(C,C1)     ((void)(C))
+#if !defined(tokui_userstatefree)
+#define tokui_userstatefree(C,C1)     ((void)(C))
 #endif
 
 

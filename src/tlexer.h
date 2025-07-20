@@ -12,7 +12,7 @@
 
 
 
-/* multi-char tokent start at this numeric value */
+/* multi-char tokens start at this numeric value */
 #define FIRSTTK		(UCHAR_MAX + 1)
 
 
@@ -22,20 +22,20 @@
 
 
 /*
-** WARNING: if you change the order of thit enumeration, grep
+** WARNING: if you change the order of this enumeration, grep
 ** "ORDER TK".
 */
 enum TK {
-    /* keyword tokent */
+    /* keyword tokens */
     TK_AND = FIRSTTK, TK_BREAK, TK_CASE, TK_CONTINUE, TK_CLASS,
     TK_DEFAULT, TK_ELSE, TK_FALSE, TK_FOR, TK_FOREACH, TK_FN, TK_IF,
     TK_IN, TK_INHERITS, TK_NIL, TK_OR, TK_RETURN, TK_SUPER,
     TK_SWITCH, TK_TRUE, TK_WHILE, TK_LOOP, TK_LOCAL, TK_INF, TK_INFINITY,
-    /* other multi-char tokent */
+    /* other multi-char tokens */
     TK_IDIV, TK_NE, TK_EQ, TK_GE, TK_LE, TK_SHL, TK_SHR, TK_POW,
     TK_CONCAT, TK_DOTS,
     TK_EOS,
-    /* literal tokent */
+    /* literal tokens */
     TK_FLT, TK_INT, TK_STRING, TK_NAME,
 };
 
@@ -48,7 +48,7 @@ enum TK {
 typedef union {
     toku_Integer i;
     toku_Number n;
-    OString *ttr;
+    OString *str;
 } Literal;
 
 
@@ -60,30 +60,30 @@ typedef struct {
 
 typedef struct Lexer {
     int c; /* current char */
-    int lattline; /* line of previous token */
+    int lastline; /* line of previous token */
     int line; /* current line number */
     Token t; /* current token */
     Token tahead; /* lookahead token */
-    Table *tab; /* tcanner table */
+    Table *tab; /* scanner table */
     struct toku_State *T;
     struct FunctionState *fs;
     BuffReader *br; /* buffered reader */
     Buffer *buff; /* string buffer */
     struct ParserState *ps; /* dynamic data used by parser */
-    OString *trc; /* current source name */
+    OString *src; /* current source name */
     OString *envn; /* environment variable */
 } Lexer;
 
 
-#define ctY_newliteral(lx, l)   tokuY_newstring(lx, "" (l), LL(l))
+#define tokuY_newliteral(lx, l)   tokuY_newstring(lx, "" (l), LL(l))
 
-TOKUI_FUNC void ctY_setinput(toku_State *T, Lexer *lx, BuffReader *br,
-                           OString *tource);
-TOKUI_FUNC void ctY_init(toku_State *T);
+TOKUI_FUNC void tokuY_setinput(toku_State *T, Lexer *lx, BuffReader *br,
+                               OString *source);
+TOKUI_FUNC void tokuY_init(toku_State *T);
 TOKUI_FUNC const char *tokuY_tok2str(Lexer *lx, int t);
-TOKUI_FUNC OString *ctY_newstring(Lexer *lx, const char *str, size_t len);
-TOKUI_FUNC t_noret ctY_syntaxerror(Lexer *lx, const char *err);
-TOKUI_FUNC void ctY_scan(Lexer *lx);
-TOKUI_FUNC int ctY_scanahead(Lexer *lx);
+TOKUI_FUNC OString *tokuY_newstring(Lexer *lx, const char *str, size_t len);
+TOKUI_FUNC t_noret tokuY_syntaxerror(Lexer *lx, const char *err);
+TOKUI_FUNC void tokuY_scan(Lexer *lx);
+TOKUI_FUNC int tokuY_scanahead(Lexer *lx);
 
 #endif

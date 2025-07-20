@@ -21,7 +21,7 @@
 
 
 Proto *tokuF_newproto(toku_State *T) {
-    GCObject *o = tokuG_new(C, sizeof(Proto), TOKU_VPROTO); 
+    GCObject *o = tokuG_new(T, sizeof(Proto), TOKU_VPROTO); 
     Proto *p = gco2proto(o);
     p->isvararg = 0;
     p->gclist = NULL;
@@ -42,9 +42,9 @@ Proto *tokuF_newproto(toku_State *T) {
 }
 
 
-CSClosure *tokuF_newCSClosure(toku_State *T, int nup) {
-    GCObject *o = tokuG_new(C, sizeofCScl(nup), TOKU_VCSCL);
-    CSClosure *cl = gco2clcs(o);
+TClosure *tokuF_newTclosure(toku_State *T, int nup) {
+    GCObject *o = tokuG_new(T, sizeofTcl(nup), TOKU_VCSCL);
+    TClosure *cl = gco2clt(o);
     cl->p = NULL;
     cl->nupvalues = nup;
     while (nup--) cl->upvals[nup] = NULL;
@@ -52,8 +52,8 @@ CSClosure *tokuF_newCSClosure(toku_State *T, int nup) {
 }
 
 
-CClosure *tokuF_newCClosure(toku_State *T, int nupvalues) {
-    GCObject *o = tokuG_new(C, sizeofCcl(nupvalues), TOKU_VCCL);
+CClosure *tokuF_newCclosure(toku_State *T, int nupvalues) {
+    GCObject *o = tokuG_new(T, sizeofCcl(nupvalues), TOKU_VCCL);
     CClosure *cl = gco2clc(o);
     cl->nupvalues = nupvalues;
     return cl;
@@ -67,45 +67,45 @@ CClosure *tokuF_newCClosure(toku_State *T, int nupvalues) {
 */
 void tokuF_adjustvarargs(toku_State *T, int arity, CallFrame *cf,
                        SPtr *sp, const Proto *fn) {
-    int actual = cast_int(C->sp.p - cf->func.p) - 1;
+    int actual = cast_int(T->sp.p - cf->func.p) - 1;
     int extra = actual - arity; /* number of varargs */
-    cf->cs.nvarargs = extra;
-    checkstackp(C, fn->maxstack + 1, *sp);
-    setobjs2s(C, C->sp.p++, cf->func.p); /* move function to the top */
+    cf->t.nvarargs = extra;
+    checkstackp(T, fn->maxstack + 1, *sp);
+    setobjs2s(T, T->sp.p++, cf->func.p); /* move function to the top */
     for (int i = 1; i <= arity; i++) { /* move params to the top */
-        setobjs2s(C, C->sp.p++, cf->func.p + i);
+        setobjs2s(T, T->sp.p++, cf->func.p + i);
         setnilval(s2v(cf->func.p + i)); /* erase original (for GC) */
     }
     cf->func.p += actual + 1;
     cf->top.p += actual + 1;
-    toku_assert(C->sp.p <= cf->top.p && cf->top.p <= C->stackend.p);
-    *sp = C->sp.p;
+    toku_assert(T->sp.p <= cf->top.p && cf->top.p <= T->stackend.p);
+    *sp = T->sp.p;
 }
 
 
 void tokuF_getvarargs(toku_State *T, CallFrame *cf, SPtr *sp, int wanted) {
-    int have = cf->cs.nvarargs;
+    int have = cf->t.nvarargs;
     if (wanted < 0) { /* TOKU_MULTRET? */
         wanted = have;
-        checkstackGCp(C, wanted, *sp); /* check stack, maybe wanted>have */
+        checkstackGCp(T, wanted, *sp); /* check stack, maybe wanted>have */
     }
     for (int i = 0; wanted > 0 && i < have; i++, wanted--)
-        setobjs2s(C, C->sp.p++, cf->func.p - have + i);
+        setobjs2s(T, T->sp.p++, cf->func.p - have + i);
     while (wanted-- > 0)
-        setnilval(s2v(C->sp.p++));
-    *sp = C->sp.p;
+        setnilval(s2v(T->sp.p++));
+    *sp = T->sp.p;
 }
 
 
 /* Create and initialize all the upvalues in 'cl'. */
-void tokuF_initupvals(toku_State *T, CSClosure *cl) {
+void tokuF_initupvals(toku_State *T, TClosure *cl) {
     for (int i = 0; i < cl->nupvalues; i++) {
-        GCObject *o = tokuG_new(C, sizeof(UpVal), TOKU_VUPVALUE);
+        GCObject *o = tokuG_new(T, sizeof(UpVal), TOKU_VUPVALUE);
         UpVal *uv = gco2uv(o);
         uv->v.p = &uv->u.value; /* close it */
         setnilval(uv->v.p);
         cl->upvals[i] = uv;
-        tokuG_objbarrier(C, cl, uv);
+        tokuG_objbarrier(T, cl, uv);
     }
 }
 
@@ -115,7 +115,7 @@ void tokuF_initupvals(toku_State *T, CSClosure *cl) {
 ** open upvalues of 'l' after entry 'prev'.
 */
 static UpVal *newupval(toku_State *T, SPtr level, UpVal **prev) {
-    GCObject *o = tokuG_new(C, sizeof(UpVal), TOKU_VUPVALUE);
+    GCObject *o = tokuG_new(T, sizeof(UpVal), TOKU_VUPVALUE);
     UpVal *uv = gco2uv(o);
     UpVal *next = *prev;
     uv->v.p = s2v(level); /* current value lives on the stack */
@@ -124,9 +124,9 @@ static UpVal *newupval(toku_State *T, SPtr level, UpVal **prev) {
     if (next)
         next->u.open.prev = &uv->u.open.next;
     *prev = uv;
-    if (!isintwups(C)) { /* thread not in list of threads with upvalues? */
-        C->twups = G(C)->twups; /* link it to the list */
-        G(C)->twups = C;
+    if (!isintwups(T)) { /* thread not in list of threads with upvalues? */
+        T->twups = G(T)->twups; /* link it to the list */
+        G(T)->twups = T;
     }
     return uv;
 }
@@ -137,17 +137,17 @@ static UpVal *newupval(toku_State *T, SPtr level, UpVal **prev) {
 ** at the given level.
 */
 UpVal *tokuF_findupval(toku_State *T, SPtr level) {
-    UpVal **pp = &C->openupval; /* good ol' pp */
+    UpVal **pp = &T->openupval; /* good ol' pp */
     UpVal *p;
-    toku_assert(isintwups(C) || C->openupval == NULL);
+    toku_assert(isintwups(T) || T->openupval == NULL);
     while ((p = *pp) != NULL && uvlevel(p) >= level) {
-        toku_assert(!isdead(G(C), p));
+        toku_assert(!isdead(G(T), p));
         if (uvlevel(p) == level) /* corresponding upvalue? */
             return p; /* return it */
         pp = &p->u.open.next; /* get next in the list */
     }
     /* not found: create a new upvalue after 'pp' */
-    return newupval(C, level, pp);
+    return newupval(T, level, pp);
 }
 
 
@@ -171,12 +171,12 @@ const char *tokuF_getlocalname(const Proto *fn, int lnum, int pc) {
 ** raise error if not.
 */
 static void checkclosem(toku_State *T, SPtr level) {
-    const TValue *fmm = tokuMM_get(C, s2v(level), TOKU_MT_CLOSE);
+    const TValue *fmm = tokuMM_get(T, s2v(level), TOKU_MT_CLOSE);
     if (t_unlikely(ttisnil(fmm))) { /* missing __close metamethod? */
-        int vidx = cast_int(level - C->cf->func.p);
-        const char *name = tokuD_findlocal(C, C->cf, vidx, NULL);
+        int vidx = cast_int(level - T->cf->func.p);
+        const char *name = tokuD_findlocal(T, T->cf, vidx, NULL);
         if (name == NULL) name = "?";
-        tokuD_runerror(C, "local variable %s got a non-closeable value", name);
+        tokuD_runerror(T, "local variable %s got a non-closeable value", name);
     }
 }
 
@@ -186,23 +186,23 @@ static void checkclosem(toku_State *T, SPtr level) {
 ** of 'tbc.delta'.
 */
 #define MAXDELTA \
-        ((256UL << ((sizeof(C->stack.p->tbc.delta) - 1) * 8)) - 1)
+        ((256UL << ((sizeof(T->stack.p->tbc.delta) - 1) * 8)) - 1)
 
 
 /*
 ** Insert value at the given stack level into the to-be-closed list.
 */
 void tokuF_newtbcvar(toku_State *T, SPtr level) {
-    toku_assert(level > C->tbclist.p);
+    toku_assert(level > T->tbclist.p);
     if (t_isfalse(s2v(level)))
         return; /* false doesn't need to be closed */
-    checkclosem(C, level);
-    while (cast_uint(level - C->tbclist.p) > MAXDELTA) {
-        C->tbclist.p += MAXDELTA; /* create a dummy node at maximum delta */
-        C->tbclist.p->tbc.delta = 0;
+    checkclosem(T, level);
+    while (cast_uint(level - T->tbclist.p) > MAXDELTA) {
+        T->tbclist.p += MAXDELTA; /* create a dummy node at maximum delta */
+        T->tbclist.p->tbc.delta = 0;
     }
-    level->tbc.delta = cast(t_ushort, level - C->tbclist.p);
-    C->tbclist.p = level;
+    level->tbc.delta = cast(t_ushort, level - T->tbclist.p);
+    T->tbclist.p = level;
 }
 
 
@@ -222,15 +222,15 @@ void tokuF_unlinkupval(UpVal *uv) {
 */
 void tokuF_closeupval(toku_State *T, SPtr level) {
     UpVal *uv;
-    while ((uv = C->openupval) != NULL && uvlevel(uv) >= level) {
+    while ((uv = T->openupval) != NULL && uvlevel(uv) >= level) {
         TValue *slot = &uv->u.value; /* new position for value */
-        toku_assert(uvlevel(uv) < C->sp.p);
+        toku_assert(uvlevel(uv) < T->sp.p);
         tokuF_unlinkupval(uv); /* remove it from 'openupval' list */
-        setobj(C, slot, uv->v.p); /* move value to the upvalue slot */
+        setobj(T, slot, uv->v.p); /* move value to the upvalue slot */
         uv->v.p = slot; /* adjust its pointer */
         if (!iswhite(uv)) { /* neither white nor dead? */
             notw2black(uv); /* closed upvalues cannot be gray */
-            tokuG_barrier(C, uv, slot);
+            tokuG_barrier(T, uv, slot);
         }
     }
 }
@@ -240,12 +240,12 @@ void tokuF_closeupval(toku_State *T, SPtr level) {
 ** Remove first value from 'tbclist'.
 */
 static void poptbclist(toku_State *T) {
-    SPtr tbc = C->tbclist.p;
+    SPtr tbc = T->tbclist.p;
     toku_assert(tbc->tbc.delta > 0);
     tbc -= tbc->tbc.delta;
-    while (tbc > C->stack.p && tbc->tbc.delta == 0)
+    while (tbc > T->stack.p && tbc->tbc.delta == 0)
         tbc -= MAXDELTA; /* remove dummy nodes */
-    C->tbclist.p = tbc;
+    T->tbclist.p = tbc;
 }
 
 
@@ -254,14 +254,14 @@ static void poptbclist(toku_State *T) {
 ** This function assumes 'EXTRA_STACK'.
 */
 static void callclosemm(toku_State *T, TValue *obj, TValue *errobj) {
-    SPtr top = C->sp.p;
-    const TValue *method = tokuMM_get(C, obj, TOKU_MT_CLOSE);
+    SPtr top = T->sp.p;
+    const TValue *method = tokuMM_get(T, obj, TOKU_MT_CLOSE);
     toku_assert(!ttisnil(method));
-    setobj2s(C, top, method);
-    setobj2s(C, top + 1, obj);
-    setobj2s(C, top + 2, errobj);
-    C->sp.p = top + 3;
-    tokuV_call(C, top, 0);
+    setobj2s(T, top, method);
+    setobj2s(T, top + 1, obj);
+    setobj2s(T, top + 2, errobj);
+    T->sp.p = top + 3;
+    tokuV_call(T, top, 0);
 }
 
 
@@ -276,12 +276,12 @@ static void prepcallclose(toku_State *T, SPtr level, int status) {
     TValue *uv = s2v(level); /* value being closed */
     TValue *errobj;
     if (status == CLOSEKTOP)
-        errobj = &G(C)->nil; /* error object is nil */
-    else { /* 'csPR_seterrorobj' will set top to level + 2 */
+        errobj = &G(T)->nil; /* error object is nil */
+    else { /* 'tokuPR_seterrorobj' will set top to level + 2 */
         errobj = s2v(level + 1); /* error object goes after 'uv' */
-        csPR_seterrorobj(C, status, level + 1); /* set error object */
+        tokuPR_seterrorobj(T, status, level + 1); /* set error object */
     }
-    callclosemm(C, uv, errobj);
+    callclosemm(T, uv, errobj);
 }
 
 
@@ -290,13 +290,13 @@ static void prepcallclose(toku_State *T, SPtr level, int status) {
 ** Returns (restored) level.
 */
 SPtr tokuF_close(toku_State *T, SPtr level, int status) {
-    ptrdiff_t levelrel = savestack(C, level);
-    tokuF_closeupval(C, level);
-    while (C->tbclist.p >= level) {
-        SPtr tbc = C->tbclist.p;
-        poptbclist(C);
-        prepcallclose(C, tbc, status);
-        level = restorestack(C, levelrel);
+    ptrdiff_t levelrel = savestack(T, level);
+    tokuF_closeupval(T, level);
+    while (T->tbclist.p >= level) {
+        SPtr tbc = T->tbclist.p;
+        poptbclist(T);
+        prepcallclose(T, tbc, status);
+        level = restorestack(T, levelrel);
     }
     return level;
 }
@@ -304,13 +304,13 @@ SPtr tokuF_close(toku_State *T, SPtr level, int status) {
 
 /* free function prototype */
 void tokuF_free(toku_State *T, Proto *p) {
-    tokuM_freearray(C, p->p, p->sizep);
-    tokuM_freearray(C, p->k, p->sizek);
-    tokuM_freearray(C, p->code, p->sizecode);
-    tokuM_freearray(C, p->lineinfo, p->sizelineinfo);
-    tokuM_freearray(C, p->abslineinfo, p->sizeabslineinfo);
-    tokuM_freearray(C, p->instpc, p->sizeinstpc);
-    tokuM_freearray(C, p->locals, p->sizelocals);
-    tokuM_freearray(C, p->upvals, p->sizeupvals);
-    tokuM_free(C, p);
+    tokuM_freearray(T, p->p, p->sizep);
+    tokuM_freearray(T, p->k, p->sizek);
+    tokuM_freearray(T, p->code, p->sizecode);
+    tokuM_freearray(T, p->lineinfo, p->sizelineinfo);
+    tokuM_freearray(T, p->abslineinfo, p->sizeabslineinfo);
+    tokuM_freearray(T, p->instpc, p->sizeinstpc);
+    tokuM_freearray(T, p->locals, p->sizelocals);
+    tokuM_freearray(T, p->upvals, p->sizeupvals);
+    tokuM_free(T, p);
 }

@@ -11,7 +11,7 @@
 
 #include "tgc.h"
 #include "tlist.h"
-#include "tokudaetonf.h"
+#include "tokudaeconf.h"
 #include "tfunction.h"
 #include "tokudaelimits.h"
 #include "tmeta.h"
@@ -98,8 +98,8 @@ static void cleargraylists(GState *gs) {
 
 /* create new object and append it to 'objects' */
 GCObject *tokuG_newoff(toku_State *T, size_t sz, int tt_, size_t offset) {
-    GState *gs = G(C);
-    char *p = tokuM_newobj(C, novariant(tt_), sz);
+    GState *gs = G(T);
+    char *p = tokuM_newobj(T, novariant(tt_), sz);
     GCObject *o = cast(GCObject*, p + offset);
     o->mark = tokuG_white(gs); /* mark as white */
     o->tt_ = tt_;
@@ -110,12 +110,12 @@ GCObject *tokuG_newoff(toku_State *T, size_t sz, int tt_, size_t offset) {
 
 
 GCObject *tokuG_new(toku_State *T, size_t size, int tt_) {
-    return tokuG_newoff(C, size, tt_, 0);
+    return tokuG_newoff(T, size, tt_, 0);
 }
 
 
 void tokuG_fix(toku_State *T, GCObject *o) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert(o == gs->objects); /* first in the list */
     markgray(o);
     gs->objects = o->next;
@@ -156,7 +156,7 @@ static void linkgclist_(GCObject *o, GCObject **gclist, GCObject **list) {
 static GCObject **getgclist(GCObject *o) {
     switch (o->tt_) {
         case TOKU_VPROTO: return &gco2proto(o)->gclist;
-        case TOKU_VCSCL: return &gco2clcs(o)->gclist;
+        case TOKU_VCSCL: return &gco2clt(o)->gclist;
         case TOKU_VCCL: return &gco2clc(o)->gclist;
         case TOKU_VLIST: return &gco2list(o)->gclist;
         case TOKU_VTABLE: return &gco2ht(o)->gclist;
@@ -179,7 +179,7 @@ static GCObject **getgclist(GCObject *o) {
 ** object being collected in the current GC cycle.
 */
 void tokuG_barrier_(toku_State *T, GCObject *r, GCObject *o) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert(isblack(r) && iswhite(o) && !isdead(gs, r) && !isdead(gs, o));
     if (keepinvariant(gs)) /* must keep invariant? */
         markobject_(gs, o); /* restore invariant */
@@ -196,7 +196,7 @@ void tokuG_barrier_(toku_State *T, GCObject *r, GCObject *o) {
 ** moving the collector backwards.
 */
 void tokuG_barrierback_(toku_State *T, GCObject *r) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert(isblack(r) && !isdead(gs, r));
     linkobjgclist(r, gs->grayagain);
 }
@@ -346,7 +346,7 @@ static t_umem markcclosure(GState *gs, CClosure *cl) {
 }
 
 
-static t_umem markcsclosure(GState *gs, CSClosure *cl) {
+static t_umem markcsclosure(GState *gs, TClosure *cl) {
     markobjectN(gs, cl->p);
     for (int i = 0; i < cl->nupvalues; i++) {
         UpVal *uv = cl->upvals[i];
@@ -383,30 +383,30 @@ static t_umem markuserdata(GState *gs, UserData *ud) {
 ** using write barriers.
 */
 static t_umem markthread(GState *gs, toku_State *T) {
-    SPtr sp = C->stack.p;
+    SPtr sp = T->stack.p;
     if (gs->gcstate == GCSpropagate)
-        linkgclist(C, gs->grayagain); /* traverse 'C' again in 'atomic' */
+        linkgclist(T, gs->grayagain); /* traverse 'T' again in 'atomic' */
     if (sp == NULL) /* stack not fully built? */
         return 1;
     toku_assert(gs->gcstate == GCSatomic || /* either in atomic phase... */
-              C->openupval == NULL || /* or no open upvalues... */
-              isintwups(C)); /* ...or 'C' is in correct list */
-    for (; sp < C->sp.p; sp++) /* mark live stack elements */
+              T->openupval == NULL || /* or no open upvalues... */
+              isintwups(T)); /* ...or 'T' is in correct list */
+    for (; sp < T->sp.p; sp++) /* mark live stack elements */
         markvalue(gs, s2v(sp));
-    for (UpVal *uv = C->openupval; uv != NULL; uv = uv->u.open.next)
+    for (UpVal *uv = T->openupval; uv != NULL; uv = uv->u.open.next)
         markobject(gs, uv); /* open upvalues cannot be collected */
     if (gs->gcstate == GCSatomic) { /* final traversal? */
         if (!gs->gcemergency) /* not an emergency collection? */
-            tokuT_shrinkstack(C); /* shrink stack if possible */
-        for (sp = C->sp.p; sp < C->stackend.p + EXTRA_STACK; sp++)
+            tokuT_shrinkstack(T); /* shrink stack if possible */
+        for (sp = T->sp.p; sp < T->stackend.p + EXTRA_STACK; sp++)
           setnilval(s2v(sp)); /* clear dead stack slice */
         /* 'markopenupvalues' might of removed thread from 'twups' list */
-        if (!isintwups(C) && C->openupval != NULL) {
-            C->twups = gs->twups; /* link it back */
-            gs->twups = C;
+        if (!isintwups(T) && T->openupval != NULL) {
+            T->twups = gs->twups; /* link it back */
+            gs->twups = T;
         }
     }
-    return 1 + stacksize(C); /* thread + stack slots */
+    return 1 + stacksize(T); /* thread + stack slots */
 }
 
 
@@ -464,7 +464,7 @@ static t_umem propagate(GState *gs) {
         case TOKU_VUSERDATA: return markuserdata(gs, gco2u(o));
         case TOKU_VTABLE: return marktable(gs, gco2ht(o));
         case TOKU_VPROTO: return markproto(gs, gco2proto(o));
-        case TOKU_VCSCL: return markcsclosure(gs, gco2clcs(o));
+        case TOKU_VCSCL: return markcsclosure(gs, gco2clt(o));
         case TOKU_VCCL: return markcclosure(gs, gco2clc(o));
         case TOKU_VLIST: return marklist(gs, gco2list(o));
         case TOKU_VTHREAD: return markthread(gs, gco2th(o));
@@ -491,45 +491,45 @@ static t_umem propagateall(GState *gs) {
 static void freeupval(toku_State *T, UpVal *uv) {
     if (uvisopen(uv))
         tokuF_unlinkupval(uv);
-    tokuM_free(C, uv);
+    tokuM_free(T, uv);
 }
 
 
 static void freeobject(toku_State *T, GCObject *o) {
     switch (o->tt_) {
-        case TOKU_VPROTO: tokuF_free(C, gco2proto(o)); break;
-        case TOKU_VUPVALUE: freeupval(C, gco2uv(o)); break;
-        case TOKU_VLIST: tokuA_free(C, gco2list(o)); break;
-        case TOKU_VTABLE: tokuH_free(C, gco2ht(o)); break;
-        case TOKU_VINSTANCE: tokuM_free(C, gco2ins(o)); break;
-        case TOKU_VIMETHOD: tokuM_free(C, gco2im(o)); break;
-        case TOKU_VUMETHOD: tokuM_free(C, gco2um(o)); break;
-        case TOKU_VTHREAD: tokuT_free(C, gco2th(o)); break;
-        case TOKU_VCLASS: tokuM_free(C, gco2cls(o)); break;
+        case TOKU_VPROTO: tokuF_free(T, gco2proto(o)); break;
+        case TOKU_VUPVALUE: freeupval(T, gco2uv(o)); break;
+        case TOKU_VLIST: tokuA_free(T, gco2list(o)); break;
+        case TOKU_VTABLE: tokuH_free(T, gco2ht(o)); break;
+        case TOKU_VINSTANCE: tokuM_free(T, gco2ins(o)); break;
+        case TOKU_VIMETHOD: tokuM_free(T, gco2im(o)); break;
+        case TOKU_VUMETHOD: tokuM_free(T, gco2um(o)); break;
+        case TOKU_VTHREAD: tokuT_free(T, gco2th(o)); break;
+        case TOKU_VCLASS: tokuM_free(T, gco2cls(o)); break;
         case TOKU_VSHRSTR: {
             OString *s = gco2str(o);
-            tokuS_remove(C, s); /* remove it from the string table */
-            tokuM_freemem(C, s, sizeofstring(s->shrlen));
+            tokuS_remove(T, s); /* remove it from the string table */
+            tokuM_freemem(T, s, sizeofstring(s->shrlen));
             break;
         }
         case TOKU_VLNGSTR: {
             OString *s = gco2str(o);
-            tokuM_freemem(C, s, sizeofstring(s->u.lnglen));
+            tokuM_freemem(T, s, sizeofstring(s->u.lnglen));
             break;
         }
         case TOKU_VCSCL: {
-            CSClosure *cl = gco2clcs(o);
-            tokuM_freemem(C, cl, sizeofCScl(cl->nupvalues));
+            TClosure *cl = gco2clt(o);
+            tokuM_freemem(T, cl, sizeofTcl(cl->nupvalues));
             break;
         }
         case TOKU_VCCL: {
             CClosure *cl = gco2clc(o);
-            tokuM_freemem(C, cl, sizeofCcl(cl->nupvalues));
+            tokuM_freemem(T, cl, sizeofCcl(cl->nupvalues));
             break;
         }
         case TOKU_VUSERDATA: {
             UserData *u = gco2u(o);
-            tokuM_freemem(C, u, sizeofuserdata(u->nuv, u->size));
+            tokuM_freemem(T, u, sizeofuserdata(u->nuv, u->size));
             break;
         }
         default: toku_assert(0); /* invalid object tag */
@@ -545,7 +545,7 @@ static void freeobject(toku_State *T, GCObject *o) {
 
 static GCObject **sweeplist(toku_State *T, GCObject **l, int nobjects, 
                             int *nsweeped) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     int white = tokuG_white(gs); /* current white */
     int whitexor = whitexor(gs); /* dead white */
     int i;
@@ -555,7 +555,7 @@ static GCObject **sweeplist(toku_State *T, GCObject **l, int nobjects,
         int mark = curr->mark;
         if (whitexor & mark) { /* is 'curr' dead? */
             *l = curr->next; /* remove 'curr' from list */
-            freeobject(C, curr); /* and collect it */
+            freeobject(T, curr); /* and collect it */
         } else { /* otherwise change mark to 'white' */
             curr->mark = cast_ubyte((mark & ~maskcolorbits) | white);
             l = &curr->next; /* go to next element */
@@ -569,12 +569,12 @@ static GCObject **sweeplist(toku_State *T, GCObject **l, int nobjects,
 
 /* do a single sweep step limited by 'GCSWEEPMAX' */
 static int sweepstep(toku_State *T, GCObject **nextlist, int nextstate) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     if (gs->sweeppos) {
         t_mem old_gcdebt = gs->gcdebt;
         int count;
         gs->gccheck = 1; /* set check flag */
-        gs->sweeppos = sweeplist(C, gs->sweeppos, GCSWEEPMAX, &count);
+        gs->sweeppos = sweeplist(T, gs->sweeppos, GCSWEEPMAX, &count);
         gs->gcestimate += gs->gcdebt - old_gcdebt; /* update estimate */
         return count;
     } else { /* enter next state */
@@ -592,17 +592,17 @@ static int sweepstep(toku_State *T, GCObject **nextlist, int nextstate) {
 static GCObject **sweepuntilalive(toku_State *T, GCObject **l) {
     GCObject **old = l;
     do {
-        l = sweeplist(C, l, 1, NULL);
+        l = sweeplist(T, l, 1, NULL);
     } while (old == l);
     return l;
 }
 
 
 static void entersweep(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     gs->gcstate = GCSsweepall;
     toku_assert(gs->sweeppos == NULL);
-    gs->sweeppos = sweepuntilalive(C, &gs->objects);
+    gs->sweeppos = sweepuntilalive(T, &gs->objects);
 }
 
 /* }===================================================================== */
@@ -619,7 +619,7 @@ static void checksizes(toku_State *T, GState *gs) {
     if (!gs->gcemergency) {
         if (gs->strtab.nuse < gs->strtab.size / 4) { /* strtab too big? */
             t_mem old_gcdebt = gs->gcdebt;
-            tokuS_resize(C, gs->strtab.size / 2);
+            tokuS_resize(T, gs->strtab.size / 2);
             gs->gcestimate += gs->gcdebt - old_gcdebt; /* correct estimate */
         }
     }
@@ -646,7 +646,7 @@ static GCObject *gettobefin(GState *gs) {
 /* protected finalizer */
 static void pgc(toku_State *T, void *userdata) {
     UNUSED(userdata);
-    tokuV_call(C, C->sp.p - 2, 0);
+    tokuV_call(T, T->sp.p - 2, 0);
 }
 
 
@@ -654,26 +654,26 @@ static void pgc(toku_State *T, void *userdata) {
 static void callgc(toku_State *T) {
     TValue v;
     const TValue *fmm;
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert(!gs->gcemergency);
-    setgcoval(C, &v, gettobefin(gs));
-    fmm = tokuMM_get(C, &v, TOKU_MT_GC);
+    setgcoval(T, &v, gettobefin(gs));
+    fmm = tokuMM_get(T, &v, TOKU_MT_GC);
     if (!ttisnil(fmm)) { /* is there a finalizer? */
         int status;
-        int old_allowhook = C->allowhook;
+        int old_allowhook = T->allowhook;
         int old_gcstop = gs->gcstop;
         gs->gcstop |= GCSTP; /* avoid GC steps */
-        C->allowhook = 0; /* stop debug hooks during GC metamethod */
-        setobj2s(C, C->sp.p++, fmm); /* push finalizer... */
-        setobj2s(C, C->sp.p++, &v); /* ...and its argument */
-        C->cf->status |= CFST_FIN; /* will run a finalizer */
-        status = csPR_call(C, pgc, NULL, savestack(C,C->sp.p-2), C->errfunc);
-        C->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
-        C->allowhook = old_allowhook; /* restore hooks */
+        T->allowhook = 0; /* stop debug hooks during GC metamethod */
+        setobj2s(T, T->sp.p++, fmm); /* push finalizer... */
+        setobj2s(T, T->sp.p++, &v); /* ...and its argument */
+        T->cf->status |= CFST_FIN; /* will run a finalizer */
+        status = tokuPR_call(T, pgc, NULL, savestack(T,T->sp.p-2), T->errfunc);
+        T->cf->status &= ~CFST_FIN; /* not running a finalizer anymore */
+        T->allowhook = old_allowhook; /* restore hooks */
         gs->gcstop = old_gcstop; /* restore state */
         if (t_unlikely(status != TOKU_STATUS_OK)) { /* error in __gc? */
-            tokuT_warnerror(C, "__gc");
-            C->sp.p--; /* pop error object */
+            tokuT_warnerror(T, "__gc");
+            T->sp.p--; /* pop error object */
         }
     }
 }
@@ -682,9 +682,9 @@ static void callgc(toku_State *T) {
 /* call objects with finalizer in 'tobefin' */
 static int runNfinalizers(toku_State *T, int n) {
     int i;
-    GState *gs = G(C);
+    GState *gs = G(T);
     for (i = 0; i < n && gs->tobefin; i++)
-        callgc(C);
+        callgc(T);
     return i;
 }
 
@@ -697,7 +697,7 @@ static int runNfinalizers(toku_State *T, int n) {
 */
 void tokuG_checkfin(toku_State *T, GCObject *o, List *ml) {
     GCObject **pp;
-    GState *gs = G(C);
+    GState *gs = G(T);
     if (!ml ||                          /* no metalist... */
         isfin(o) ||                     /* or object is already marked... */
         ttisnil(&ml->arr[TOKU_MT_GC]) ||    /* or it has no finalizer... */
@@ -707,7 +707,7 @@ void tokuG_checkfin(toku_State *T, GCObject *o, List *ml) {
     if (issweepstate(gs)) {
         markwhite(gs, o); /* sweep object 'o' */
         if (gs->sweeppos == &o->next) /* should sweep more? */
-            gs->sweeppos = sweepuntilalive(C, gs->sweeppos);
+            gs->sweeppos = sweepuntilalive(T, gs->sweeppos);
     }
     /* search for pointer in 'objects' pointing to 'o' */
     for (pp = &gs->objects; *pp != o; pp = &(*pp)->next) {/* empty */}
@@ -764,16 +764,16 @@ static t_umem marktobefin(GState *gs) {
 
 
 static t_umem atomic(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     t_mem work = 0;
     GCObject *grayagain = gs->grayagain;
     gs->grayagain = NULL;
     toku_assert(gs->weak == NULL); /* 'weak' unused */
     toku_assert(!iswhite(gs->mainthread)); /* mainthread must be marked */
     gs->gcstate = GCSatomic;
-    markobject(gs, C); /* mark running thread */
-    markvalue(gs, &gs->t_list); /* mark clist */
-    markvalue(gs, &gs->t_table); /* mark ctable */
+    markobject(gs, T); /* mark running thread */
+    markvalue(gs, &gs->c_list); /* mark clist */
+    markvalue(gs, &gs->c_table); /* mark ctable */
     work += propagateall(gs); /* traverse all gray objects */
     work += markopenupvalues(gs); /* mark open upvalues */
     work += propagateall(gs); /* propagate changes */
@@ -817,8 +817,8 @@ static void setpause(GState *gs) {
 static void restartgc(GState *gs) {
     cleargraylists(gs);
     markobject(gs, gs->mainthread); /* mark mainthread */
-    markvalue(gs, &gs->t_list); /* mark clist */
-    markvalue(gs, &gs->t_table); /* mark ctable */
+    markvalue(gs, &gs->c_list); /* mark clist */
+    markvalue(gs, &gs->c_table); /* mark ctable */
     marktobefin(gs); /* mark any finalizing object left from previous cycle */
 }
 
@@ -837,7 +837,7 @@ static void restartgc(GState *gs) {
 */
 static t_umem singlestep(toku_State *T) {
     t_umem work;
-    GState *gs = G(C);
+    GState *gs = G(T);
     gs->gcstopem = 1; /* prevent emergency collections */
     switch (gs->gcstate) {
         case GCSpause: { /* mark roots */
@@ -855,25 +855,25 @@ static t_umem singlestep(toku_State *T) {
             break;
         }
         case GCSenteratomic: { /* re-mark all reachable objects */
-            work = atomic(C);
-            entersweep(C); /* set 'objects' as first list to sweep */
+            work = atomic(T);
+            entersweep(T); /* set 'objects' as first list to sweep */
             gs->gcestimate = gettotalbytes(gs); /* first estimate */
             break;
         }
         case GCSsweepall: { /* sweep objects in */
-            work = sweepstep(C, &gs->fin, GCSsweepfin);
+            work = sweepstep(T, &gs->fin, GCSsweepfin);
             break;
         }
         case GCSsweepfin: { /* sweep objects with finalizers */
-            work = sweepstep(C, &gs->tobefin, GCSsweeptofin);
+            work = sweepstep(T, &gs->tobefin, GCSsweeptofin);
             break;
         }
         case GCSsweeptofin: { /* sweep objects to be finalized */
-            work = sweepstep(C, NULL, GCSsweepend);
+            work = sweepstep(T, NULL, GCSsweepend);
             break;
         }
         case GCSsweepend: { /* finish sweeps */
-            checksizes(C, gs);
+            checksizes(T, gs);
             gs->gcstate = GCScallfin;
             work = 0;
             break;
@@ -881,7 +881,7 @@ static t_umem singlestep(toku_State *T) {
         case GCScallfin: { /* call remaining finalizers */
             if (gs->tobefin && !gs->gcemergency) {
                 gs->gcstopem = 0; /* enable collections during finalizers */
-                work = runNfinalizers(C, GCFINMAX) * GCFINCOST;
+                work = runNfinalizers(T, GCFINMAX) * GCFINCOST;
             } else { /* emergency or no more finalizers */
                 gs->gcstate = GCSpause;
                 work = 0;
@@ -899,16 +899,16 @@ static t_umem singlestep(toku_State *T) {
 t_sinline void freelist(toku_State *T, GCObject *l, GCObject *limit) {
     while (l != limit) {
         GCObject *next = l->next;
-        freeobject(C, l);
+        freeobject(T, l);
         l = next;
     }
 }
 
 
 static void callpendingfinalizers(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     while (gs->tobefin)
-        callgc(C);
+        callgc(T);
 }
 
 
@@ -917,14 +917,14 @@ static void callpendingfinalizers(toku_State *T) {
 ** call all finalizers.
 */
 void tokuG_freeallobjects(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     gs->gcstop = GCSTPCLS; /* paused by state closing */
     separatetobefin(gs, 1); /* seperate all objects with a finalizer */
     toku_assert(gs->fin == NULL);
-    callpendingfinalizers(C);
-    freelist(C, gs->objects, obj2gco(gs->mainthread));
+    callpendingfinalizers(T);
+    freelist(T, gs->objects, obj2gco(gs->mainthread));
     toku_assert(gs->fin == NULL); /* no new finalizers */
-    freelist(C, gs->fixed, NULL); /* collect fixed objects */
+    freelist(T, gs->fixed, NULL); /* collect fixed objects */
     toku_assert(gs->strtab.nuse == 0);
 }
 
@@ -934,9 +934,9 @@ void tokuG_freeallobjects(toku_State *T) {
 ** allowed by 'statemask'.
 */
 void tokuG_rununtilstate(toku_State *T, int statemask) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     while (!testbit(statemask, gs->gcstate))
-        singlestep(C);
+        singlestep(T);
 }
 
 
@@ -953,7 +953,7 @@ static void step(toku_State *T, GState *gs) {
                     ? ((cast_mem(1) << nbits) / WORK2MEM) * stepmul
                     : TOKU_MAXMEM; /* overflows; keep maximum value */
     do { /* do until pause or enough negative debt */
-        t_umem work = singlestep(C); /* perform one single step */
+        t_umem work = singlestep(T); /* perform one single step */
         debt -= work;
     } while (debt > -stepsize && gs->gcstate != GCSpause);
     if (gs->gcstate == GCSpause) /* pause? */
@@ -966,32 +966,32 @@ static void step(toku_State *T, GState *gs) {
 
 
 void tokuG_step(toku_State *T) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     if (!gcrunning(gs)) /* stopped ? */
         tokuG_setgcdebt(gs, -2000);
     else
-        step(C, gs);
+        step(T, gs);
 }
 
 
 static void fullinc(toku_State *T, GState *gs) {
     if (keepinvariant(gs)) /* have black objects? */
-        entersweep(C); /* sweep all tto turn them back to white */
+        entersweep(T); /* sweep all tto turn them back to white */
     /* finish any pending sweep phase to start a new cycle */
-    tokuG_rununtilstate(C, bitmask(GCSpause));
-    tokuG_rununtilstate(C, bitmask(GCScallfin)); /* run up to finalizers */
+    tokuG_rununtilstate(T, bitmask(GCSpause));
+    tokuG_rununtilstate(T, bitmask(GCScallfin)); /* run up to finalizers */
     /* estimate must be correct after full GC cycle */
     toku_assert(gs->gcestimate == gettotalbytes(gs));
-    tokuG_rununtilstate(C, bitmask(GCSpause)); /* finish collection */
+    tokuG_rununtilstate(T, bitmask(GCSpause)); /* finish collection */
     setpause(gs);
 }
 
 
 void tokuG_fullinc(toku_State *T, int isemergency) {
-    GState *gs = G(C);
+    GState *gs = G(T);
     toku_assert(!gs->gcemergency);
     gs->gcemergency = isemergency;
-    fullinc(C, G(C));
+    fullinc(T, G(T));
     gs->gcemergency = 0;
 }
 
@@ -1019,5 +1019,5 @@ static void enterinc(GState *gs) {
 
 /* enter incremental mode */
 void tokuG_incmode(toku_State *T) {
-    enterinc(G(C));
+    enterinc(G(T));
 }

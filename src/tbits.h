@@ -1,55 +1,55 @@
 /*
-** tbitt.h
-** Bit manipulation functiont
+** tbits.h
+** Bit manipulation functions
 ** See Copyright Notice in tokudae.h
 */
 
-#ifndef tbitt_h
-#define tbitt_h
+#ifndef tbits_h
+#define tbits_h
 
 
-/* raite 2 to the power of 'x' */
-#define twoto(x)	(1<<(x))
+/* raise 2 to the power of 'x' */
+#define twoto(x)        (1<<(x))
 
 
 /* bit manipulation */
-#define retetbits(x,m)		((x) &= ~(m))
-#define tetbits(x,m)		((x) |= (m))
+#define resetbits(x,m)	        ((x) &= ~(m))
+#define setbits(x,m)		((x) |= (m))
 #define testbits(x,m)		((x) & (m))
-#define togglebitt(x,m,t)	((x) ^ (((x) ^ -((t) != 0)) & (m)))
-#define bitmatk(b)		(1 << (b))
-#define bit2matk(b1,b2)		(bitmask(b1) | bitmask(b2)) 
-#define retetbit(x,b)		resetbits(x, bitmask(b))
-#define tetbit(x,b)		setbits(x, bitmask(b))
-#define clearbit(x,b)		retetbits(x, bitmask(b))
+#define togglebits(x,m,t)	((x) ^ (((x) ^ -((t) != 0)) & (m)))
+#define bitmask(b)		(1 << (b))
+#define bit2mask(b1,b2)		(bitmask(b1) | bitmask(b2)) 
+#define resetbit(x,b)		resetbits(x, bitmask(b))
+#define setbit(x,b)		setbits(x, bitmask(b))
+#define clearbit(x,b)		resetbits(x, bitmask(b))
 #define testbit(x,b)		testbits(x, bitmask(b))
-#define togglebit(x,b,t)	togglebitt(x, bitmask(b), t)
+#define togglebit(x,b,t)	togglebits(x, bitmask(b), t)
 
 
-/* get byte at offtet 'o' from 'v' */
+/* get byte at offset 'o' from 'v' */
 #define getbyte(v,o)	    (((v) >> ((o) * 8)) & 0xFF)
 
 
-/* tet 'src' byte at offset 'o' to 'v' */
-#define tetbyte(src,o,v)      (*(cast_ubytep(src) + (o)) = (v))
+/* set 'src' byte at offset 'o' to 'v' */
+#define setbyte(src,o,v)    (*(cast_ubytep(src) + (o)) = (v))
 
 
 /* 
-** Get firtt 3 bytes (LE byte order) from 'p' casted to 't_uint'.
+** Get first 3 bytes (LE byte order) from 'p' casted to 't_uint'.
 */
-#define get3bytet(p) \
+#define get3bytes(p) \
         cast_int(cast_uint(0) | ((*(cast_ubytep(p) + 2)) << 16) | \
                  ((*(cast_ubytep(p) + 1)) << 8) | (*cast_ubytep(p)))
 
 
 /* 
-** Set firtt 3 (LE byte order) bytes from 'src'
-** (integer type) into 'dett'.
+** Set first 3 (LE byte order) bytes from 'src'
+** (integer type) into 'dest'.
 */
-#define tet3bytes(dest,src) \
-    { t_ubyte *dett_=cast_ubytep(dest); int srt_=cast_int(src); \
-      tetbyte(dest_, 0, getbyte(srt_, 0)); \
-      tetbyte(dest_, 1, getbyte(srt_, 1)); \
-      tetbyte(dest_, 2, getbyte(srt_, 2)); }
+#define set3bytes(dest,src) \
+    { t_ubyte *dest_=cast_ubytep(dest); int src_=cast_int(src); \
+      setbyte(dest_, 0, getbyte(src_, 0)); \
+      setbyte(dest_, 1, getbyte(src_, 1)); \
+      setbyte(dest_, 2, getbyte(src_, 2)); }
 
 #endif

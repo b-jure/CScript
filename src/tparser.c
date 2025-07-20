@@ -20,7 +20,7 @@
 #include "tobject.h"
 #include "tobject.h"
 #include "tparser.h"
-#include "tokudaetonf.h"
+#include "tokudaeconf.h"
 #include "tstate.h"
 #include "tstring.h"
 #include "ttable.h"
@@ -32,10 +32,10 @@
 ** (Used for internal debugging.)
 */
 #if defined(TOKUI_DISASSEMBLE_BYTECODE)
-#include "ttrace.h"
-#define unasmfunc(C,p)      csTR_disassemble(C, p)
+#include "strace.h"
+#define unasmfunc(T,p)      tokuTR_disassemble(T, p)
 #else
-#define unasmfunc(C,p)      /* no-op */
+#define unasmfunc(T,p)      /* no-op */
 #endif
 
 
@@ -44,8 +44,8 @@
 
 
 /* macros for controlling recursion depth */
-#define enterCstack(lx)     tokuT_incCstack((lx)->C)
-#define leaveCstack(lx)     ((lx)->C->nCcalls--)
+#define enterCstack(lx)     tokuT_incCstack((lx)->T)
+#define leaveCstack(lx)     ((lx)->T->nCcalls--)
 
 
 /* macros for 'lastisend' in function state */
@@ -170,17 +170,17 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
 
 
 static t_noret expecterror(Lexer *lx, int tk) {
-    const char *err = tokuS_pushfstring(lx->C, "expected %s", tokuY_tok2str(lx, tk));
+    const char *err = tokuS_pushfstring(lx->T, "expected %s", tokuY_tok2str(lx, tk));
     tokuY_syntaxerror(lx, err);
 }
 
 
 static t_noret limiterror(FunctionState *fs, const char *what, int limit) {
-    toku_State *T = fs->lx->C;
+    toku_State *T = fs->lx->T;
     int linenum = fs->p->defline;
     const char *where = (linenum == 0 ? "main function" :
-                         tokuS_pushfstring(C, "function at line %d", linenum));
-    const char *err = tokuS_pushfstring(C, "too many %s (limit is %d) in %s",
+                         tokuS_pushfstring(T, "function at line %d", linenum));
+    const char *err = tokuS_pushfstring(T, "too many %s (limit is %d) in %s",
                                           what, limit, where);
     tokuY_syntaxerror(fs->lx, err);
 }
@@ -223,7 +223,7 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
         if (lx->line == linenum) /* same line? */
             expecterror(lx, what); /* emit usual error message */
         else /* otherwise spans across multiple lines */
-            tokuY_syntaxerror(lx, tokuS_pushfstring(lx->C,
+            tokuY_syntaxerror(lx, tokuS_pushfstring(lx->T,
                     "expected %s (to close %s at line %d)",
                     tokuY_tok2str(lx, what), tokuY_tok2str(lx, who), linenum));
     }
@@ -238,13 +238,13 @@ static const char *errstmname(Lexer *lx, const char *err) {
         case 3: stm = "continue"; break;
         default: return err;
     }
-    return tokuS_pushfstring(lx->C,
+    return tokuS_pushfstring(lx->T,
             "%s ('%s' must be the last statement in this block)", err, stm);
 }
 
 
 static t_noret expecterrorblk(Lexer *lx) {
-    const char *err = tokuS_pushfstring(lx->C,
+    const char *err = tokuS_pushfstring(lx->T,
                         "expected %s", tokuY_tok2str(lx, '}'));
     err = errstmname(lx, err);
     tokuY_syntaxerror(lx, err);
@@ -260,7 +260,7 @@ static void expectmatchblk(Lexer *lx, int linenum) {
         if (lx->line == linenum)
             expecterrorblk(lx);
         else {
-            const char *err = tokuS_pushfstring(lx->C,
+            const char *err = tokuS_pushfstring(lx->T,
                     "expected %s to close %s at line %d",
                     tokuY_tok2str(lx, '}'), tokuY_tok2str(lx, '{'), linenum);
             tokuY_syntaxerror(lx, errstmname(lx, err));
@@ -337,7 +337,7 @@ static void contadjust(FunctionState *fs, int push) {
 static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
     GotoList *gl = &lx->ps->gt;
     int n = gl->len;
-    tokuM_growarray(lx->C, gl->arr, gl->size, n, TOKU_MAXINT, "pending jumps", Goto);
+    tokuM_growarray(lx->T, gl->arr, gl->size, n, TOKU_MAXINT, "pending jumps", Goto);
     gl->arr[n].pc = pc;
     gl->arr[n].nactlocals = lx->fs->nactlocals;
     gl->arr[n].close = close;
@@ -457,13 +457,13 @@ static void initstring(ExpInfo *e, OString *s) {
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Proto *p = fs->p;
     int osz = p->sizelocals;
-    tokuM_growarray(lx->C, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
+    tokuM_growarray(lx->T, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
                   "locals", LVarInfo);
     while (osz < p->sizelocals)
         p->locals[osz++].name = NULL;
     p->locals[fs->nlocals].name = name;
     p->locals[fs->nlocals].startpc = currPC;
-    tokuG_objbarrier(lx->C, p, name);
+    tokuG_objbarrier(lx->T, p, name);
     return fs->nlocals++;
 }
 
@@ -569,7 +569,7 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->lasttarget = 0;
     fs->iwthabs = fs->needclose = fs->opbarrier = fs->lastisend = 0;
     p->source = lx->src;
-    tokuG_objbarrier(lx->C, p, p->source);
+    tokuG_objbarrier(lx->T, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
     enterscope(fs, s, 0); /* start top-level scope */
 }
@@ -578,43 +578,43 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
 static void close_func(Lexer *lx) {
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
-    toku_State *T = lx->C;
+    toku_State *T = lx->T;
     toku_assert(fs->scope && !fs->scope->prev);
     leavescope(fs); toku_assert(!fs->scope); /* end final scope */
     if (!stmIsReturn(fs)) /* function missing final return? */
         tokuC_ret(fs, nvarstack(fs), 0); /* add implicit return */
     tokuC_finish(fs); /* final code adjustments */
     /* shrink unused memory */
-    tokuM_shrinkarray(C, p->p, p->sizep, fs->np, Proto *);
-    tokuM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
-    tokuM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
-    tokuM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, t_byte);
-    tokuM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
+    tokuM_shrinkarray(T, p->p, p->sizep, fs->np, Proto *);
+    tokuM_shrinkarray(T, p->k, p->sizek, fs->nk, TValue);
+    tokuM_shrinkarray(T, p->code, p->sizecode, currPC, Instruction);
+    tokuM_shrinkarray(T, p->lineinfo, p->sizelineinfo, currPC, t_byte);
+    tokuM_shrinkarray(T, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
                        AbsLineInfo);
-    tokuM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
-    tokuM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    tokuM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
+    tokuM_shrinkarray(T, p->instpc, p->sizeinstpc, fs->ninstpc, int);
+    tokuM_shrinkarray(T, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
+    tokuM_shrinkarray(T, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
-    tokuG_checkGC(C); /* try to collect garbage memory */
-    unasmfunc(fs->lx->C, fs->p);
+    tokuG_checkGC(T); /* try to collect garbage memory */
+    unasmfunc(fs->lx->T, fs->p);
 }
 
 
 /* add function prototype */
 static Proto *addproto(Lexer *lx) {
-    toku_State *T = lx->C;
+    toku_State *T = lx->T;
     FunctionState *fs = lx->fs;
     Proto *p = fs->p;
     Proto *clp; /* closure prototype */
     if (fs->np >= p->sizep) {
         int osz = p->sizep;
-        tokuM_growarray(C, p->p, p->sizep, fs->np, MAX_ARG_L, "functions",
+        tokuM_growarray(T, p->p, p->sizep, fs->np, MAX_ARG_L, "functions",
                       Proto *);
         while (osz < p->sizep)
             p->p[osz++] = NULL;
     }
-    p->p[fs->np++] = clp = tokuF_newproto(C);
-    tokuG_objbarrier(C, p, clp);
+    p->p[fs->np++] = clp = tokuF_newproto(T);
+    tokuG_objbarrier(T, p, clp);
     return clp;
 }
 
@@ -642,7 +642,7 @@ static int addlocal(Lexer *lx, OString *name) {
     ParserState *ps = lx->ps;
     LVar *local;
     tokuP_checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
-    tokuM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
+    tokuM_growarray(lx->T, ps->actlocals.arr, ps->actlocals.size,
                          ps->actlocals.len, TOKU_MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
@@ -676,7 +676,7 @@ static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     int osz = p->sizeupvals;
     tokuP_checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    tokuM_growarray(fs->lx->C, p->upvals, p->sizeupvals, fs->nupvals,
+    tokuM_growarray(fs->lx->T, p->upvals, p->sizeupvals, fs->nupvals,
                   MAXUPVAL, "upvalues", UpValInfo);
     while (osz < p->sizeupvals)
         p->upvals[osz++].name = NULL;
@@ -701,7 +701,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *v) {
         toku_assert(eqstr(name, prev->p->upvals[v->u.info].name));
     }
     uv->name = name;
-    tokuG_objbarrier(fs->lx->C, fs->p, name);
+    tokuG_objbarrier(fs->lx->T, fs->p, name);
     return fs->nupvals - 1;
 }
 
@@ -869,9 +869,9 @@ static void call(Lexer *lx, ExpInfo *e) {
 }
 
 
-static void qmark(Lexer *lx, ExpInfo *e) {
-    cs_assert(0); /* TODO: implement */
-}
+//static void qmark(Lexer *lx, ExpInfo *e) {
+//    toku_assert(0); /* TODO: implement */
+//}
 
 
 static void suffixedexp(Lexer *lx, ExpInfo *e) {
@@ -889,8 +889,8 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
             case '(': {
                 tokuC_exp2stack(lx->fs, e);
                 call(lx, e);
-                if (check(lx, '?'))
-                    qmark(lx, e);
+                //if (check(lx, '?'))
+                //    qmark(lx, e);
                 break;
             }
             default: return;
@@ -1333,7 +1333,7 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         default: return; /* cannot be read-only */
     }
     if (varid) {
-        const char *msg = tokuS_pushfstring(lx->C,
+        const char *msg = tokuS_pushfstring(lx->T,
             "attempt to assign to read-only variable '%s'", getstr(varid));
         tokuP_semerror(lx, msg);
     }
@@ -1518,17 +1518,17 @@ static void expstm(Lexer *lx) {
 }
 
 
-static int getlocalattribute(Lexer *lx) {
+static int getlocalastribute(Lexer *lx) {
     if (match(lx, '<')) {
-        const char *attr = getstr(str_expectname(lx));
+        const char *astr = getstr(str_expectname(lx));
         expectnext(lx, '>');
-        if (strcmp(attr, "final") == 0)
+        if (strcmp(astr, "final") == 0)
             return VARFINAL; /* read-only variable */
-        else if (strcmp(attr, "close") == 0)
+        else if (strcmp(astr, "close") == 0)
             return VARTBC; /* to-be-closed variable */
         else
             tokuP_semerror(lx,
-                tokuS_pushfstring(lx->C, "unknown attribute '%s'", attr));
+                tokuS_pushfstring(lx->T, "unknown astribute '%s'", astr));
     }
     return VARREG;
 }
@@ -1539,7 +1539,7 @@ static int newlocalvar(Lexer *lx, OString *name, int ign) {
         ExpInfo dummy;
         int limit = lx->fs->scope->nactlocals - 1;
         if (t_unlikely(searchlocal(lx->fs, name, &dummy, limit) >= 0))
-            tokuP_semerror(lx, tokuS_pushfstring(lx->C,
+            tokuP_semerror(lx, tokuS_pushfstring(lx->T,
                         "redefinition of local variable '%s'", getstr(name)));
     }
     return addlocal(lx, name);
@@ -1563,7 +1563,7 @@ static void localstm(Lexer *lx) {
     ExpInfo e = INIT_EXP;
     do {
         vidx = newlocalvar(lx, str_expectname(lx), 1);
-        kind = getlocalattribute(lx);
+        kind = getlocalastribute(lx);
         getlocalvar(fs, vidx)->s.kind = kind;
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
@@ -1731,10 +1731,10 @@ typedef struct {
 /* convert literal information into text */
 static const char *literal2text(toku_State *T, LiteralInfo *li) {
     switch (li->tt) {
-        case TOKU_VNUMINT: return tokuS_pushfstring(C, " (%I)", li->lit.i);
-        case TOKU_VNUMFLT: return tokuS_pushfstring(C, " (%f)", li->lit.n);
+        case TOKU_VNUMINT: return tokuS_pushfstring(T, " (%I)", li->lit.i);
+        case TOKU_VNUMFLT: return tokuS_pushfstring(T, " (%f)", li->lit.n);
         case TOKU_VSHRSTR:case TOKU_VLNGSTR:
-            return tokuS_pushfstring(C, " (%s)", getstr(li->lit.str));
+            return tokuS_pushfstring(T, " (%s)", getstr(li->lit.str));
         default: toku_assert(0); return NULL; /* invalid literal */
     }
 }
@@ -1839,9 +1839,9 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
     if (!checkliteral(ss, e, &what))
          checkK(lx, e, li, ss->firstli, &extra, &what);
     if (t_unlikely(what)) { /* have duplicate? */
-        const char *msg = tokuS_pushfstring(lx->C,
+        const char *msg = tokuS_pushfstring(lx->T,
                             "duplicate %s literal%s in switch statement",
-                            what, (extra ? literal2text(lx->C, li) : ""));
+                            what, (extra ? literal2text(lx->T, li) : ""));
         tokuP_semerror(lx, msg);
     }
 }
@@ -1852,7 +1852,7 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
     tokuP_checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
-    tokuM_growarray(lx->C, ps->literals.arr, ps->literals.size,
+    tokuM_growarray(lx->T, ps->literals.arr, ps->literals.size,
                   ps->literals.len, MAX_CODE, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
 }
@@ -1907,7 +1907,7 @@ static int codeconstexp(FunctionState *fs, ExpInfo *e) {
 static void removeliterals(Lexer *lx, int nliterals) {
     ParserState *ps = lx->ps;
     if (ps->literals.len < ps->literals.size / 3) /* too many literals? */
-        tokuM_shrinkarray(lx->C, ps->literals.arr, ps->literals.size,
+        tokuM_shrinkarray(lx->T, ps->literals.arr, ps->literals.size,
                         ps->literals.size / 2, LiteralInfo);
     ps->literals.len = nliterals;
 }
@@ -2462,7 +2462,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     env->idx = 0;
     env->onstack = 1;
     env->kind = VARREG;
-    tokuG_objbarrier(lx->C, fs->p, env->name);
+    tokuG_objbarrier(lx->T, fs->p, env->name);
     tokuY_scan(lx); /* scan for first token */
     decl_list(lx, 0); /* parse main body */
     expect(lx, TK_EOS);
@@ -2471,28 +2471,28 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 
 
 /* parse source code */
-CSClosure *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
+TClosure *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = tokuF_newCSClosure(C, 1);
-    setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
-    tokuT_incsp(C);
-    lx.tab = tokuH_new(C); /* create table for scanner */
-    settval2s(C, C->sp.p, lx.tab); /* anchor it */
-    tokuT_incsp(C);
-    fs.p = cl->p = tokuF_newproto(C);
-    tokuG_objbarrier(C, cl, cl->p);
-    fs.p->source = tokuS_new(C, source);
-    tokuG_objbarrier(C, fs.p, fs.p->source);
+    TClosure *cl = tokuF_newTclosure(T, 1);
+    setclTval2s(T, T->sp.p, cl); /* anchor main function closure */
+    tokuT_incsp(T);
+    lx.tab = tokuH_new(T); /* create table for scanner */
+    settval2s(T, T->sp.p, lx.tab); /* anchor it */
+    tokuT_incsp(T);
+    fs.p = cl->p = tokuF_newproto(T);
+    tokuG_objbarrier(T, cl, cl->p);
+    fs.p->source = tokuS_new(T, source);
+    tokuG_objbarrier(T, fs.p, fs.p->source);
     lx.buff = buff;
     lx.ps = ps;
-    tokuY_setinput(C, &lx, br, fs.p->source);
+    tokuY_setinput(T, &lx, br, fs.p->source);
     toku_assert(!ps->gt.len && !ps->literals.len && !ps->actlocals.len);
     mainfunc(&fs, &lx);
     toku_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);
     /* all scopes should be correctly finished */
     toku_assert(ps->actlocals.len == 0 && ps->gt.len == 0);
-    C->sp.p--; /* remove scanner table */
+    T->sp.p--; /* remove scanner table */
     return cl;
 }
