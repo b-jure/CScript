@@ -237,7 +237,7 @@ __G.aaa = nil;
 
 
 /// testing size of 'source' info; size of buffer for that info is
-/// CS_IDSIZE, declared as 60 in cscriptconf. Get one position for '\0'.
+/// TOKU_IDSIZE, declared as 60 in cscriptconf. Get one position for '\0'.
 local idsize = 60 - 1;
 local fn checksize(source) {
     /// syntax error
@@ -349,7 +349,7 @@ lineerror([=[
 
 
 if __heavy {
-    /// several tests that exhaust the CScript stack
+    /// several tests that exhaust the Tokudae stack
     gc();
     print("testing stack overflow");
     local C = 0;
@@ -440,7 +440,7 @@ if __heavy {
     local res, msg = xpcall(error, err, 170);
     assert(!res and msg == "}");
 
-    /// too many levels (limit is 'CSI_MAXCCALLS')
+    /// too many levels (limit is 'TOKUI_MAXCCALLS')
     res, msg = xpcall(error, err, 300);
     assert(!res and msg == "C stack overflow");
 }

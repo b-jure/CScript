@@ -1,11 +1,11 @@
-#include "cscript.h"
-#include "cscriptaux.h"
+#include "tokudae.h"
+#include "tokudaeaux.h"
 #include <stdio.h>
 
-static int id(cs_State *C) {
-    cs_push_bool(C, 1);
-    cs_insert(C, 0);
-    return cs_getntop(C);
+static int id(toku_State *T) {
+    toku_push_bool(C, 1);
+    toku_insert(C, 0);
+    return toku_getntop(C);
 }
 
 
@@ -15,10 +15,10 @@ static const struct csL_Entry funcs[] = {
 };
 
 
-CSMOD_API int csopen_lib2(cs_State *C) {
-    cs_setntop(C, 2);
-    cs_set_global(C, "y"); /* y gets 2nd parameter */
-    cs_set_global(C, "x"); /* x gets 1st parameter */
+CSMOD_API int tokuopen_lib2(toku_State *T) {
+    toku_setntop(C, 2);
+    toku_set_global(C, "y"); /* y gets 2nd parameter */
+    toku_set_global(C, "x"); /* x gets 1st parameter */
     csL_push_lib(C, funcs);
     return 1;
 }

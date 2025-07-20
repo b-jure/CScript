@@ -14,7 +14,7 @@ local fn topointer(s) {
    ** ("The value of the pointer is converted to a sequence of printing
    ** characters, in an implementation-defined manner.")
    */ 
-    local null = "(null)";  # nulls are formatted by CScript
+    local null = "(null)";  # nulls are formatted by Tokudae
     assert(string.fmt("%p", 4) == null);
     assert(string.fmt("%p", inf) == null);
     assert(string.fmt("%p", infinity) == null);

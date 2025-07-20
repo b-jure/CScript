@@ -1,5 +1,5 @@
 " Vim filetype plugin file
-" Language:	CScript
+" Language:	Tokudae
 " Maintainer:	Jure Bagić <jurebagic98@gmail.com>
 " Last Change:	2025 Feb 22
 
@@ -13,7 +13,7 @@ let b:did_ftplugin = 1
 
 " keep in sync with syntax/cscript.vim
 if !exists("cscript_version")
-  " Default is CScript 1.0
+  " Default is Tokudae 1.0
   let cscript_version = 1
   let cscript_subversion = 0
 elseif !exists("cscript_subversion")
@@ -34,7 +34,7 @@ setlocal fo-=t fo+=croql
 setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://,:#
 
 if (has("gui_win32") || has("gui_gtk")) && !exists("b:browsefilter")
-    let b:browsefilter = "CScript Source Files (*.cscript)\t*.cscript\n"
+    let b:browsefilter = "Tokudae Source Files (*.cscript)\t*.cscript\n"
     if has("win32")
         let b:browsefilter ..= "All Files (*.*)\t*\n"
     else

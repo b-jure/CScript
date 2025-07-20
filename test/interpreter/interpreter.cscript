@@ -92,47 +92,47 @@ checkout("-x\n");
 
 prepfile("print(package.path);");
 
-/// test CS_PATH
-RUN("env CS_INIT= CS_PATH=x cscript %s > %s", prog, out);
+/// test TOKU_PATH
+RUN("env TOKU_INIT= TOKU_PATH=x cscript %s > %s", prog, out);
 checkout("x\n");
 
-/// test CS_PATH_version
-RUN("env CS_INIT= CS_PATH_1_0=y CS_PATH=x cscript %s > %s", prog, out);
+/// test TOKU_PATH_version
+RUN("env TOKU_INIT= TOKU_PATH_1_0=y TOKU_PATH=x cscript %s > %s", prog, out);
 checkout("y\n");
 
-/// test CS_CPATH
+/// test TOKU_CPATH
 prepfile("print(package.cpath);");
-RUN("env CS_INIT= CS_CPATH=xuxu cscript %s > %s", prog, out);
+RUN("env TOKU_INIT= TOKU_CPATH=xuxu cscript %s > %s", prog, out);
 checkout("xuxu\n");
 
-/// test CS_CPATH_version
-RUN("env CS_INIT= CS_CPATH_1_0=yacc CS_CPATH=x cscript %s > %s", prog, out);
+/// test TOKU_CPATH_version
+RUN("env TOKU_INIT= TOKU_CPATH_1_0=yacc TOKU_CPATH=x cscript %s > %s", prog, out);
 checkout("yacc\n");
 
-/// test CS_INIT (and its access to 'args' list)
+/// test TOKU_INIT (and its access to 'args' list)
 prepfile("print(X);");
-RUN("env CS_INIT=\"X=tonum(args[1]);\" cscript %s 3.2 > %s", prog, out);
+RUN("env TOKU_INIT=\"X=tonum(args[1]);\" cscript %s 3.2 > %s", prog, out);
 checkout("3.2\n");
 
-/// test CS_INIT_version
+/// test TOKU_INIT_version
 prepfile("print(X);");
-RUN("env CS_INIT_1_0=\"X=10;\" CS_INIT=\"X=3;\" cscript %s > %s", prog, out);
+RUN("env TOKU_INIT_1_0=\"X=10;\" TOKU_INIT=\"X=3;\" cscript %s > %s", prog, out);
 checkout("10\n");
 
-/// test CS_INIT for files
+/// test TOKU_INIT for files
 prepfile("x = x or 10; print(x); x = x + 1;");
-RUN("env CS_INIT=\"@%s\" cscript %s > %s", prog, prog, out);
+RUN("env TOKU_INIT=\"@%s\" cscript %s > %s", prog, prog, out);
 checkout("10\n11\n");
 
-/// test errors in CS_INIT
-NoRun("CS_INIT:1: msg", "env CS_INIT='error(\"msg\");' cscript");
+/// test errors in TOKU_INIT
+NoRun("TOKU_INIT:1: msg", "env TOKU_INIT='error(\"msg\");' cscript");
 
 /// test option '-E'
 local defaultpath, defaultCpath;
 
 {
     prepfile("print(package.path, package.cpath);");
-    RUN("env CS_INIT=\"error(10);\" CS_PATH=xxx CS_CPATH=xxx cscript -E %s > %s",
+    RUN("env TOKU_INIT=\"error(10);\" TOKU_PATH=xxx TOKU_CPATH=xxx cscript -E %s > %s",
          prog, out);
     local output = getoutput();
     defaultpath = reg.match(output, "^(.-)\t");
@@ -155,7 +155,7 @@ assert(!reg.find(defaultpath, "xxx") and
 /// test replacement of ';;' to default path
 local fn convert(p) {
     prepfile("print(package.path);");
-    RUN("env CS_PATH=\"%s\" cscript %s > %s", p, prog, out);
+    RUN("env TOKU_PATH=\"%s\" cscript %s > %s", p, prog, out);
     local expected = getoutput();
     expected = string.substr(expected, 0, -2); /// cut final end of line
     if reg.find(p, ";;") {
@@ -177,7 +177,7 @@ convert("a;b;;c");
 /// test -l over multiple libraries
 prepfile("print(1); a=2; return {x=15};");
 prepfile(string.fmt("print(a); print(__G[\"%s\"].x);", prog), false, otherprog);
-RUN("env CS_PATH=\"?;;\" cscript -l %s -l%s -lstring -l io %s > %s", prog, otherprog, otherprog, out);
+RUN("env TOKU_PATH=\"?;;\" cscript -l %s -l%s -lstring -l io %s > %s", prog, otherprog, otherprog, out);
 checkout("1\n2\n15\n2\n15\n");
 
 /// test explicit global names in -l
@@ -187,7 +187,7 @@ checkout("0.0\nALO ALO\t20\n");
 
 
 /// test module names with version suffix ("_libs/lib2-v2")
-RUN("env CS_CPATH='./_libs/?.so' cscript -l lib2-v2 -e 'print(lib2.id());' > %s", out);
+RUN("env TOKU_CPATH='./_libs/?.so' cscript -l lib2-v2 -e 'print(lib2.id());' > %s", out);
 checkout("true\n");
 
 
@@ -208,7 +208,7 @@ RUN("cscript \"-e \" -- %s a b c", prog); /// "-e " runs an empty command
 /// test 'args' availability in libraries
 prepfile("assert(args);");
 prepfile("assert(args);", false, otherprog);
-RUN("env CS_PATH=\"?;;\" cscript -l%s - < %s", prog, otherprog);
+RUN("env TOKU_PATH=\"?;;\" cscript -l%s - < %s", prog, otherprog);
 
 /// test messing up the 'args' and 'cliargs' lists
 RUN("echo \"print(...);\" | cscript -e \"args[0] = 100;\" - > %s", out);
@@ -255,9 +255,9 @@ warn("Z", "Z", "Z");          /// common warning
 ]=]);
 RUN("cscript -W %s 2> %s", prog, out);
 checkout([=[
-CScript warning: @offXXX@off
-CScript warning: @on
-CScript warning: ZZZ
+Tokudae warning: @offXXX@off
+Tokudae warning: @on
+Tokudae warning: ZZZ
 ]=]);
 
 prepfile([=[
@@ -293,7 +293,7 @@ prepfile([=[
         print("creating 3");
         local ml = [];
         /// this finalizer should not be called, as object will be
-        /// created after 'cs_close' has been called
+        /// created after 'toku_close' has been called
         ml[__MT.gc] = fn() { print(3); };
         setmetalist((class{})(), ml);
         ml = nil;
@@ -504,28 +504,28 @@ NoRun("'-l' needs argument", "cscript -l");
         /// shell script to run 'cscriptprog' in background and echo its pid
         local shellprg = string.fmt("%s -e \"%s\" & echo $!", progname, cscriptprog);
         local f = io.popen(shellprg, "r");  /// run shell script
-        local pid = f.read(); /// get pid for CScript script
-        print("(if test fails now, it may leave a CScript script running in background, pid " .. pid .. ")");
+        local pid = f.read(); /// get pid for Tokudae script
+        print("(if test fails now, it may leave a Tokudae script running in background, pid " .. pid .. ")");
         return f, pid;
     }
 
-    /// CScript script that runs protected infinite loop and then prints '42'
+    /// Tokudae script that runs protected infinite loop and then prints '42'
     local f, pid = runback([=[
         pcall(fn() { print(12); while true; }); print(42);]=]);
     /// wait until script is inside 'pcall'
     assert(f.read() == "12");
-    kill(pid); /// send INT signal to CScript script
+    kill(pid); /// send INT signal to Tokudae script
     /// check that 'pcall' captured the exception and script continued running
     assert(f.read() == "42"); /// expected output
     assert(f.close());
 
-    /// CScript script in a long unbreakable search
+    /// Tokudae script in a long unbreakable search
     f, pid = runback([=[
         print(15); reg.find(string.repeat(\"a\", 100000), \".*b\");]=]);
     /// wait (so script can reach the loop)
     assert(f.read() == "15");
     assert(os.execute("sleep 1"));
-    /// must send at least two INT signals to stop this CScript script
+    /// must send at least two INT signals to stop this Tokudae script
     local n = 100;
     foreach i in range(100) { /// keep sending signals
         if !kill(pid) { /// until it fails

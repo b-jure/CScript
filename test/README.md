@@ -1,6 +1,6 @@
 ## Testing
 `test.cscript` is standalone executable script used for running tests.
-Every directory in this directory represents a testsuite, and any CScript
+Every directory in this directory represents a testsuite, and any Tokudae
 script file (filenames ending with `.cscript` that do not start with `.`) in
 the testsuite directory is considered as a test belonging to that testsuite.
 

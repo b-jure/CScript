@@ -54,8 +54,8 @@ res, of = tonum("-63abzg42zzzzzzzzzz5555zzzzzzzzzzzzzzzzzzzzzzzz", 36);
 assert(res and of == -1);
 
 /*
-** Assert below depends on the types CScript was compiled with.
-** For now CScript can be compiled only with 'long long int' for
+** Assert below depends on the types Tokudae was compiled with.
+** For now Tokudae can be compiled only with 'long long int' for
 ** integers and 'double' for floats.
 */
 res, of = tonum("0x7fffffffffffffff", 16);

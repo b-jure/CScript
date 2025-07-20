@@ -286,7 +286,7 @@ return AA;]=];
             assert(!f and typeof(err) == "string" and when == "open");
 
             /// symbols from 'lib1' must be visible to other libraries
-            f = assert(package.loadlib(DC("lib11"), p.."csopen_lib11"));
+            f = assert(package.loadlib(DC("lib11"), p.."tokuopen_lib11"));
             assert(f() == "exported");
         }
 

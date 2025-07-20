@@ -1,5 +1,5 @@
-" CScript syntax file
-" Language:     CScript 1.0
+" Tokudae syntax file
+" Language:     Tokudae 1.0
 " Maintainer:   Jure Bagić <jurebagic99@gmail.com>
 " Last Change:  2025 Jul 4
 " Options:      cscript_version = 1
@@ -18,7 +18,7 @@ syn clear
 
 " keep in sync with ftplugin/cscript.vim
 if !exists("cscript_version")
-  " Default is CScript 1.0
+  " Default is Tokudae 1.0
   let cscript_version = 1
   let cscript_subversion = 0
 elseif !exists("cscript_subversion")

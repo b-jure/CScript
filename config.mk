@@ -1,4 +1,4 @@
-# Configuration file for building and installing CScript
+# Configuration file for building and installing Tokudae
 
 
 # {=========================================================================
@@ -22,8 +22,8 @@ INSTALL_BIN = $(INSTALL_ROOT)/bin
 INSTALL_INC = $(INSTALL_ROOT)/include
 INSTALL_LIB = $(INSTALL_ROOT)/lib
 INSTALL_MAN = $(INSTALL_ROOT)/man/man1
-INSTALL_CSMOD = $(INSTALL_ROOT)/share/cscript/$V
-INSTALL_CMOD = $(INSTALL_ROOT)/lib/cscript/$V
+INSTALL_TMOD = $(INSTALL_ROOT)/share/tokudae/$V
+INSTALL_CMOD = $(INSTALL_ROOT)/lib/tokudae/$V
 
 # Install tool
 INSTALL = install -p
@@ -41,19 +41,15 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # 			Compiler and Linker Flags
 # ==========================================================================
 # Internal defines used for testing (all of these slow down operations a lot):
-# -DCSI_ASSERT => Enables all internal asserts inside CScript.
-# -DCSI_TRACE_EXEC => Traces bytecode execution (including stack state).
-# -DCSI_DISASSEMBLE_BYTECODE => Disassembles precompiled chunks.
-# -DEMERGENCYGCTESTS => Forces an emergency collection at every single
+# -DTOKUI_ASSERT => Enables all internal asserts inside Tokudae.
+# -DTOKUI_TRACE_EXEC => Traces bytecode execution (including stack state).
+# -DTOKUI_DISASSEMBLE_BYTECODE => Disassembles precompiled chunks.
+# -DTOKUI_EMERGENCYGCTESTS => Forces an emergency collection at every single
 # allocation.
-# -DCSI_HARDMEMTESTS => Forces a full collection at all points where the collector
-# can run.
-# -DCSI_HARDSTACKTESTS => forces a reallocation of the stack at every point where
-# the stack can be reallocated.
-#
-# Address Sanitizer stuff:
-# ASAN_OPTIONS => environment variable that holds Address Sanitizer options
-# detect_invalid_pointer_pairs=2
+# -DTOKUI_HARDMEMTESTS => Forces a full collection at all points where the
+# collector can run.
+# -DTOKUI_HARDSTACKTESTS => forces a reallocation of the stack at every point
+# where the stack can be reallocated.
 
 CC = gcc
 CFLAGS = -std=c99 -Wfatal-errors -Wall -Wextra $(SYSCFLAGS) $(MYCFLAGS)
@@ -72,9 +68,10 @@ SYSLIBS =
 # MYOBJS =
 
 # Testing flags
-#ASANFLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=pointer-subtract -fsanitize=pointer-compare
-MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DCS_USE_APICHECK -DCSI_ASSERT
-	   #-DCSI_DISASSEMBLE_BYTECODE #-DCSI_TRACE_EXEC
+#ASANFLAGS = -fsanitize=address -fsanitize=undefined \
+# 	     -fsanitize=pointer-subtract -fsanitize=pointer-compare
+MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DTOKU_USE_APICHECK -DTOKUI_ASSERT
+	   #-DTOKUI_DISASSEMBLE_BYTECODE #-DTOKUI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =

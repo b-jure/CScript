@@ -1,7 +1,7 @@
 local db = import("debug");
 local getinfo = db.getinfo;
 
-{ /// inactive CScript function
+{ /// inactive Tokudae function
     local g; /// 'f' second upvalue
     /// comment
     local fn f(x, y, z) {
@@ -14,7 +14,7 @@ local getinfo = db.getinfo;
 
     local t = getinfo(f); /// default
     assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
-    assert(t.defline == 7 and t.lastdefline == 13 and t.what == "CScript");
+    assert(t.defline == 7 and t.lastdefline == 13 and t.what == "Tokudae");
     assert(t.currline == -1);
     assert(t.nupvals == 2 and t.nparams == 3 and t.isvararg == false);
     assert(t.name == nil and t.namewhat == "");
@@ -24,7 +24,7 @@ local getinfo = db.getinfo;
 
     t = getinfo(f, "s"); /// get source information
     assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
-    assert(t.defline == 7 and t.lastdefline == 13 and t.what == "CScript");
+    assert(t.defline == 7 and t.lastdefline == 13 and t.what == "Tokudae");
     t = getinfo(f, "l"); /// get line
     assert(t.currline == -1);
     t = getinfo(f, "u"); /// get upvalues and isvararg
@@ -67,7 +67,7 @@ local extra = 0;
 if reg.find(db.traceback(nil, 0), "test%.cscript")
     extra = 7; /* @bugprone if 'cscript.test' is changed */
 
-{ /// active CScript functions
+{ /// active Tokudae functions
     local t = getinfo(1);
     assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
     assert(t.defline == 0 and t.lastdefline == 0 and t.what == "main");

@@ -33,7 +33,7 @@ local Cprint = (__c and __c.print) or print;
     a = debug.getinfo(Cprint, "L");
     assert(a.activelines == nil);
     local b = debug.getinfo(test, "sfL");
-    assert(b.name == nil and b.what == "CScript" and
+    assert(b.name == nil and b.what == "Tokudae" and
            b.defline == testline and
            b.lastdefline == b.defline + 10 and
            b.func == test and !reg.find(b.shortsrc, "%["));
@@ -87,7 +87,7 @@ loop {
     local f = fn() { return 1+1 and (!1 or g.x()); };
     assert(f() == "xixi");
     g = debug.getinfo(f);
-    assert(g.what == "CScript" and g.func == f and g.namewhat == "" and !g.name);
+    assert(g.what == "Tokudae" and g.func == f and g.namewhat == "" and !g.name);
 
     fn f(x, name) {   /// local!
         name = name or "f";
@@ -350,7 +350,7 @@ fn f(a,b) {
     assert(debug.setlocal(2, 3, "pera") == "AA".."AA");
     assert(debug.setlocal(2, 4, "manga") == "B");
     x = debug.getinfo(2);
-    assert(x.func == g and x.what == "CScript" and
+    assert(x.func == g and x.what == "Tokudae" and
            x.name == "g" and x.nupvals == 2 and
            reg.find(x.source, "^@.*db%.cscript$"));
     glob = glob+1;
@@ -393,7 +393,7 @@ g();
 assert(a[f] and a[g] and a[assert] and a[debug.getlocal] and !a[Cprint]);
 
 
-/// tests for manipulating non-registered locals (C and CScript temporaries)
+/// tests for manipulating non-registered locals (C and Tokudae temporaries)
 
 local n, v = debug.getlocal(0, 1);
 assert(v == 0 and n == "(C auto)");

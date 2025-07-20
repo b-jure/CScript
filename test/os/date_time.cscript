@@ -59,7 +59,7 @@ checkerr("field 'year' is out-of-bound", os.time,
 checkerr("field 'year' is out-of-bound", os.time,
          {year = -(1 << 31), month = 1, day = 1});
 
-if (math.maxint > 2**31) # have larger cs_Integer?
+if (math.maxint > 2**31) # have larger toku_Integer?
     checkerr("field 'year' is out-of-bound", os.time,
              {year = (1 << 31) + 1900, month = 1, day = 1});
 

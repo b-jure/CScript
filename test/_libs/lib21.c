@@ -1,8 +1,8 @@
-#include "cscript.h"
+#include "tokudae.h"
 
 
-int csopen_lib2(cs_State *C);
+int tokuopen_lib2(toku_State *T);
 
-CSMOD_API int csopen_lib21(cs_State *C) {
-    return csopen_lib2(C);
+CSMOD_API int tokuopen_lib21(toku_State *T) {
+    return tokuopen_lib2(C);
 }

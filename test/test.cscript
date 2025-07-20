@@ -1,7 +1,7 @@
 #!../cscript
 
 /* Quick version check, keep this first! */
-local version = "CScript 1.0";
+local version = "Tokudae 1.0";
 if __VERSION != version { /* test script and core version mismatch? */
     io.stderr.write("This test script is for ", version, ", not for ",
                      __VERSION, "\nExiting...");
@@ -587,7 +587,7 @@ Available options are:
 
     -w      Enable output of warnings while running tests.
 
-    -o      Replace 'print' and 'printf' with CScript functions that print to
+    -o      Replace 'print' and 'printf' with Tokudae functions that print to
             temporary file instead of 'stdout' (not portable).
 
     -m      Print memory usage before running the test.
@@ -618,7 +618,7 @@ Available options are:
     -e testsuite_name   Exclude testsuite {testsuite_name}, preventing the script
                         from running it.
 
-    -s tests_script     Run CScript script {tests_script} to generate the tests table.
+    -s tests_script     Run Tokudae script {tests_script} to generate the tests table.
                         This script should return a table with testsuite names as
                         keys and lists of filenames as values which represent the
                         tests of that testsuite. Test filepaths inside the list
