@@ -47,12 +47,21 @@ __skipmsg = __G.__skipmsg or true; /* default is true */
 ** Specific programs/devices/files used when rebuilding the
 ** standalone executable or running non-portable options.
 */
+
 local make_target = __POSIX and "linux-readline" or "guess";
 local make_threads = !__port and 12 or 1;
+
 local dev_null = __POSIX and "/dev/null" or "nul";
 local dev_null1 = " > " .. dev_null;
 local dev_null2 = " 2> " .. dev_null;
 local dev_null12 = dev_null1 .. "2>&1";
+
+local cp = __POSIX and "cp" or "copy";
+
+local script = debug.getinfo(1, "s").source;
+script = string.substr(script, 1); /* skip  '@' */
+if (string.startswith(args[0], "./") and !string.startswith(script, "./"))
+    script = "./" .. script;
 
 /* }===================================================================== */
 
@@ -117,6 +126,7 @@ local opts_flags = {
     abort_on_fail = "-a",
     run_isolated = "-i",
     enter_debug = "-d",
+    rebuild = "-b",
 };
 
 
@@ -162,7 +172,7 @@ local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock
 local tmpname,pairs,gc,rm,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
 local exit,getinfo,enumerate = os.exit,debug.getinfo,list.enumerate;
 local char,dbg,gmatch,repeat = string.char,debug.debug,reg.gmatch,string.repeat;
-local rename,startswith = os.rename,string.startswith;
+local startswith = string.startswith;
 
 
 /* tests should import debug library when needed */
@@ -417,16 +427,15 @@ local fn showmem() {
 };
 
 
-/*
-** Removes temporary output file.
-*/
-local fn rmtempfile() {
-    if (__c.out) {
-        printf("Removing temporary file '%'...", __c.out);
-        rm(__c.out);
-        print("Ok!");
-    }
-}
+/* temporary output file */
+local tempfile = (class {
+        __gc = || {
+            if self.file {
+                printf("Removing temporary output file '%'...", self.file);
+                rm(self.file);
+            }
+        };
+})();
 
 
 /*
@@ -468,10 +477,8 @@ local fn run_test(filepath) {
         };
         if (__opts.errors) /* print errors of failed tests? */
             print(msg);
-        if (__opts.abort_on_fail) { /* abort on first failed test? */
-            rmtempfile();
-            exit(0, true);
-        }
+        if (__opts.abort_on_fail) /* abort on first failed test? */
+            exit(1, true);
     }
 }
 
@@ -914,7 +921,6 @@ local fn handle_cli_args() {
         if (byte(arg, 0) == '-' and 1 < len(arg)) { /* option? */
             if (argi == 1 and byte(arg, 1) == 'h') { /* help option? */
                 print(usage);
-                rmtempfile();
                 exit(0, true);
             }
             handle_option(arg);
@@ -1021,7 +1027,7 @@ local fn run_args() {
 ** Set specific options in '__opts'.
 ** Should be called after all cli options and arguments were parsed.
 */
-local fn set_options() {
+local fn set_output_options() {
     if __opts.noprint and !__port {
         __c = { /* store old functions */
             print = __G.print,
@@ -1030,7 +1036,7 @@ local fn set_options() {
 
         /* file for redirecting 'stdout' and 'stderr' when running a test */
         local out = assert(tmpname());
-        __c.out = out;
+        tempfile.file = out;
 
         /* replace 'print' while testing */
         __G.print = fn(...) {
@@ -1080,8 +1086,12 @@ local fn set_options() {
     }
 }
 
-local fn report(msg, st, what, code) {
-    if !st print(fmt("Fail, %s (%s -> %d)", msg, what, code));
+local fn report(exit, msg, st, what, code) {
+    if !st {
+        print(fmt("Fail, %s (%s -> %d)", msg, what, code));
+        if exit /* exit on failure? */
+            exit(1, true);
+    }
     return st;
 }
 
@@ -1090,41 +1100,52 @@ local fn report(msg, st, what, code) {
 ** Removes backup executable.
 */
 local have_oldprog = false;
-local fn rmoldprog() {
+local fn rmoldprog(restore) {
     if have_oldprog {
-        printf("Removing backup executable '%'...", oldprog);
-        rm(oldprog);
-        print("Ok!");
-    }
+        if restore {
+            printf("Restoring saved executable...");
+            report(true, "can't restore executable",
+                   execute(fmt("%s %s %s", cp, oldprog, prog)));
+        } else {
+            printf("Removing backup executable '%'...", oldprog);
+            rm(oldprog);
+        }
+        have_oldprog = false;
+    } else
+        error("cannot remove or restore backup executable (no such file)");
 }
 
 
+handle_cli_args();
+
 if __opts.rebuild { /* rebuild standalone interpreter? */
     print("Rebuilding Takudae standalone interpreter...");
-    report("can't create executable backup", rename(prog, oldprog));
+    report(true, "can't create executable backup",
+           execute(fmt("%s %s %s %s", cp, prog, oldprog, dev_null1)));
     have_oldprog = true;
     local cmd = "make -j" .. tostr(make_threads or 1);
-    cmd = fmt("cd .. && %s clean && %s %s", cmd, cmd, make_target);
-    cmd ..= " > " .. null; /* redirect 'stdout' to null */
+    cmd = fmt("cd .. && %s clean %s && %s %s",
+               cmd, dev_null1, cmd, make_target);
+    cmd ..= dev_null1; /* redirect 'stdout' to null */
     printf("+ %", cmd);
-    if !report(msg, execute(cmd)) { /* rebuild failed? */
+    if !report(false, msg, execute(cmd)) { /* rebuild failed? */
         printf("Rebuild failed, exiting...");
-        rmoldprog();
-        rmtempfile();
+        rmoldprog(true);
         exit(1, true);
     }
-    rmoldprog();
-    print("Ok, rebuild successful, executing it now...");
+    rmoldprog(false);
     /* build command by passing all the arguments to new executable */
+    cmd = "";
     foreach _,arg in ipairs(__args)
-        cmd ..= " " .. arg;
-    cmd ..= " " .. "-B"; /* do not rebuild the second time */
-    assert(startswith(cmd, prog), "arguments must start with script name");
+        cmd ..= arg .. " ";
+    cmd ..= "-B"; /* do not rebuild the second time */
+    printf("Rebuild successful, executing: '%'", cmd);
+    assert(startswith(cmd, script),
+           fmt("arguments must start with '%s' ('%s')", script, cmd));
     printf("+ %", cmd);
     exit(execute(cmd), true);
 } else { /* otherwise execute arguments */
-    handle_cli_args();
-    set_options();
+    set_output_options();
     if gen_dir_tests
         get_tests();
     else if gen_script_tests
@@ -1133,7 +1154,6 @@ if __opts.rebuild { /* rebuild standalone interpreter? */
         output_tests_table(__opts.tests_script);
     else if !gen_dir_tests and !gen_script_tests
         run_args();
-    rmtempfile();
 }
 
 /* }==================================================================== */
