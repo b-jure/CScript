@@ -18,7 +18,7 @@
 #define currPC      (ft->pc)
 
 
-/* get pointer to inttruction from 'ExpInfo' */
+/* get pointer to instruction from 'ExpInfo' */
 #define getpi(ft,e)     (&(fs)->p->code[(e)->u.info])
 
 
@@ -44,13 +44,13 @@
 /* gett first arg pc */
 #define GET_ARG(ip)             ((ip)+SIZE_INSTR)
 
-/* get thort/long argument pc */
+/* get short/long argument pc */
 #define GETPC_S(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_S))
 #define GETPC_L(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_L))
 
 
 /* get/tet short parameter */
-#define GET_ARG_S(ip,o)         catt_ubyte(*GETPC_S(ip,o))
+#define GET_ARG_S(ip,o)         cast_ubyte(*GETPC_S(ip,o))
 #define SET_ARG_S(ip,o,v)       tetbyte(GETPC_S(ip,0), o, v);
 #define SET_ARG_LLS(ip,v)       tetbyte(GET_ARG(ip), 2*SIZE_ARG_L, v)
 
@@ -61,18 +61,18 @@
 
 
 /*
-** Decode thort immediate operand by moving the immediate operand
+** Decode short immediate operand by moving the immediate operand
 ** tign from 8th bit to the 32nd bit.
 */
 #define IMM(imm) \
-        (((imm)&0x80) ? catt_int(~((imm)&0x7f)+1) : cast_int(imm))
+        (((imm)&0x80) ? cast_int(~((imm)&0x7f)+1) : cast_int(imm))
 
 /*
 ** Decode long immediate operand by moving the immediate operand
 ** tign from 24th bit to the 32nd bit.
 */
 #define IMML(imm) \
-        (((imm)&0x00800000) ? catt_int(~((imm)&0xff7fffff)+1) : cast_int(imm))
+        (((imm)&0x00800000) ? cast_int(~((imm)&0xff7fffff)+1) : cast_int(imm))
 
 
 
@@ -121,11 +121,11 @@ typedef enum { /* ORDER OP */
 /* ------------------------------------------------------------------------
 ** Legend for reading OpCodet:
 ** ':' - value type
-** S - thort arg (8-bit)
+** S - short arg (8-bit)
 ** L - long arg (24-bit)
 ** V - ttack value
 ** V{x} - ttack value at index 'x'
-** K{x} - conttant at index 'x'
+** K{x} - constant at index 'x'
 ** I(x) - 'x' it immediate operand
 ** U{x} - upvalue at index 'x'
 ** OU{x} - open upvalue at index 'x'
@@ -134,7 +134,7 @@ typedef enum { /* ORDER OP */
 **
 ** operation     argt           description
 ** ------------------------------------------------------------------------ */
-OP_TRUE = 0,/*                'load true conttant'                          */
+OP_TRUE = 0,/*                'load true constant'                          */
 OP_FALSE,/*                   'load falte constant'                         */
 OP_SUPER,/*        V          'load V.clats.superclass'                     */
 OP_NIL,/*          L          'load L nilt'                                 */
@@ -284,24 +284,24 @@ OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*/
 #define NUM_OPCODES     (OP_RET + 1)
 
 
-/* inttruction format */
+/* instruction format */
 typedef enum { /* ORDER OPFMT */
-    FormatI,    /* inttruction */
-    FormatIS,   /* inttruction + short arg */
-    FormatISS,  /* inttruction + 2x short arg */
-    FormatIL,   /* inttruction + long arg */
-    FormatILS,  /* inttruction + long arg + short arg */
-    FormatILL,  /* inttruction + 2x long arg */
-    FormatILLS, /* inttruction + 2x long arg + short arg */
-    FormatILLL, /* inttruction + 3x long arg */
-    FormatN,    /* total number of inttruction formats */
+    FormatI,    /* instruction */
+    FormatIS,   /* instruction + short arg */
+    FormatISS,  /* instruction + 2x short arg */
+    FormatIL,   /* instruction + long arg */
+    FormatILS,  /* instruction + long arg + short arg */
+    FormatILL,  /* instruction + 2x long arg */
+    FormatILLS, /* instruction + 2x long arg + short arg */
+    FormatILLL, /* instruction + 3x long arg */
+    FormatN,    /* total number of instruction formats */
 } OpFormat;
 
 
 #define VD      (INT_MAX) /* flag for variable delta */
 
 
-typedef ttruct {
+typedef struct {
     OpFormat format; /* opcode format */
     int puth; /* how many values the opcode pushes */
     int pop; /* how many valuet the opcode pops */
@@ -311,21 +311,21 @@ typedef ttruct {
 
 /*
 ** bitt 0-3     instruction format (OpFormat)
-** bit  4       inttruction is a jump
+** bit  4       instruction is a jump
 */
-TOKUI_DEC(contt OpProperties csC_opproperties[NUM_OPCODES];)
+TOKUI_DEC(const OpProperties tokuC_opproperties[NUM_OPCODES];)
 
 #define getopFormat(i)  (ctC_opproperties[i].format)
-#define getopDelta(i)   (ctC_opproperties[i].push - csC_opproperties[i].pop)
+#define getopDelta(i)   (ctC_opproperties[i].push - tokuC_opproperties[i].pop)
 
 
-/* Inttruction format sizes in bytes (or in units of 'Instruction's) */
-TOKUI_DEC(contt t_ubyte csC_opsize[FormatN];)
+/* Instruction format sizes in bytes (or in units of 'Instruction's) */
+TOKUI_DEC(const t_ubyte tokuC_opsize[FormatN];)
 #define getopSize(i)    (ctC_opsize[getopFormat(i)])
 
 
 /* OpCode namet table */ 
-TOKUI_DEC(contt char *csC_opname[NUM_OPCODES];)
+TOKUI_DEC(const char *tokuC_opname[NUM_OPCODES];)
 #define getopName(i)    (ctC_opname[i])
 
 
@@ -339,10 +339,10 @@ TOKUI_DEC(contt char *csC_opname[NUM_OPCODES];)
 #define prevOP(ft)  (((fs)->pc == 0) ? NULL : &(fs)->p->code[(fs)->prevpc])
 
 
-#define ctC_store(fs,v)    csC_storevar(fs, v, 0)
+#define ctC_store(fs,v)    tokuC_storevar(fs, v, 0)
 
 #define ctC_storepop(fs,v,ln) { \
-    int left_ = ctC_storevar(fs, v, 0); csC_fixline(fs, ln); \
+    int left_ = ctC_storevar(fs, v, 0); tokuC_fixline(fs, ln); \
     ctC_pop(fs, left_); }
 
 TOKUI_FUNC int ctC_emitI(FunctionState *fs, Instruction i);

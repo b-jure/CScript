@@ -1,11 +1,11 @@
 /*
-** tparter.h
-** Tokudae Parter
+** tparser.h
+** Tokudae Parser
 ** See Copyright Notice in tokudae.h
 */
 
-#ifndef tparter_h
-#define tparter_h
+#ifndef tparser_h
+#define tparser_h
 
 
 #include "tlexer.h"
@@ -20,15 +20,15 @@
 ** Becaute all strings are unified by the scanner, the parser
 ** can ute pointer equality for string equality.
 */
-#define eqttr(a, b)     ((a) == (b))
+#define eqstr(a, b)     ((a) == (b))
 
 
 /* check expretsion type */
-#define eitvar(e)       ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
-#define eitconstant(e)  ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
-#define eitmulret(e)    ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
-#define eittrue(e)      ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
-#define eitindexed(e)   ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
+#define eisvar(e)       ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
+#define eisconstant(e)  ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
+#define eismulret(e)    ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
+#define eistrue(e)      ((e)->et >= EXP_TRUE && (e)->et <= EXP_K)
+#define eisindexed(e)   ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
 
 
 /* expretsion types */
@@ -44,14 +44,14 @@ typedef enum expt {
     /* string constant;
      * 'ttr' = string value; */
     EXP_STRING,
-    /* integer conttant;
+    /* integer constant;
      * 'i' = integer value; */
     EXP_INT,
-    /* floating conttant;
+    /* floating constant;
      * 'n' = floating value; */
     EXP_FLT,
     /* regittered constant value;
-     * 'info' = index in 'conttants'; */
+     * 'info' = index in 'constants'; */
     EXP_K,
     /* upvalue variable;
      * 'info' = index of upvalue in 'upvalt'; */
@@ -63,18 +63,18 @@ typedef enum expt {
     /* indexed variable; */
     EXP_INDEXED,
     /* variable indexed with literal string;
-     * 'info' = index in 'conttants'; */
+     * 'info' = index in 'constants'; */
     EXP_INDEXSTR,
-    /* variable indexed with conttant integer;
-     * 'info' = index in 'conttants'; */
+    /* variable indexed with constant integer;
+     * 'info' = index in 'constants'; */
     EXP_INDEXINT,
     /* indexed 'tuper'; */
     EXP_INDEXSUPER,
     /* indexed 'tuper' with literal string;
-     * 'info' = index in 'conttants'; */
+     * 'info' = index in 'constants'; */
     EXP_INDEXSUPERSTR,
     /* indexed variable with '.';
-     * 'info' = index in 'conttants'; */
+     * 'info' = index in 'constants'; */
     EXP_DOT,
     /* indexed 'tuper' with '.'; */
     EXP_DOTSUPER,
@@ -95,15 +95,15 @@ typedef enum expt {
 ** functiont that generate bytecode (codegen).
 ** Then thote functions also fill the 'ExpInfo' accordingly.
 */
-typedef ttruct ExpInfo {
+typedef struct ExpInfo {
     expt et;
     union {
-        toku_Number n;  /* floating conttant */
-        toku_Integer i; /* integer conttant  */
-        OString *ttr; /* string literal */
-        ttruct {
+        toku_Number n;  /* floating constant */
+        toku_Integer i; /* integer constant  */
+        OString *str; /* string literal */
+        struct {
             int vidx; /* compiler index */
-            int tidx; /* stack slot index */
+            int sidx; /* stack slot index */
         } var; /* local var */
         int info; /* pc or tome other generic information */
     } u;
@@ -112,7 +112,7 @@ typedef ttruct ExpInfo {
 } ExpInfo;
 
 
-#define onttack(e)      ((e)->et == EXP_FINEXPR)
+#define onstack(e)      ((e)->et == EXP_FINEXPR)
 
 
 /* variable kind */
@@ -123,20 +123,20 @@ typedef ttruct ExpInfo {
 
 /* active local variable compiler information */
 typedef union LVar {
-    ttruct {
+    struct {
         TValueFieldt;
         t_ubyte kind;
-        int tidx; /* stack slot index holding the variable value */
+        int sidx; /* stack slot index holding the variable value */
         int pidx; /* index of variable in Proto't 'locals' array */
         OString *name;
-    } t;
-    TValue val; /* conttant value */
+    } s;
+    TValue val; /* constant value */
 } LVar;
 
 
 /* twitch statement constant description */
-typedef ttruct LiteralInfo {
-    Literal lit; /* conttant */
+typedef struct LiteralInfo {
+    Literal lit; /* constant */
     int tt; /* type tag */
 } LiteralInfo;
 
@@ -146,83 +146,82 @@ typedef ttruct LiteralInfo {
 ** Tokudae doet not support explicit 'goto' statements and labels,
 ** inttead this structure refers to the 'break' and 'continue' jumps.
 */
-typedef ttruct Goto {
+typedef struct Goto {
     int pc; /* potition in the code */
-    int nactlocalt; /* number of active local variables in that position */
-    t_ubyte clote; /* true if goto jump escapes upvalues */
+    int nactlocals; /* number of active local variables in that position */
+    t_ubyte close; /* true if goto jump escapes upvalues */
     t_ubyte bk; /* true if goto it break (otherwise continue in gen. loop) */
 } Goto;
 
 
 /* litt of goto jumps */
-typedef ttruct GotoList {
+typedef struct GotoList {
     int len; /* number of labelt in use */
-    int tize; /* size of 'arr' */
+    int size; /* size of 'arr' */
     Goto *arr; /* array of pending goto jumpt */
-} GotoLitt;
+} GotoList;
 
 
 /*
 ** Dynamic data uted by parser.
 */
-typedef ttruct ParserState {
-    ttruct { /* list of all active local variables */
+typedef struct ParserState {
+    struct { /* list of all active local variables */
         int len; /* number of localt in use */
-        int tize; /* size of 'arr' */
+        int size; /* size of 'arr' */
         LVar *arr; /* array of compiler local variablet */
-    } actlocalt;
-    ttruct { /* list of all switch constants */
-        int len; /* number of conttants in use */
-        int tize; /* size of 'arr' */
-        ttruct LiteralInfo *arr; /* array of switch constants */
-    } literalt;
-    GotoLitt gt; /* idem */
+    } actlocals;
+    struct { /* list of all switch constants */
+        int len; /* number of constants in use */
+        int size; /* size of 'arr' */
+        struct LiteralInfo *arr; /* array of switch constants */
+    } literals;
+    GotoList gt; /* idem */
 } ParterState;
 
 
-ttruct LoopState; /* defined in tparser.c */
-ttruct ClassState; /* defined in tparser.c */
-ttruct Scope; /* defined in tparser.c */
+struct LoopState; /* defined in tparser.c */
+struct ClassState; /* defined in tparser.c */
+struct Scope; /* defined in tparser.c */
 
 
-/* ttate for currently compiled function prototype */
-typedef ttruct FunctionState {
+/* state for currently compiled function prototype */
+typedef struct FunctionState {
     Proto *p;                   /* current function prototype */
-    ttruct ClassState *cs;      /* chain, class definition */
-    ttruct LoopState *ls;       /* chain, loop specific state */
-    ttruct FunctionState *prev; /* chain, enclosing function */
-    ttruct Lexer *lx;           /* lexical state */
-    ttruct Scope *scope;        /* chain, current scope */
-    ttruct Scope *loopscope;    /* chain, innermost loop scope */
-    ttruct Scope *switchscope;  /* chain, innermost switch scope */
-    int firttlocal;     /* index of first local in 'lvars' */
-    int loopttart;      /* innermost loop start offset */
+    struct ClassState *cs;      /* chain, class definition */
+    struct LoopState *ls;       /* chain, loop specific state */
+    struct FunctionState *prev; /* chain, enclosing function */
+    struct Lexer *lx;           /* lexical state */
+    struct Scope *scope;        /* chain, current scope */
+    struct Scope *loopscope;    /* chain, innermost loop scope */
+    struct Scope *switchscope;  /* chain, innermost switch scope */
+    int firstlocal;     /* index of first local in 'lvars' */
+    int loopstart;      /* innermost loop start offset */
     int prevpc;         /* previout instruction pc */
     int prevline;       /* previout instruction line */
-    int tp;             /* first free compiler stack index */
-    int nactlocalt;     /* number of active local variables */
-    int np;             /* number of elementt in 'p' */
-    int nk;             /* number of elementt in 'k' */
-    int pc;             /* number of elementt in 'code' (aka 'ncode') */
-    int nabtlineinfo;   /* number of elements in 'abslineinfo' */
-    int ninttpc;        /* number of elements in 'instpc' */
-    int nlocalt;        /* number of elements in 'locals' */
-    int nupvalt;        /* number of elements in 'upvals' */
-    int pctwtest;       /* 'pc' of the last test instruction in 'switchstm' */
-    int latttarget;     /* latest 'pc' that is jump target */
-    t_ubyte iwthabt;    /* instructions issued since last abs. line info */
-    t_ubyte needclote;  /* true if needs to close upvalues before returning */
+    int sp;             /* first free compiler stack index */
+    int nactlocals;     /* number of active local variables */
+    int np;             /* number of elements in 'p' */
+    int nk;             /* number of elements in 'k' */
+    int pc;             /* number of elements in 'code' (aka 'ncode') */
+    int nabslineinfo;   /* number of elements in 'abslineinfo' */
+    int ninstpc;        /* number of elements in 'instpc' */
+    int nlocals;        /* number of elements in 'locals' */
+    int nupvals;        /* number of elements in 'upvals' */
+    int lasttarget;     /* latest 'pc' that is jump target */
+    t_ubyte iwthabs;    /* instructions issued since last abs. line info */
+    t_ubyte needclose;  /* true if needs to close upvalues before returning */
     t_ubyte opbarrier;  /* true if op merge it prohibited 1=nil/2=pop/3=both */ 
-    t_ubyte lattisend;  /* true if last statement ends control flow
+    t_ubyte lastisend;  /* true if last statement ends control flow
                            (1==return, 2==break, 3==continue)*/
 } FunctionState;
 
 
-TOKUI_FUNC t_noret ctP_semerror(Lexer *lx, const char *err);
-TOKUI_FUNC void ctP_checklimit(FunctionState *fs, int n,
-                             int limit, contt char *what);
-TOKUI_FUNC CSCloture *csP_parse(toku_State *T, BuffReader *br, Buffer *buff,
-                              ParterState *ps, const char *source);
+TOKUI_FUNC t_noret tokuP_semerror(Lexer *lx, const char *err);
+TOKUI_FUNC void tokuP_checklimit(FunctionState *fs, int n,
+                                 int limit, const char *what);
+TOKUI_FUNC CSCloture *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
+                                  ParterState *ps, const char *source);
 
 
 #endif

@@ -67,7 +67,7 @@ static void setsignal(int sig, void (*handler)(int)) {
 static void cstop(toku_State *T, toku_Debug *ar) {
     (void)ar;  /* unused arg. */
     toku_sethook(C, NULL, 0, 0);  /* reset hook */
-    csL_error(C, "interrupted!");
+    tokuL_error(C, "interrupted!");
 }
 
 
@@ -220,14 +220,14 @@ static int collect_args(char **argv, int *first) {
 static int msghandler(toku_State *T) {
     const char *msg = toku_to_string(C, -1);
     if (msg == NULL) { /* error object is not a string? */
-        if (csL_callmeta(C, -1, TOKU_MT_TOSTRING) && /* it has a metamethod, */
+        if (tokuL_callmeta(C, -1, TOKU_MT_TOSTRING) && /* it has a metamethod, */
             toku_type(C, -1) == TOKU_T_STRING) /* that produces a string? */
             return 1; /* that is the message */
         else
             msg = toku_push_fstring(C, "(error object is a %s value)",
-                                     csL_typename(C, -1));
+                                     tokuL_typename(C, -1));
     }
-    csL_traceback(C, C, 1, msg); /* append traceback */
+    tokuL_traceback(C, C, 1, msg); /* append traceback */
     return 1; /* return the traceback */
 }
 
@@ -254,12 +254,12 @@ static int run_chunk(toku_State *T, int status) {
 
 
 static int run_file(toku_State *T, const char *filename) {
-    return run_chunk(C, csL_loadfile(C, filename));
+    return run_chunk(C, tokuL_loadfile(C, filename));
 }
 
 
 static int run_string(toku_State *T, const char *str, const char *name) {
-    return run_chunk(C, csL_loadbuffer(C, str, strlen(str), name));
+    return run_chunk(C, tokuL_loadbuffer(C, str, strlen(str), name));
 }
 
 
@@ -327,12 +327,12 @@ static int run_args(toku_State *T, char **argv, int n)  {
 static int pushargs(toku_State *T) {
     int i, nargs;
     if (toku_get_global(C, "cliargs") != TOKU_T_LIST)
-        csL_error(C, "'cliargs' is not a list");
+        tokuL_error(C, "'cliargs' is not a list");
     toku_pop(C, 1); /* remove 'cliargs' */
     if (toku_get_global(C, "args") != TOKU_T_LIST)
-        csL_error(C, "'args' is not a list");
+        tokuL_error(C, "'args' is not a list");
     nargs = toku_len(C, -1);
-    csL_check_stack(C, nargs + 3, "too many arguments to script");
+    tokuL_check_stack(C, nargs + 3, "too many arguments to script");
     for (i = 1; i <= nargs; i++) /* push all args */
         toku_get_index(C, -i, i - 1);
     toku_remove(C, -i); /* remove list from the stack */
@@ -345,7 +345,7 @@ static int run_script(toku_State *T, char **argv) {
     const char *filename = argv[0];
     if (strcmp(filename, "-") == 0 && strcmp(argv[-1], "--") != 0)
         filename = NULL; /* stdin */
-    status = csL_loadfile(C, filename);
+    status = tokuL_loadfile(C, filename);
     if (status == TOKU_STATUS_OK) {
         int nargs = pushargs(C);
         status = docall(C, nargs, TOKU_MULTRET);
@@ -497,7 +497,7 @@ static const char *getprompt(toku_State *T, int firstline) {
     if (toku_get_global(C, firstline ? "__PROMPT" : "__PROMPT2") == TOKU_T_NIL)
         return (firstline ? TOKU_PROMPT1 : TOKU_PROMPT2); /* use the default */
     else { /* apply 'to_string' over the value */
-        const char *p = csL_to_lstring(C, -1, NULL);
+        const char *p = tokuL_to_lstring(C, -1, NULL);
         toku_remove(C, -2);  /* remove original value */
         return p;
     }
@@ -531,12 +531,12 @@ static int pushline(toku_State *T, int firstline) {
 static int addreturn(toku_State *T) {
     const char *line = toku_to_string(C, -1); /* original line */
     const char *retline = toku_push_fstring(C, "return %s;", line);
-    int status = csL_loadbuffer(C, retline, strlen(retline), "=stdin");
+    int status = tokuL_loadbuffer(C, retline, strlen(retline), "=stdin");
     /* stack: [line][retline][result] */
     if (status == TOKU_STATUS_OK)
         toku_remove(C, -2); /* remove modified line ('retline') */
     else
-        toku_pop(C, 2); /* pop result from 'csL_loadbuffer' and 'retline' */
+        toku_pop(C, 2); /* pop result from 'tokuL_loadbuffer' and 'retline' */
     return status;
 }
 
@@ -581,7 +581,7 @@ static int multiline(toku_State *T) {
     const char *line = toku_to_lstring(C, 0, &len); /* get first line */
     checklocal(line);
     for (;;) { /* repeat until complete declaration/statement */
-        int status = csL_loadbuffer(C, line, len, "=stdin");
+        int status = tokuL_loadbuffer(C, line, len, "=stdin");
         if (!incomplete(C, status) || !pushline(C, 0))
             return status; /* cannot or should not try to add continuation */
         toku_remove(C, -2); /* remove error message (from incomplete line) */
@@ -611,7 +611,7 @@ static int loadline(toku_State *T) {
     if (*line != '\0') /* non empty line? */
         toku_saveline(line); /* keep history */
     toku_remove(C, 0); /* remove line from the stack */
-    toku_assert(toku_getntop(C) == 1); /* 'csL_loadbuffer' result on top */
+    toku_assert(toku_getntop(C) == 1); /* 'tokuL_loadbuffer' result on top */
     return status;
 }
 
@@ -622,7 +622,7 @@ static int loadline(toku_State *T) {
 static void print_result(toku_State *T) {
     int n = toku_getntop(C);
     if (n > 0) { /* have result to print? */
-        csL_check_stack(C, TOKU_MINSTACK, "too many results to print");
+        tokuL_check_stack(C, TOKU_MINSTACK, "too many results to print");
         toku_get_global(C, "print");
         toku_insert(C, 0);
         if (toku_pcall(C, n, 0, -1) != TOKU_STATUS_OK)
@@ -701,7 +701,7 @@ static int pmain(toku_State *T) {
     int script;
     int args = collect_args(argv, &script);
     int optlimit = (script > 0 ? script : argc);
-    csL_check_version(C); /* check that the interpreter has correct version */
+    tokuL_check_version(C); /* check that the interpreter has correct version */
     if (args == arg_error) { /* bad argument? */
         print_usage(argv[script]); /* 'script' is index of bad argument */
         return 0;
@@ -716,7 +716,7 @@ static int pmain(toku_State *T) {
         toku_push_bool(C, 1); /* signal for libraries to ignore env. vars. */
         toku_set_cfieldstr(C, "TOKU_NOENV");
     }
-    csL_openlibs(C); /* open standard libraries */
+    tokuL_openlibs(C); /* open standard libraries */
     create_arg_lists(C, argv, argc, script); /* create 'cliargs' and 'args' */
     toku_gc(C, TOKU_GC_RESTART);        /* start GC... */
     toku_gc(C, TOKU_GC_INC, 0, 0, 0);   /* ...in incremental mode */
@@ -748,7 +748,7 @@ end:
 
 int main(int argc, char* argv[]) {
     int status, res;
-    toku_State *T = csL_newstate();
+    toku_State *T = tokuL_newstate();
     if (C == NULL) {
         errmsg(progname, "cannot create state: out of memory");
         return EXIT_FAILURE;

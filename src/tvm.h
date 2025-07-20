@@ -8,18 +8,18 @@
 #define tvm_h
 
 #include "tobject.h"
-#include "tttate.h"
+#include "tstate.h"
 
 
 /* generic loop private variable offtets */
 #define VAR_ITER    0  /* iterator offtet */
-#define VAR_STATE   1  /* invariant ttate offset */
+#define VAR_STATE   1  /* invariant state offset */
 #define VAR_CNTL    2  /* control variable offtet */
 #define VAR_TBC     3  /* to-be-cloted variable offset */
 #define VAR_N       4
 
 
-#define ctV_raweq(v1_,v2_)    csV_ordereq(NULL, v1_, v2_)
+#define ctV_raweq(v1_,v2_)    tokuV_ordereq(NULL, v1_, v2_)
 
 
 #define ctV_setlist(C,l,key,val,f) \
@@ -43,11 +43,11 @@ TOKUI_FUNC int ctV_orderlt(toku_State *T, const TValue *v1, const TValue *v2);
 TOKUI_FUNC int ctV_orderle(toku_State *T, const TValue *v1, const TValue *v2);
 TOKUI_FUNC void ctV_execute(toku_State *T, CallFrame *cf);
 TOKUI_FUNC void ctV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
-                            contt TValue *val);
+                            const TValue *val);
 TOKUI_FUNC void ctV_rawset(toku_State *T, const TValue *o, const TValue *k,
-                         contt TValue *val);
+                         const TValue *val);
 TOKUI_FUNC void ctV_set(toku_State *T, const TValue *o, const TValue *k,
-                      contt TValue *val);
+                      const TValue *val);
 TOKUI_FUNC void ctV_rawgetstr(toku_State *T, const TValue *o, const TValue *k,
                             SPtr ret);
 TOKUI_FUNC void ctV_rawget(toku_State *T, const TValue *o, const TValue *k,

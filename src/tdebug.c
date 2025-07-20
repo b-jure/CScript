@@ -96,7 +96,7 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
 ** first gets a base line and from there does the increments until the
 ** desired instruction.
 */
-int csD_getfuncline(const Proto *p, int pc) {
+int tokuD_getfuncline(const Proto *p, int pc) {
     int basepc;
     int baseline = getbaseline(p, pc, &basepc);
     while (basepc < pc) { /* walk until given instruction */
@@ -127,7 +127,7 @@ t_sinline int currentpc(const CallFrame *cf) {
 /* get current line number */
 t_sinline int getcurrentline(CallFrame *cf) {
     toku_assert(isTokudae(cf));
-    return csD_getfuncline(cf_func(cf)->p, currentpc(cf));
+    return tokuD_getfuncline(cf_func(cf)->p, currentpc(cf));
 }
 
 
@@ -143,14 +143,14 @@ static const char *findvararg(CallFrame *cf, SPtr *pos, int n) {
 }
 
 
-const char *csD_findlocal(toku_State *T, CallFrame *cf, int n, SPtr *pos) {
+const char *tokuD_findlocal(toku_State *T, CallFrame *cf, int n, SPtr *pos) {
     SPtr base = cf->func.p + 1;
     const char *name = NULL;
     if (isTokudae(cf)) {
         if (n < 0) /* vararg ? */
             return findvararg(cf, pos, n);
         else /* otherwise local variable */
-            name = csF_getlocalname(cf_func(cf)->p, n, currentpc(cf));
+            name = tokuF_getlocalname(cf_func(cf)->p, n, currentpc(cf));
     }
     if (name == NULL) {
         SPtr limit = (cf == C->cf) ? C->sp.p : cf->next->func.p;
@@ -173,10 +173,10 @@ TOKU_API const char *toku_getlocal(toku_State *T, const toku_Debug *ar, int n) {
         if (!ttisCSclosure(func)) /* not a Tokudae function? */
             name = NULL;
         else /* consider live variables at function start (parameters) */
-            name = csF_getlocalname(clCSval(func)->p, n, 0);
+            name = tokuF_getlocalname(clCSval(func)->p, n, 0);
     } else { /* active function; get information through 'ar' */
         SPtr pos = NULL; /* to avoid warnings */
-        name = csD_findlocal(C, ar->cf, n, &pos);
+        name = tokuD_findlocal(C, ar->cf, n, &pos);
         if (name) { /* found ? */
             /* push its value on top of the stack */
             setobjs2s(C, C->sp.p, pos);
@@ -192,7 +192,7 @@ TOKU_API const char *toku_setlocal(toku_State *T, const toku_Debug *ar, int n) {
     SPtr pos = NULL;
     const char *name;
     toku_lock(C);
-    name = csD_findlocal(C, ar->cf, n, &pos);
+    name = tokuD_findlocal(C, ar->cf, n, &pos);
     if (name) { /* found ? */
         setobjs2s(C, pos, C->sp.p - 1);
         C->sp.p--; /* pop value */
@@ -222,7 +222,7 @@ static void getfuncinfo(Closure *cl, toku_Debug *ar) {
         ar->lastdefline = p->deflastline;
         ar->what = (ar->lastdefline == 0) ? "main" : "Tokudae";
     }
-    csS_chunkid(ar->shortsrc, ar->source, ar->srclen);
+    tokuS_chunkid(ar->shortsrc, ar->source, ar->srclen);
 }
 
 
@@ -239,7 +239,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
     while (pc < lastpc) {
         const Instruction *i = &code[pc];
         int change; /* true if current instruction changed 'sp' */
-        //printf("%d:%d:%-20s\t", csD_getfuncline(p, pc), pc, getopName(*i));
+        //printf("%d:%d:%-20s\t", tokuD_getfuncline(p, pc), pc, getopName(*i));
         toku_assert(-1 <= symsp && symsp <= p->maxstack);
         switch (*i) {
             case OP_RET: {
@@ -317,11 +317,11 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
                 OpCode op = *i;
                 int delta = getopDelta(op);
                 toku_assert(delta != VD); /* default case can't handle VD */
-                if (csC_opproperties[op].chgsp) { /* changes symsp? */
+                if (tokuC_opproperties[op].chgsp) { /* changes symsp? */
                     check_exp(delta <= 0, symsp += delta);
                     change = (sp == symsp);
                 } else {
-                    int npush = csC_opproperties[op].push;
+                    int npush = tokuC_opproperties[op].push;
                     change = npush && (symsp < sp && sp <= symsp + npush);
                     symsp += delta;
                 }
@@ -367,7 +367,7 @@ static const char *basicgetobjname(const Proto *p, int *ppc, int sp,
                                    const char **name) {
     int pc = *ppc;
     //printf("%s pc=%d, sp=%d\n", __funt__, pc, sp);
-    *name = csF_getlocalname(p, sp + 1, pc);
+    *name = tokuF_getlocalname(p, sp + 1, pc);
     if (*name) {  /* is a local? */
         //printf("Got local '%s'\n", *name);
         return strlocal;
@@ -592,7 +592,7 @@ static int nextline (const Proto *p, int currline, int pc) {
     if (p->lineinfo[pc] != ABSLINEINFO)
         return currline + p->lineinfo[pc];
     else
-        return csD_getfuncline(p, pc);
+        return tokuD_getfuncline(p, pc);
 }
 
 
@@ -605,7 +605,7 @@ static void collectvalidlines(toku_State *T, Closure *f) {
         TValue v;
         const Proto *p = f->cs.p;
         int currline = p->defline;
-        Table *t = csH_new(C); /* new table to store active lines */
+        Table *t = tokuH_new(C); /* new table to store active lines */
         settval2s(C, C->sp.p, t); /* push it on stack */
         api_inctop(C);
         toku_assert(p->lineinfo != NULL); /* must have debug information */
@@ -619,7 +619,7 @@ static void collectvalidlines(toku_State *T, Closure *f) {
         }
         while (i < p->sizelineinfo) { /* for each instruction */
             currline = nextline(p, currline, i); /* get its line */
-            csH_setint(C, t, currline, &v); /* table[line] = true */
+            tokuH_setint(C, t, currline, &v); /* table[line] = true */
             i += getopSize(p->code[i]); /* get next instruction */
         }
     }
@@ -684,7 +684,7 @@ static void settraps(CallFrame *cf) {
 ** values (causes at most one wrong hook call). 'hookmask' is an atomic
 ** value. We assume that pointers are atomic too (e.g., gcc ensures that
 ** for all platforms where it runs). Moreover, 'hook' is always checked
-** before being called (see 'csD_hook').
+** before being called (see 'tokuD_hook').
 */
 // TODO: add docs
 TOKU_API void toku_sethook(toku_State *T, toku_Hook func, int mask, int count) {
@@ -697,7 +697,7 @@ TOKU_API void toku_sethook(toku_State *T, toku_Hook func, int mask, int count) {
     resethookcount(C);
     C->hookmask = cast_ubyte(mask);
     if (mask)
-        settraps(C->cf); /* to trace inside 'csV_execute' */
+        settraps(C->cf); /* to trace inside 'tokuV_execute' */
 }
 
 
@@ -720,51 +720,51 @@ TOKU_API int toku_gethookcount(toku_State *T) {
 
 
 /* add usual debug information to 'msg' (source id and line) */
-const char *csD_addinfo(toku_State *T, const char *msg, OString *src,
+const char *tokuD_addinfo(toku_State *T, const char *msg, OString *src,
                         int line) {
     char buffer[TOKU_IDSIZE];
     if (src)
-        csS_chunkid(buffer, getstr(src), getstrlen(src));
+        tokuS_chunkid(buffer, getstr(src), getstrlen(src));
     else {
         buffer[0] = '?';
         buffer[1] = '\0';
     }
-    return csS_pushfstring(C, "%s:%d: %s", buffer, line, msg);
+    return tokuS_pushfstring(C, "%s:%d: %s", buffer, line, msg);
 }
 
 
-t_noret csD_errormsg(toku_State *T) {
+t_noret tokuD_errormsg(toku_State *T) {
     if (C->errfunc != 0) { /* is there an error handling function? */
         SPtr errfunc = restorestack(C, C->errfunc);
         toku_assert(ttisfunction(s2v(errfunc)));
         setobjs2s(C, C->sp.p, C->sp.p - 1); /* move argument */
         setobjs2s(C, C->sp.p - 1, errfunc); /* push function */
         C->sp.p++; /* assume EXTRA_STACK */
-        csV_call(C, C->sp.p - 2, 1); /* call it */
+        tokuV_call(C, C->sp.p - 2, 1); /* call it */
     }
     if (ttisnil(s2v(C->sp.p - 1))) { /* error object is nil? */
         /* change it to a proper message */
-        setstrval2s(C, C->sp.p - 1, csS_newlit(C, "<no error object>"));
+        setstrval2s(C, C->sp.p - 1, tokuS_newlit(C, "<no error object>"));
     }
     csPR_throw(C, TOKU_STATUS_ERUNTIME);
 }
 
 
 /* generic runtime error */
-t_noret csD_runerror(toku_State *T, const char *fmt, ...) {
+t_noret tokuD_runerror(toku_State *T, const char *fmt, ...) {
     CallFrame *cf = C->cf;
     const char *err;
     va_list ap;
-    csG_checkGC(C);
+    tokuG_checkGC(C);
     va_start(ap, fmt);
-    err = csS_pushvfstring(C, fmt, ap);
+    err = tokuS_pushvfstring(C, fmt, ap);
     va_end(ap);
     if (isTokudae(cf)) { /* can add source information? */
-        csD_addinfo(C, err, cf_func(cf)->p->source, getcurrentline(cf));
+        tokuD_addinfo(C, err, cf_func(cf)->p->source, getcurrentline(cf));
         setobj2s(C, C->sp.p - 2, s2v(C->sp.p - 1)); /* remove 'err' */
         C->sp.p--;
     }
-    csD_errormsg(C);
+    tokuD_errormsg(C);
 }
 
 
@@ -805,7 +805,7 @@ static const char *formatvarinfo(toku_State *T, const char *kind,
     if (kind == NULL)
         return ""; /* no information */
     else
-        return csS_pushfstring(C, " (%s '%s')", kind, name);
+        return tokuS_pushfstring(C, " (%s '%s')", kind, name);
 }
 
 
@@ -834,8 +834,8 @@ static const char *varinfo(toku_State *T, const TValue *o) {
 */
 static t_noret typeerror(toku_State *T, const TValue *o, const char *op,
                                                        const char *extra) {
-    const char *t = csMM_objtypename(C, o);
-    csD_runerror(C, "attempt to %s a %s value%s", op, t, extra);
+    const char *t = tokuMM_objtypename(C, o);
+    tokuD_runerror(C, "attempt to %s a %s value%s", op, t, extra);
 }
 
 
@@ -843,7 +843,7 @@ static t_noret typeerror(toku_State *T, const TValue *o, const char *op,
 ** Raise a type error with "standard" information about the faulty
 ** object 'o' (using 'varinfo').
 */
-t_noret csD_typeerror(toku_State *T, const TValue *o, const char *op) {
+t_noret tokuD_typeerror(toku_State *T, const TValue *o, const char *op) {
     typeerror(C, o, op, varinfo(C, o));
 }
 
@@ -851,22 +851,22 @@ t_noret csD_typeerror(toku_State *T, const TValue *o, const char *op) {
 /*
 ** Raise type error for operation over integers and numbers.
 */
-t_noret csD_opinterror(toku_State *T, const TValue *v1, const TValue *v2,
+t_noret tokuD_opinterror(toku_State *T, const TValue *v1, const TValue *v2,
                                                       const char *msg) {
     if (!ttisnum(v1)) /* first operand is wrong? */
         v2 = v1; /* now second is wrong */
-    csD_typeerror(C, v2, msg);
+    tokuD_typeerror(C, v2, msg);
 }
 
 
 /*
 ** Error when value is convertible to numbers, but not integers.
 */
-t_noret csD_tointerror(toku_State *T, const TValue *v1, const TValue *v2) {
+t_noret tokuD_tointerror(toku_State *T, const TValue *v1, const TValue *v2) {
     toku_Integer temp;
-    if (!csO_tointeger(v1, &temp, N2IEQ))
+    if (!tokuO_tointeger(v1, &temp, N2IEQ))
         v2 = v1;
-    csD_runerror(C, "number%s has no integer representation", varinfo(C, v2));
+    tokuD_runerror(C, "number%s has no integer representation", varinfo(C, v2));
 }
 
 
@@ -878,48 +878,48 @@ static int differentclasses(const TValue *v1, const TValue *v2) {
 
 
 static t_noret classerror(toku_State *T, const char *op) {
-    csD_runerror(C, "attempt to %s instances of different class", op);
+    tokuD_runerror(C, "attempt to %s instances of different class", op);
 }
 
 
-t_noret csD_binoperror(toku_State *T, const TValue *v1,
+t_noret tokuD_binoperror(toku_State *T, const TValue *v1,
                                     const TValue *v2, int mm) {
     switch (mm) {
         case TOKU_MT_BAND: case TOKU_MT_BOR: case TOKU_MT_BXOR:
         case TOKU_MT_BSHL: case TOKU_MT_BSHR: case TOKU_MT_BNOT: {
             if (ttisnum(v1) && ttisnum(v2))
-                csD_tointerror(C, v1, v2);
+                tokuD_tointerror(C, v1, v2);
             else
-                csD_opinterror(C, v1, v2, "perform bitwise operation on");
+                tokuD_opinterror(C, v1, v2, "perform bitwise operation on");
             break;
         }
         /* to avoid warnings *//* fall through */
         default:
-            csD_opinterror(C, v1, v2, "perform arithmetic on");
+            tokuD_opinterror(C, v1, v2, "perform arithmetic on");
     }
 }
 
 
-t_noret csD_ordererror(toku_State *T, const TValue *v1, const TValue *v2) {
+t_noret tokuD_ordererror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
         classerror(C, "compare");
     else {
-        const char *t1 = csMM_objtypename(C, v1);
-        const char *t2 = csMM_objtypename(C, v2);
+        const char *t1 = tokuMM_objtypename(C, v1);
+        const char *t2 = tokuMM_objtypename(C, v2);
         if (strcmp(t1, t2) == 0)
-            csD_runerror(C, "attempt to compare two %s values", t1);
+            tokuD_runerror(C, "attempt to compare two %s values", t1);
         else
-            csD_runerror(C, "attempt to compare %s with %s", t1, t2);
+            tokuD_runerror(C, "attempt to compare %s with %s", t1, t2);
     }
 }
 
 
-t_noret csD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
+t_noret tokuD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
         classerror(C, metaname(C, TOKU_MT_CONCAT));
     else {
         if (ttisstring(v1)) v1 = v2;
-        csD_typeerror(C, v1, "concatenate");
+        tokuD_typeerror(C, v1, "concatenate");
     }
 }
 
@@ -929,7 +929,7 @@ t_noret csD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
 ** for the object based on how it was called ('funcnamefromcall'); if it
 ** cannot get a name there, try 'varinfo'.
 */
-t_noret csD_callerror(toku_State *T, const TValue *o) {
+t_noret tokuD_callerror(toku_State *T, const TValue *o) {
     CallFrame *cf = C->cf;
     const char *name = NULL; /* to avoid warnings */
     const char *kind = funcnamefromcall(C, cf, &name);
@@ -941,11 +941,11 @@ t_noret csD_callerror(toku_State *T, const TValue *o) {
 /*
 ** Raise generic list-related error.
 */
-t_noret csD_listerror(toku_State *T, const TValue *o, const char *what,
+t_noret tokuD_listerror(toku_State *T, const TValue *o, const char *what,
                                                     const char *msg) {
-    const char *t = csMM_objtypename(C, o);
+    const char *t = tokuMM_objtypename(C, o);
     const char *e = varinfo(C, o);
-    csD_runerror(C, "list %s %s value%s is %s", what, t, e, msg);
+    tokuD_runerror(C, "list %s %s value%s is %s", what, t, e, msg);
 }
 
 
@@ -953,9 +953,9 @@ t_noret csD_listerror(toku_State *T, const TValue *o, const char *what,
 ** Check whether new instruction 'newpc' is in a different line from
 ** previous instruction 'oldpc'. More often than not, 'newpc' is only
 ** one or a few instructions after 'oldpc' (it must be after, see
-** caller), so try to avoid calling 'csD_getfuncline'. If they are
+** caller), so try to avoid calling 'tokuD_getfuncline'. If they are
 ** too far apart, there is a good chance of a ABSLINEINFO in the way,
-** so it goes directly to 'csD_getfuncline'.
+** so it goes directly to 'tokuD_getfuncline'.
 */
 static int changedline(const Proto *p, int oldpc, int newpc) {
     toku_assert(p->lineinfo != NULL);
@@ -977,7 +977,7 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
     }
     /* either instructions are too far apart or there is an absolute line
        info in the way; compute line difference explicitly */
-    return (csD_getfuncline(p, oldpc) != csD_getfuncline(p, newpc));
+    return (tokuD_getfuncline(p, oldpc) != tokuD_getfuncline(p, newpc));
 }
 
 
@@ -986,7 +986,7 @@ static int changedline(const Proto *p, int oldpc, int newpc) {
 ** called. (Both 'C->hook' and 'C->hookmask', which trigger this
 ** function, can be changed asynchronously by signals.)
 */
-void csD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer) {
+void tokuD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer) {
     toku_Hook hook = C->hook;
     if (hook && C->allowhook) { /* make sure there is a hook */
         CallFrame *cf = C->cf;
@@ -1017,12 +1017,12 @@ void csD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer) 
 ** whenever 'hookmask' is not zero, so it checks whether call hooks are
 ** active.
 */
-void csD_hookcall(toku_State *T, CallFrame *cf, int delta) {
+void tokuD_hookcall(toku_State *T, CallFrame *cf, int delta) {
     C->oldpc = 0; /* set 'oldpc' for new function */
     if (C->hookmask & TOKU_MASK_CALL) { /* is call hook on? */
         toku_assert(delta > 0);
         cf->cs.pc += delta; /* hooks assume 'pc' is already incremented */
-        csD_hook(C, TOKU_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
+        tokuD_hook(C, TOKU_HOOK_CALL, -1, 0, cf_func(cf)->p->arity);
         cf->cs.pc -= delta; /* correct 'pc' */
     }
 }
@@ -1030,12 +1030,12 @@ void csD_hookcall(toku_State *T, CallFrame *cf, int delta) {
 
 /*
 ** Traces Tokudae calls. If code is running the first instruction of
-** a function, and function is not vararg, calls 'csD_hookcall'
-** (Vararg functions will call 'csD_hookcall' after adjusting its
+** a function, and function is not vararg, calls 'tokuD_hookcall'
+** (Vararg functions will call 'tokuD_hookcall' after adjusting its
 ** variable arguments; otherwise, they could call a line/count hook
 ** before the call hook.)
 */
-int csD_tracecall(toku_State *T, int delta) {
+int tokuD_tracecall(toku_State *T, int delta) {
     CallFrame *cf = C->cf;
     Proto *p = cf_func(cf)->p;
     cf->cs.trap = 1; /* ensure hooks will be checked */
@@ -1043,7 +1043,7 @@ int csD_tracecall(toku_State *T, int delta) {
         if (p->isvararg)
             return 0; /* hooks will start at VARARGPREP instruction */
         else
-            csD_hookcall(C, cf, delta); /* check 'call' hook */
+            tokuD_hookcall(C, cf, delta); /* check 'call' hook */
     }
     return 1; /* keep 'trap' on */
 }
@@ -1061,7 +1061,7 @@ int csD_tracecall(toku_State *T, int delta) {
 ** This function is not "Protected" when called, so it should correct
 ** 'C->sp.p' before calling anything that can run the GC.
 */
-int csD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
+int tokuD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
     CallFrame *cf = C->cf;
     const Proto *p = cf_func(cf)->p;
     t_ubyte mask = C->hookmask;
@@ -1083,7 +1083,7 @@ int csD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
         return 1; /* no line hook and count != 0; nothing to be done now */
     if (counthook) {
         C->sp.p = base + stacksize; /* save 'sp' */
-        csD_hook(C, TOKU_HOOK_COUNT, -1, 0, 0); /* call count hook */
+        tokuD_hook(C, TOKU_HOOK_COUNT, -1, 0, 0); /* call count hook */
     }
     if (mask & TOKU_MASK_LINE) {
         /* 'C->oldpc' may be invalid; use zero in this case */
@@ -1091,9 +1091,9 @@ int csD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
         int npci = cast_int(pc - p->code);
         if (npci <= oldpc || /* call hook when jump back (loop), */
                 changedline(p, oldpc, npci)) { /* or when enter new line */
-            int newline = csD_getfuncline(p, npci);
+            int newline = tokuD_getfuncline(p, npci);
             C->sp.p = base + stacksize; /* save 'sp' */
-            csD_hook(C, TOKU_HOOK_LINE, newline, 0, 0); /* call line hook */
+            tokuD_hook(C, TOKU_HOOK_LINE, newline, 0, 0); /* call line hook */
         }
         C->oldpc = npci; /* 'pc' of last call to line hook */
     }

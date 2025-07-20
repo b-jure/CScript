@@ -57,7 +57,7 @@ typedef enum DigType {
 } DigType;
 
 
-void csY_setinput(toku_State *T, Lexer *lx, BuffReader *br, OString *source) {
+void tokuY_setinput(toku_State *T, Lexer *lx, BuffReader *br, OString *source) {
     toku_assert(lx->ps != NULL);
     lx->c = brgetc(br); /* fetch first char */
     lx->line = 1;
@@ -67,20 +67,20 @@ void csY_setinput(toku_State *T, Lexer *lx, BuffReader *br, OString *source) {
     lx->tahead.tk = TK_EOS; /* no lookahead token */
     lx->br = br;
     lx->src = source;
-    lx->envn = csS_newlit(C, TOKU_ENV);
-    csR_buffresize(C, lx->buff, TOKUI_MINBUFFER);
+    lx->envn = tokuS_newlit(C, TOKU_ENV);
+    tokuR_buffresize(C, lx->buff, TOKUI_MINBUFFER);
 }
 
 
-void csY_init(toku_State *T) {
-    OString *e = csS_newlit(C, TOKU_ENV); /* create env name */
-    csG_fix(C, obj2gco(e)); /* never collect this name */
+void tokuY_init(toku_State *T) {
+    OString *e = tokuS_newlit(C, TOKU_ENV); /* create env name */
+    tokuG_fix(C, obj2gco(e)); /* never collect this name */
     /* create keyword names and never collect them */
     toku_assert(NUM_KEYWORDS <= TOKU_MAXUBYTE);
     for (int i = 0; i < NUM_KEYWORDS; i++) {
-        OString *s = csS_new(C, tkstr[i]);
+        OString *s = tokuS_new(C, tkstr[i]);
         s->extra = cast_ubyte(i + 1);
-        csG_fix(C, obj2gco(s));
+        tokuG_fix(C, obj2gco(s));
     }
 }
 
@@ -91,14 +91,14 @@ static t_noret lexerror(Lexer *lx, const char *err, int token);
 
 /* pushes character into token buffer */
 t_sinline void savec(Lexer *lx, int c) {
-    if (csR_bufflen(lx->buff) >= csR_buffsize(lx->buff)) {
+    if (tokuR_bufflen(lx->buff) >= tokuR_buffsize(lx->buff)) {
         size_t newsize;
-        if (csR_buffsize(lx->buff) >= TOKU_MAXSIZE / 2)
+        if (tokuR_buffsize(lx->buff) >= TOKU_MAXSIZE / 2)
             lexerror(lx, "lexical element too long", 0);
-        newsize = csR_buffsize(lx->buff) * 2;
-        csR_buffresize(lx->C, lx->buff, newsize);
+        newsize = tokuR_buffsize(lx->buff) * 2;
+        tokuR_buffresize(lx->C, lx->buff, newsize);
     }
-    csR_buff(lx->buff)[csR_bufflen(lx->buff)++] = cast_char(c);
+    tokuR_buff(lx->buff)[tokuR_bufflen(lx->buff)++] = cast_char(c);
 }
 
 
@@ -112,18 +112,18 @@ t_sinline int lxmatch(Lexer *lx, int c) {
 }
 
 
-const char *csY_tok2str(Lexer *lx, int t) {
+const char *tokuY_tok2str(Lexer *lx, int t) {
     toku_assert(t <= TK_NAME);
     if (t >= FIRSTTK) {
         const char *str = tkstr[t - FIRSTTK];
         if (t < TK_EOS)
-            return csS_pushfstring(lx->C, "'%s'", str);
+            return tokuS_pushfstring(lx->C, "'%s'", str);
         return str;
     } else {
         if (cisprint(t))
-            return csS_pushfstring(lx->C, "'%c'", t);
+            return tokuS_pushfstring(lx->C, "'%c'", t);
         else
-            return csS_pushfstring(lx->C, "'<\\%d>'", t);
+            return tokuS_pushfstring(lx->C, "'<\\%d>'", t);
     }
 }
 
@@ -133,18 +133,18 @@ static const char *lextok2str(Lexer *lx, int t) {
         case TK_FLT: case TK_INT:
         case TK_STRING: case TK_NAME: {
             savec(lx, '\0');
-            return csS_pushfstring(lx->C, "'%s'", csR_buff(lx->buff));
+            return tokuS_pushfstring(lx->C, "'%s'", tokuR_buff(lx->buff));
         }
-        default: return csY_tok2str(lx, t);
+        default: return tokuY_tok2str(lx, t);
     }
 }
 
 
 static const char *lexmsg(Lexer *lx, const char *msg, int token) {
     toku_State *T = lx->C;
-    msg = csD_addinfo(C, msg, lx->src, lx->line);
+    msg = tokuD_addinfo(C, msg, lx->src, lx->line);
     if (token)
-        msg = csS_pushfstring(C, "%s near %s", msg, lextok2str(lx, token));
+        msg = tokuS_pushfstring(C, "%s near %s", msg, lextok2str(lx, token));
     return msg;
 }
 
@@ -152,7 +152,7 @@ static const char *lexmsg(Lexer *lx, const char *msg, int token) {
 static void lexwarn(Lexer *lx, const char *msg, int token) {
     toku_State *T = lx->C;
     SPtr oldsp = C->sp.p;
-    csT_warning(C, lexmsg(lx, msg, token), 0);
+    tokuT_warning(C, lexmsg(lx, msg, token), 0);
     C->sp.p = oldsp; /* remove warning messages */
 }
 
@@ -164,7 +164,7 @@ static t_noret lexerror(Lexer *lx, const char *err, int token) {
 
 
 /* external interface for 'lexerror' */
-t_noret csY_syntaxerror(Lexer *lx, const char *err) {
+t_noret tokuY_syntaxerror(Lexer *lx, const char *err) {
     lexerror(lx, err, lx->t.tk);
 }
 
@@ -181,17 +181,17 @@ static void inclinenr(Lexer *lx) {
 
 
 /* create new string and fix it inside of lexer htable */
-OString *csY_newstring(Lexer *lx, const char *str, size_t l) {
+OString *tokuY_newstring(Lexer *lx, const char *str, size_t l) {
     toku_State *T = lx->C;
-    OString *s = csS_newl(C, str, l);
-    const TValue *o = csH_getstr(lx->tab, s);
+    OString *s = tokuS_newl(C, str, l);
+    const TValue *o = tokuH_getstr(lx->tab, s);
     if (!ttisnil(o)) /* string already present? */
         s = keystrval(cast(Node *, o));
     else {
         TValue *stkv = s2v(C->sp.p++); /* reserve stack space for string */
         setstrval(C, stkv, s); /* anchor */
-        csH_setstr(C, lx->tab, strval(stkv), stkv); /* t[string] = string */
-        csG_checkGC(C);
+        tokuH_setstr(C, lx->tab, strval(stkv), stkv); /* t[string] = string */
+        tokuG_checkGC(C);
         C->sp.p--; /* remove string from stack */
     }
     return s;
@@ -244,14 +244,14 @@ static void checkcond(Lexer *lx, int cond, const char *msg) {
 static int expect_hexdig(Lexer *lx){
     save_and_advance(lx);
     checkcond(lx, cisxdigit(lx->c), "hexadecimal digit expected");
-    return csS_hexvalue(lx->c);
+    return tokuS_hexvalue(lx->c);
 }
 
 
 static int read_hexesc(Lexer *lx) {
     int hd = expect_hexdig(lx);
     hd = (hd << 4) + expect_hexdig(lx);
-    csR_buffpopn(lx->buff, 2); /* remove saved chars from buffer */
+    tokuR_buffpopn(lx->buff, 2); /* remove saved chars from buffer */
     return hd;
 }
 
@@ -277,14 +277,14 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
     while (cast_void(save_and_advance(lx)), cisxdigit(lx->c)) {
         i++;
         checkcond(lx, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");
-        r = (r << 4) + csS_hexvalue(lx->c);
+        r = (r << 4) + tokuS_hexvalue(lx->c);
     }
     if (*strict)
         checkcond(lx, lx->c == ']', "missing ']'");
     else
         checkcond(lx, lx->c == '}', "missing '}'");
     advance(lx); /* skip '}' or ']' */
-    csR_buffpopn(lx->buff, i); /* remove saved chars from buffer */
+    tokuR_buffpopn(lx->buff, i); /* remove saved chars from buffer */
     return r;
 }
 
@@ -347,7 +347,7 @@ static void utf8esc(Lexer *lx) {
         n = check_utf8(lx, n);
         utf8verfied(buff, temp, n);
     } else /* otherwise create non-strict UTF-8 sequence */
-        n = csS_utf8esc(buff, n);
+        n = tokuS_utf8esc(buff, n);
     for (; n > 0; n--) /* add 'buff' to string */
         savec(lx, buff[UTF8BUFFSZ - n]);
 }
@@ -361,7 +361,7 @@ static int read_decesc(Lexer *lx) {
         save_and_advance(lx);
     }
     checkcond(lx, r <= UCHAR_MAX, "decimal escape too large");
-    csR_buffpopn(lx->buff, i); /* remove read digits from buffer */
+    tokuR_buffpopn(lx->buff, i); /* remove read digits from buffer */
     return r;
 }
 
@@ -392,7 +392,7 @@ static void read_long_string(Lexer *lx, Literal *k, size_t sep) {
     for (;;) {
         switch (lx->c) {
             case CSEOF: { /* error */
-                const char *msg = csS_pushfstring(lx->C,
+                const char *msg = tokuS_pushfstring(lx->C,
                     "unterminated long string (starting at line %d)", line);
                 lexerror(lx, msg, TK_EOS);
                 break; /* to avoid warnings */
@@ -416,8 +416,8 @@ static void read_long_string(Lexer *lx, Literal *k, size_t sep) {
         }
     }
 endloop:
-    k->str = csY_newstring(lx, csR_buff(lx->buff) + sep,
-                               csR_bufflen(lx->buff) - 2 * sep);
+    k->str = tokuY_newstring(lx, tokuR_buff(lx->buff) + sep,
+                               tokuR_bufflen(lx->buff) - 2 * sep);
 }
 
 
@@ -465,7 +465,7 @@ static void read_string(Lexer *lx, Literal *k) {
                 advance(lx);
                 /* fall through */
             only_save:
-                csR_buffpop(lx->buff); /* remove '\\' */
+                tokuR_buffpop(lx->buff); /* remove '\\' */
                 savec(lx, c);
                 /* fall through */
             no_save:
@@ -475,7 +475,7 @@ static void read_string(Lexer *lx, Literal *k) {
         }
     } /* while byte is not a delimiter */
     save_and_advance(lx); /* skip delimiter */
-    k->str = csY_newstring(lx, csR_buff(lx->buff)+1, csR_bufflen(lx->buff)-2);
+    k->str = tokuY_newstring(lx, tokuR_buff(lx->buff)+1, tokuR_bufflen(lx->buff)-2);
 }
 
 
@@ -517,7 +517,7 @@ repeat:
                     goto only_save;
                 }
             }
-            csR_buffpop(lx->buff);
+            tokuR_buffpop(lx->buff);
             break;
         }
         default: {
@@ -541,7 +541,7 @@ static int lexstr2num(Lexer *lx, Literal *k) {
     int f; /* flag for float overflow; -1 underflow; 1 overflow; 0 ok */
     TValue o;
     savec(lx, '\0'); /* terminate */
-    if (t_unlikely(csS_tonum(csR_buff(lx->buff), &o, &f) == 0))
+    if (t_unlikely(tokuS_tonum(tokuR_buff(lx->buff), &o, &f) == 0))
         lexerror(lx, "malformed number", TK_FLT);
     if (t_unlikely(f > 0)) /* overflow? */
         lexwarn(lx, "number constant overflows", TK_FLT);
@@ -696,7 +696,7 @@ static int read_numeral(Lexer *lx, Literal *k) {
 
 /* scan for tokens */
 static int scan(Lexer *lx, Literal *k) {
-    csR_buffreset(lx->buff);
+    tokuR_buffreset(lx->buff);
     for (;;) {
         switch (lx->c) {
             case ' ': case '\t': case '\f': case '\v': {
@@ -808,8 +808,8 @@ static int scan(Lexer *lx, Literal *k) {
                     do {
                         save_and_advance(lx);
                     } while (cisalnum(lx->c) || lx->c == '_');
-                    k->str = csY_newstring(lx, csR_buff(lx->buff),
-                                               csR_bufflen(lx->buff));
+                    k->str = tokuY_newstring(lx, tokuR_buff(lx->buff),
+                                               tokuR_bufflen(lx->buff));
                     if (isreserved(k->str)) { /* reserved keywword? */
                         int tk = k->str->extra + FIRSTTK - 1;
                         if (tk == TK_INF || tk == TK_INFINITY)
@@ -826,7 +826,7 @@ static int scan(Lexer *lx, Literal *k) {
 
 
 /* fetch next token into 't' */
-void csY_scan(Lexer *lx) {
+void tokuY_scan(Lexer *lx) {
     lx->lastline = lx->line;
     if (lx->tahead.tk == TK_EOS)
         lx->t.tk = scan(lx, &lx->t.lit);
@@ -838,7 +838,7 @@ void csY_scan(Lexer *lx) {
 
 
 /* fetch next token into 'tahead' */
-int csY_scanahead(Lexer *lx) {
+int tokuY_scanahead(Lexer *lx) {
     toku_assert(lx->t.tk != TK_EOS);
     lx->tahead.tk = scan(lx, &lx->t.lit);
     return lx->tahead.tk;

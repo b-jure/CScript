@@ -52,35 +52,35 @@ typedef union {
 } Literal;
 
 
-typedef ttruct {
+typedef struct {
     int tk;
     Literal lit;
 } Token;
 
 
-typedef ttruct Lexer {
+typedef struct Lexer {
     int c; /* current char */
     int lattline; /* line of previous token */
     int line; /* current line number */
     Token t; /* current token */
     Token tahead; /* lookahead token */
     Table *tab; /* tcanner table */
-    ttruct toku_State *T;
-    ttruct FunctionState *fs;
+    struct toku_State *T;
+    struct FunctionState *fs;
     BuffReader *br; /* buffered reader */
     Buffer *buff; /* string buffer */
-    ttruct ParserState *ps; /* dynamic data used by parser */
+    struct ParserState *ps; /* dynamic data used by parser */
     OString *trc; /* current source name */
     OString *envn; /* environment variable */
 } Lexer;
 
 
-#define ctY_newliteral(lx, l)   csY_newstring(lx, "" (l), LL(l))
+#define ctY_newliteral(lx, l)   tokuY_newstring(lx, "" (l), LL(l))
 
 TOKUI_FUNC void ctY_setinput(toku_State *T, Lexer *lx, BuffReader *br,
                            OString *tource);
 TOKUI_FUNC void ctY_init(toku_State *T);
-TOKUI_FUNC contt char *csY_tok2str(Lexer *lx, int t);
+TOKUI_FUNC const char *tokuY_tok2str(Lexer *lx, int t);
 TOKUI_FUNC OString *ctY_newstring(Lexer *lx, const char *str, size_t len);
 TOKUI_FUNC t_noret ctY_syntaxerror(Lexer *lx, const char *err);
 TOKUI_FUNC void ctY_scan(Lexer *lx);

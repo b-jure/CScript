@@ -44,7 +44,7 @@
 
 
 /* macros for controlling recursion depth */
-#define enterCstack(lx)     csT_incCstack((lx)->C)
+#define enterCstack(lx)     tokuT_incCstack((lx)->C)
 #define leaveCstack(lx)     ((lx)->C->nCcalls--)
 
 
@@ -57,7 +57,7 @@
 
 /* expect 'cond' to be true or invoke error */
 #define expect_cond(lx, cond, err) \
-    { if (t_unlikely(!(cond))) csY_syntaxerror(lx, err); }
+    { if (t_unlikely(!(cond))) tokuY_syntaxerror(lx, err); }
 
 
 /* control flow masks */
@@ -116,7 +116,6 @@ typedef struct FuncContext {
     int nabslineinfo;
     int nlocals;
     int nupvals;
-    int pcswtest;
     int lasttarget;
     int lastgoto; /* last pending goto in 'gt' */
     t_ubyte iwthabs;
@@ -139,7 +138,6 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->nabslineinfo = fs->nabslineinfo;
     ctx->nlocals = fs->nlocals;
     ctx->nupvals = fs->nupvals;
-    ctx->pcswtest = fs->pcswtest;
     ctx->lasttarget = fs->lasttarget;
     ctx->lastgoto = fs->lx->ps->gt.len;
     ctx->iwthabs = fs->iwthabs;
@@ -162,7 +160,6 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->nabslineinfo = ctx->nabslineinfo;
     fs->nlocals = ctx->nlocals;
     fs->nupvals = ctx->nupvals;
-    fs->pcswtest = ctx->pcswtest;
     fs->lasttarget = ctx->lasttarget;
     fs->lx->ps->gt.len = ctx->lastgoto;
     fs->iwthabs = ctx->iwthabs;
@@ -173,8 +170,8 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
 
 
 static t_noret expecterror(Lexer *lx, int tk) {
-    const char *err = csS_pushfstring(lx->C, "expected %s", csY_tok2str(lx, tk));
-    csY_syntaxerror(lx, err);
+    const char *err = tokuS_pushfstring(lx->C, "expected %s", tokuY_tok2str(lx, tk));
+    tokuY_syntaxerror(lx, err);
 }
 
 
@@ -182,10 +179,10 @@ static t_noret limiterror(FunctionState *fs, const char *what, int limit) {
     toku_State *T = fs->lx->C;
     int linenum = fs->p->defline;
     const char *where = (linenum == 0 ? "main function" :
-                         csS_pushfstring(C, "function at line %d", linenum));
-    const char *err = csS_pushfstring(C, "too many %s (limit is %d) in %s",
+                         tokuS_pushfstring(C, "function at line %d", linenum));
+    const char *err = tokuS_pushfstring(C, "too many %s (limit is %d) in %s",
                                           what, limit, where);
-    csY_syntaxerror(fs->lx, err);
+    tokuY_syntaxerror(fs->lx, err);
 }
 
 
@@ -195,7 +192,7 @@ static t_noret limiterror(FunctionState *fs, const char *what, int limit) {
 */
 static int match(Lexer *lx, int tk) {
     if (check(lx, tk)) {
-        csY_scan(lx);
+        tokuY_scan(lx);
         return 1;
     }
     return 0;
@@ -212,7 +209,7 @@ static void expect(Lexer *lx, int tk) {
 /* same as 'expect' but this also advances the scanner */
 static void expectnext(Lexer *lx, int tk) {
     expect(lx, tk);
-    csY_scan(lx);
+    tokuY_scan(lx);
 }
 
 
@@ -226,9 +223,9 @@ static void expectmatch(Lexer *lx, int what, int who, int linenum) {
         if (lx->line == linenum) /* same line? */
             expecterror(lx, what); /* emit usual error message */
         else /* otherwise spans across multiple lines */
-            csY_syntaxerror(lx, csS_pushfstring(lx->C,
+            tokuY_syntaxerror(lx, tokuS_pushfstring(lx->C,
                     "expected %s (to close %s at line %d)",
-                    csY_tok2str(lx, what), csY_tok2str(lx, who), linenum));
+                    tokuY_tok2str(lx, what), tokuY_tok2str(lx, who), linenum));
     }
 }
 
@@ -241,16 +238,16 @@ static const char *errstmname(Lexer *lx, const char *err) {
         case 3: stm = "continue"; break;
         default: return err;
     }
-    return csS_pushfstring(lx->C,
+    return tokuS_pushfstring(lx->C,
             "%s ('%s' must be the last statement in this block)", err, stm);
 }
 
 
 static t_noret expecterrorblk(Lexer *lx) {
-    const char *err = csS_pushfstring(lx->C,
-                        "expected %s", csY_tok2str(lx, '}'));
+    const char *err = tokuS_pushfstring(lx->C,
+                        "expected %s", tokuY_tok2str(lx, '}'));
     err = errstmname(lx, err);
-    csY_syntaxerror(lx, err);
+    tokuY_syntaxerror(lx, err);
 }
 
 
@@ -263,10 +260,10 @@ static void expectmatchblk(Lexer *lx, int linenum) {
         if (lx->line == linenum)
             expecterrorblk(lx);
         else {
-            const char *err = csS_pushfstring(lx->C,
+            const char *err = tokuS_pushfstring(lx->C,
                     "expected %s to close %s at line %d",
-                    csY_tok2str(lx, '}'), csY_tok2str(lx, '{'), linenum);
-            csY_syntaxerror(lx, errstmname(lx, err));
+                    tokuY_tok2str(lx, '}'), tokuY_tok2str(lx, '{'), linenum);
+            tokuY_syntaxerror(lx, errstmname(lx, err));
         }
     }
 }
@@ -276,19 +273,19 @@ static OString *str_expectname(Lexer *lx) {
     OString *s;
     expect(lx, TK_NAME);
     s = lx->t.lit.str;
-    csY_scan(lx);
+    tokuY_scan(lx);
     return s;
 }
 
 
 /* semantic error; variant of syntax error without 'near <token>' */
-t_noret csP_semerror(Lexer *lx, const char *err) {
+t_noret tokuP_semerror(Lexer *lx, const char *err) {
     lx->t.tk = 0;
-    csY_syntaxerror(lx, err);
+    tokuY_syntaxerror(lx, err);
 }
 
 
-void csP_checklimit(FunctionState *fs, int n, int limit, const char *what) {
+void tokuP_checklimit(FunctionState *fs, int n, int limit, const char *what) {
     if (t_unlikely(n >= limit)) limiterror(fs, what, limit);
 }
 
@@ -330,7 +327,7 @@ static int nvarstack(FunctionState *fs) {
 static void contadjust(FunctionState *fs, int push) {
     int ncntl = is_genloop(&fs->ls->s) * VAR_N;
     int total = (fs->nactlocals - fs->ls->s.nactlocals - ncntl);
-    csC_adjuststack(fs, push ? -total : total);
+    tokuC_adjuststack(fs, push ? -total : total);
 }
 
 
@@ -340,7 +337,7 @@ static void contadjust(FunctionState *fs, int push) {
 static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
     GotoList *gl = &lx->ps->gt;
     int n = gl->len;
-    csM_growarray(lx->C, gl->arr, gl->size, n, TOKU_MAXINT, "pending jumps", Goto);
+    tokuM_growarray(lx->C, gl->arr, gl->size, n, TOKU_MAXINT, "pending jumps", Goto);
     gl->arr[n].pc = pc;
     gl->arr[n].nactlocals = lx->fs->nactlocals;
     gl->arr[n].close = close;
@@ -380,13 +377,13 @@ static int newpendingjump(Lexer *lx, int bk, int close, int adjust) {
     if (close) { /* needs close? */
         const Scope *cfs = getcfscope(fs);
         toku_assert(cfs != NULL);
-        csC_emitIL(fs, OP_CLOSE, stacklevel(fs, cfs->nactlocals));
+        tokuC_emitIL(fs, OP_CLOSE, stacklevel(fs, cfs->nactlocals));
     }
     if (bk) { /* break statement? */
         toku_assert(adjust >= 0);
-        csC_adjuststack(fs, adjust);
+        tokuC_adjuststack(fs, adjust);
     }
-    pc = csC_jmp(fs, OP_JMP);
+    pc = tokuC_jmp(fs, OP_JMP);
     return newbreakjump(lx, pc, bk, close);
 }
 
@@ -413,12 +410,12 @@ static void patchpendingjumps(FunctionState *fs, Scope *s) {
     while (igt < gl->len) {
         Goto *gt = &gl->arr[igt];
         if (gt->bk) /* 'break' ? */
-            csC_patchtohere(fs, gt->pc);
+            tokuC_patchtohere(fs, gt->pc);
         else { /* 'continue' in generic loop */
             toku_assert(fs->ls && fs->ls->pcloop != NOPC);
             toku_assert(s == &fs->ls->s && is_genloop(s));
             toku_assert(!gt->close);
-            csC_patch(fs, gt->pc, fs->ls->pcloop);
+            tokuC_patch(fs, gt->pc, fs->ls->pcloop);
         }
         igt++; /* get next */
     }
@@ -460,13 +457,13 @@ static void initstring(ExpInfo *e, OString *s) {
 static int registerlocal(Lexer *lx, FunctionState *fs, OString *name) {
     Proto *p = fs->p;
     int osz = p->sizelocals;
-    csM_growarray(lx->C, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
+    tokuM_growarray(lx->C, p->locals, p->sizelocals, fs->nlocals, MAXVARS,
                   "locals", LVarInfo);
     while (osz < p->sizelocals)
         p->locals[osz++].name = NULL;
     p->locals[fs->nlocals].name = name;
     p->locals[fs->nlocals].startpc = currPC;
-    csG_objbarrier(lx->C, p, name);
+    tokuG_objbarrier(lx->C, p, name);
     return fs->nlocals++;
 }
 
@@ -509,13 +506,13 @@ static void leavescope(FunctionState *fs) {
     int stklevel = stacklevel(fs, s->nactlocals);
     int nvalues = fs->nactlocals - s->nactlocals;
     if (s->prev && s->haveupval) /* need a 'close'? */
-        csC_emitIL(fs, OP_CLOSE, stklevel);
+        tokuC_emitIL(fs, OP_CLOSE, stklevel);
     removelocals(fs, s->nactlocals); /* remove scope locals */
     toku_assert(s->nactlocals == fs->nactlocals);
     if (s->prev) { /* not main chunk scope? */
         if (fs->lasttarget == currPC)
             fs->opbarrier |= 2; /* prevent POP merge */
-        csC_pop(fs, nvalues); /* pop locals */
+        tokuC_pop(fs, nvalues); /* pop locals */
         fs->opbarrier &= ~2; /* allow POP merge */
     }
     if (haspendingjumps(s)) /* might have pending jumps? */
@@ -569,11 +566,10 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->ninstpc = 0;
     fs->nlocals = 0;
     fs->nupvals = 0;
-    fs->pcswtest = 0;
     fs->lasttarget = 0;
     fs->iwthabs = fs->needclose = fs->opbarrier = fs->lastisend = 0;
     p->source = lx->src;
-    csG_objbarrier(lx->C, p, p->source);
+    tokuG_objbarrier(lx->C, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
     enterscope(fs, s, 0); /* start top-level scope */
 }
@@ -586,20 +582,20 @@ static void close_func(Lexer *lx) {
     toku_assert(fs->scope && !fs->scope->prev);
     leavescope(fs); toku_assert(!fs->scope); /* end final scope */
     if (!stmIsReturn(fs)) /* function missing final return? */
-        csC_ret(fs, nvarstack(fs), 0); /* add implicit return */
-    csC_finish(fs); /* final code adjustments */
+        tokuC_ret(fs, nvarstack(fs), 0); /* add implicit return */
+    tokuC_finish(fs); /* final code adjustments */
     /* shrink unused memory */
-    csM_shrinkarray(C, p->p, p->sizep, fs->np, Proto *);
-    csM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
-    csM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
-    csM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, t_byte);
-    csM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
+    tokuM_shrinkarray(C, p->p, p->sizep, fs->np, Proto *);
+    tokuM_shrinkarray(C, p->k, p->sizek, fs->nk, TValue);
+    tokuM_shrinkarray(C, p->code, p->sizecode, currPC, Instruction);
+    tokuM_shrinkarray(C, p->lineinfo, p->sizelineinfo, currPC, t_byte);
+    tokuM_shrinkarray(C, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
                        AbsLineInfo);
-    csM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
-    csM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
-    csM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
+    tokuM_shrinkarray(C, p->instpc, p->sizeinstpc, fs->ninstpc, int);
+    tokuM_shrinkarray(C, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
+    tokuM_shrinkarray(C, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
-    csG_checkGC(C); /* try to collect garbage memory */
+    tokuG_checkGC(C); /* try to collect garbage memory */
     unasmfunc(fs->lx->C, fs->p);
 }
 
@@ -612,13 +608,13 @@ static Proto *addproto(Lexer *lx) {
     Proto *clp; /* closure prototype */
     if (fs->np >= p->sizep) {
         int osz = p->sizep;
-        csM_growarray(C, p->p, p->sizep, fs->np, MAX_ARG_L, "functions",
+        tokuM_growarray(C, p->p, p->sizep, fs->np, MAX_ARG_L, "functions",
                       Proto *);
         while (osz < p->sizep)
             p->p[osz++] = NULL;
     }
-    p->p[fs->np++] = clp = csF_newproto(C);
-    csG_objbarrier(C, p, clp);
+    p->p[fs->np++] = clp = tokuF_newproto(C);
+    tokuG_objbarrier(C, p, clp);
     return clp;
 }
 
@@ -626,7 +622,7 @@ static Proto *addproto(Lexer *lx) {
 /* set current function as vararg */
 static void setvararg(FunctionState *fs, int arity) {
     fs->p->isvararg = 1;
-    csC_emitIL(fs, OP_VARARGPREP, arity);
+    tokuC_emitIL(fs, OP_VARARGPREP, arity);
 }
 
 
@@ -645,8 +641,8 @@ static int addlocal(Lexer *lx, OString *name) {
     FunctionState *fs = lx->fs;
     ParserState *ps = lx->ps;
     LVar *local;
-    csP_checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
-    csM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
+    tokuP_checklimit(fs, ps->actlocals.len + 1 - fs->firstlocal, MAXVARS, "locals");
+    tokuM_growarray(lx->C, ps->actlocals.arr, ps->actlocals.size,
                          ps->actlocals.len, TOKU_MAXINT, "locals", LVar);
     local = &ps->actlocals.arr[ps->actlocals.len++];
     local->s.kind = VARREG;
@@ -657,7 +653,7 @@ static int addlocal(Lexer *lx, OString *name) {
 
 
 #define addlocallit(lx,lit) \
-        addlocal(lx, csY_newstring(lx, "" lit, LL(lit)))
+        addlocal(lx, tokuY_newstring(lx, "" lit, LL(lit)))
 
 
 /*
@@ -679,8 +675,8 @@ static int searchlocal(FunctionState *fs, OString *name, ExpInfo *e, int limit) 
 static UpValInfo *newupvalue(FunctionState *fs) {
     Proto *p = fs->p;
     int osz = p->sizeupvals;
-    csP_checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
-    csM_growarray(fs->lx->C, p->upvals, p->sizeupvals, fs->nupvals,
+    tokuP_checklimit(fs, fs->nupvals + 1, MAXUPVAL, "upvalues");
+    tokuM_growarray(fs->lx->C, p->upvals, p->sizeupvals, fs->nupvals,
                   MAXUPVAL, "upvalues", UpValInfo);
     while (osz < p->sizeupvals)
         p->upvals[osz++].name = NULL;
@@ -705,7 +701,7 @@ static int addupvalue(FunctionState *fs, OString *name, ExpInfo *v) {
         toku_assert(eqstr(name, prev->p->upvals[v->u.info].name));
     }
     uv->name = name;
-    csG_objbarrier(fs->lx->C, fs->p, name);
+    tokuG_objbarrier(fs->lx->C, fs->p, name);
     return fs->nupvals - 1;
 }
 
@@ -760,14 +756,14 @@ static void var(Lexer *lx, OString *varname, ExpInfo *var) {
         ExpInfo key;
         varaux(fs, lx->envn, var, 1); /* get environment variable */
         toku_assert(var->et != EXP_VOID); /* this one must exist */
-        csC_exp2stack(fs, var); /* put env on stack */
+        tokuC_exp2stack(fs, var); /* put env on stack */
         initstring(&key, varname); /* key is variable name */
-        csC_indexed(fs, var, &key, 0); /* env[varname] */
+        tokuC_indexed(fs, var, &key, 0); /* env[varname] */
     }
 }
 
 
-#define varlit(lx,l,e)      var(lx, csY_newstring(lx, "" l, LL(l)), e)
+#define varlit(lx,l,e)      var(lx, tokuY_newstring(lx, "" l, LL(l)), e)
 
 
 /* =======================================================================
@@ -778,7 +774,7 @@ static int explist(Lexer *lx, ExpInfo *e) {
     int n = 1;
     expr(lx, e);
     while (match(lx, ',')) {
-        csC_exp2stack(lx->fs, e);
+        tokuC_exp2stack(lx->fs, e);
         expr(lx, e);
         n++;
     }
@@ -788,20 +784,20 @@ static int explist(Lexer *lx, ExpInfo *e) {
 
 static void indexed(Lexer *lx, ExpInfo *var, int super) {
     ExpInfo key = INIT_EXP;
-    csY_scan(lx); /* skip '[' */
-    csC_exp2stack(lx->fs, var);
+    tokuY_scan(lx); /* skip '[' */
+    tokuC_exp2stack(lx->fs, var);
     expr(lx, &key);
-    csC_indexed(lx->fs, var, &key, super);
+    tokuC_indexed(lx->fs, var, &key, super);
     expectnext(lx, ']');
 }
 
 
 static void getdotted(Lexer *lx, ExpInfo *v, int super) {
     ExpInfo key = INIT_EXP;
-    csY_scan(lx); /* skip '.' */
-    csC_exp2stack(lx->fs, v);
+    tokuY_scan(lx); /* skip '.' */
+    tokuC_exp2stack(lx->fs, v);
     expname(lx, &key);
-    csC_getdotted(lx->fs, v, &key, super);
+    tokuC_getdotted(lx->fs, v, &key, super);
 }
 
 
@@ -809,20 +805,20 @@ static void getdotted(Lexer *lx, ExpInfo *v, int super) {
 static void superkw(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     if (t_unlikely(fs->cs == NULL))
-        csP_semerror(lx, "'super' outside of class definition");
+        tokuP_semerror(lx, "'super' outside of class definition");
     else if (t_unlikely(!fs->cs->super))
-        csY_syntaxerror(lx, "'super' in a class that does not inherit");
+        tokuY_syntaxerror(lx, "'super' in a class that does not inherit");
     else {
-        csY_scan(lx); /* skip 'super' */
+        tokuY_scan(lx); /* skip 'super' */
         varlit(lx, "self", e);          /* get class... */
         toku_assert(e->et == EXP_LOCAL);  /* which must be local... */
-        csC_exp2stack(fs, e);           /* ...and put it on stack */
+        tokuC_exp2stack(fs, e);           /* ...and put it on stack */
         if (check(lx, '[')) /* index access? */
             indexed(lx, e, 1);
         else if (check(lx, '.')) /* field access? */
             getdotted(lx, e, 1);
         else /* get superclass */
-            csC_emitI(lx->fs, OP_SUPER);
+            tokuC_emitI(lx->fs, OP_SUPER);
     }
 }
 
@@ -831,10 +827,10 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
     switch (lx->t.tk) {
         case '(': {
             int linenum = lx->line;
-            csY_scan(lx); /* skip ')' */
+            tokuY_scan(lx); /* skip ')' */
             expr(lx, e);
             expectmatch(lx, ')', '(', linenum);
-            csC_exp2val(lx->fs, e);
+            tokuC_exp2val(lx->fs, e);
             break;
         }
         case TK_NAME: {
@@ -846,7 +842,7 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
             break;
         }
         default: {
-            csY_syntaxerror(lx, "unexpected symbol");
+            tokuY_syntaxerror(lx, "unexpected symbol");
         }
     }
 }
@@ -857,18 +853,18 @@ static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int linenum = lx->line;
     int base = fs->sp - 1;
-    csY_scan(lx); /* skip '(' */
+    tokuY_scan(lx); /* skip '(' */
     if (!check(lx, ')')) { /* have args ? */
         explist(lx, e);
         if (eismulret(e))
-            csC_setmulret(fs, e);
+            tokuC_setmulret(fs, e);
         else
-            csC_exp2stack(fs, e);
+            tokuC_exp2stack(fs, e);
     } else
         e->et = EXP_VOID;
     expectnext(lx, ')');
-    initexp(e, EXP_CALL, csC_call(fs, base, TOKU_MULTRET));
-    csC_fixline(fs, linenum);
+    initexp(e, EXP_CALL, tokuC_call(fs, base, TOKU_MULTRET));
+    tokuC_fixline(fs, linenum);
     fs->sp = base; /* call removes function and arguments */
 }
 
@@ -891,7 +887,7 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
                 break;
             }
             case '(': {
-                csC_exp2stack(lx->fs, e);
+                tokuC_exp2stack(lx->fs, e);
                 call(lx, e);
                 if (check(lx, '?'))
                     qmark(lx, e);
@@ -927,17 +923,17 @@ static void checklistlimit(FunctionState *fs, LConstructor *c) {
        size = c->narray + c->tostore;
     else /* otherwise overflow */
         size = TOKU_MAXINT; /* force error */
-    csP_checklimit(fs, size, TOKU_MAXINT, "elements in a list constructor");
+    tokuP_checklimit(fs, size, TOKU_MAXINT, "elements in a list constructor");
 }
 
 
 static void closelistfield(FunctionState *fs, LConstructor *c) {
     if (c->v.et == EXP_VOID) return; /* there is no list item */
-    csC_exp2stack(fs, &c->v); /* put the item on stack */
+    tokuC_exp2stack(fs, &c->v); /* put the item on stack */
     voidexp(&c->v); /* now empty */
     if (c->tostore == LISTFIELDS_PER_FLUSH) { /* flush? */
         checklistlimit(fs, c);
-        csC_setlist(fs, c->l->u.info, c->narray, c->tostore);
+        tokuC_setlist(fs, c->l->u.info, c->narray, c->tostore);
         c->narray += c->tostore; /* add to total */
         c->tostore = 0; /* no more pending items */
     }
@@ -948,13 +944,13 @@ static void lastlistfield(FunctionState *fs, LConstructor *c) {
     if (c->tostore == 0) return;
     checklistlimit(fs, c);
     if (eismulret(&c->v)) { /* last item has multiple returns? */
-        csC_setmulret(fs, &c->v);
-        csC_setlist(fs, c->l->u.info, c->narray, TOKU_MULTRET);
+        tokuC_setmulret(fs, &c->v);
+        tokuC_setlist(fs, c->l->u.info, c->narray, TOKU_MULTRET);
         c->narray--; /* do not count last expression */
     } else {
         if (c->v.et != EXP_VOID) /* have item? */
-            csC_exp2stack(fs, &c->v); /* ensure it is on stack */
-        csC_setlist(fs, c->l->u.info, c->narray, c->tostore);
+            tokuC_exp2stack(fs, &c->v); /* ensure it is on stack */
+        tokuC_setlist(fs, c->l->u.info, c->narray, c->tostore);
     }
     c->narray += c->tostore;
 }
@@ -963,10 +959,10 @@ static void lastlistfield(FunctionState *fs, LConstructor *c) {
 static void listdef(Lexer *lx, ExpInfo *l) {
     FunctionState *fs = lx->fs;
     int linenum = lx->line;
-    int pc = csC_emitIS(fs, OP_NEWLIST, 0);
+    int pc = tokuC_emitIS(fs, OP_NEWLIST, 0);
     LConstructor c = { .l = l, .v = INIT_EXP };
     initexp(l, EXP_FINEXPR, fs->sp); /* finalize list expression */
-    csC_reserveslots(fs, 1); /* space for list */
+    tokuC_reserveslots(fs, 1); /* space for list */
     expectnext(lx, '[');
     do {
         toku_assert(c.v.et == EXP_VOID || c.tostore > 0);
@@ -976,7 +972,7 @@ static void listdef(Lexer *lx, ExpInfo *l) {
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, ']', '[', linenum);
     lastlistfield(fs, &c);
-    csC_setlistsize(fs, pc, c.narray);
+    tokuC_setlistsize(fs, pc, c.narray);
 }
 
 /* }==================================================================== */
@@ -996,7 +992,7 @@ typedef struct TConstructor {
 static void tabindex(Lexer *lx, ExpInfo *e) {
     expectnext(lx, '[');
     expr(lx, e);
-    csC_exp2val(lx->fs, e);
+    tokuC_exp2val(lx->fs, e);
     expectnext(lx, ']');
 }
 
@@ -1005,34 +1001,34 @@ static void tabfield(Lexer *lx, TConstructor *c) {
     FunctionState *fs = lx->fs;
     ExpInfo t, k, v;
     if (check(lx, TK_NAME)) {
-        csP_checklimit(fs, c->nhash, TOKU_MAXINT, "records in a table constructor");
+        tokuP_checklimit(fs, c->nhash, TOKU_MAXINT, "records in a table constructor");
         expname(lx, &k);
     } else
         tabindex(lx, &k);
     c->nhash++;
     expectnext(lx, '=');
     t = *c->t; /* copy of table descriptor */
-    csC_indexed(fs, &t, &k, 0);
+    tokuC_indexed(fs, &t, &k, 0);
     expr(lx, &v);
-    csC_exp2stack(fs, &v);
-    csC_pop(fs, csC_store(fs, &t) - 1); /* -1 to keep table */
+    tokuC_exp2stack(fs, &v);
+    tokuC_pop(fs, tokuC_store(fs, &t) - 1); /* -1 to keep table */
 }
 
 
 static void tabledef(Lexer *lx, ExpInfo *t) {
     FunctionState *fs = lx->fs;
     int linenum = lx->line;
-    int pc = csC_emitIS(fs, OP_NEWTABLE, 0);
+    int pc = tokuC_emitIS(fs, OP_NEWTABLE, 0);
     TConstructor c = { .t = t, .v = INIT_EXP };
     initexp(t, EXP_FINEXPR, fs->sp); /* finalize table expression */
-    csC_reserveslots(fs, 1); /* space for table */
+    tokuC_reserveslots(fs, 1); /* space for table */
     expectnext(lx, '{');
     do {
         if (check(lx, '}')) break; /* delimiter; no more fields */
         tabfield(lx, &c);
     } while (match(lx, ',') || match(lx, ';'));
     expectmatch(lx, '}', '{', linenum);
-    csC_settablesize(fs, pc, c.nhash);
+    tokuC_settablesize(fs, pc, c.nhash);
 }
 
 /* }==================================================================== */
@@ -1048,11 +1044,11 @@ static void dottedname(Lexer *lx, ExpInfo *v) {
 static void method(Lexer *lx) {
     ExpInfo var, dummy;
     int linenum = lx->line;
-    csY_scan(lx); /* skip 'fn' */
+    tokuY_scan(lx); /* skip 'fn' */
     expname(lx, &var);
     funcbody(lx, &dummy, 1, linenum, '(');
-    csC_methodset(lx->fs, &var);
-    csC_fixline(lx->fs, linenum);
+    tokuC_methodset(lx->fs, &var);
+    tokuC_fixline(lx->fs, linenum);
 }
 
 
@@ -1065,10 +1061,10 @@ static void metafield(Lexer *lx, t_ubyte *amt) {
     expname(lx, &e);
     mtname = e.u.str;
     if (t_unlikely(!ismetatag(mtname)))
-        csP_semerror(lx, "invalid metafield name");
+        tokuP_semerror(lx, "invalid metafield name");
     mt = mtname->extra - NUM_KEYWORDS - 1;
     if (t_unlikely(amt[mt]))
-        csP_semerror(lx, "metafield redefinition");
+        tokuP_semerror(lx, "metafield redefinition");
     amt[mt] = 1; /* mark as defined */
     expectnext(lx, '=');
     if (match(lx, TK_FN) || check(lx, '|')) {
@@ -1077,10 +1073,10 @@ static void metafield(Lexer *lx, t_ubyte *amt) {
         funcbody(lx, &e, 1, linenum, del);
     } else
         expr(lx, &e);
-    csC_exp2stack(fs, &e);
+    tokuC_exp2stack(fs, &e);
     expectnext(lx, ';');
-    csC_mtset(fs, mt);
-    csC_fixline(fs, linenum);
+    tokuC_mtset(fs, mt);
+    tokuC_fixline(fs, linenum);
 }
 
 
@@ -1102,34 +1098,34 @@ static int classbody(Lexer *lx, int *havemt) {
 
 static void klass(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
-    int pc = csC_emitIS(fs, OP_NEWCLASS, 0);
+    int pc = tokuC_emitIS(fs, OP_NEWCLASS, 0);
     int linenum, nm;
     int havemt = 0;
     ClassState cs;
     cs.prev = fs->cs; cs.super = 0;
     fs->cs = &cs;
-    csC_reserveslots(fs, 1); /* space for class */
+    tokuC_reserveslots(fs, 1); /* space for class */
     if (match(lx, TK_INHERITS)) { /* class object inherits? */
         int cls = fs->sp - 1;
         ExpInfo v;
         dottedname(lx, &v);             /* get superclass... */
-        csC_exp2stack(fs, &v);          /* put it on stack... */
-        csC_load(fs, cls);              /* load class... */
-        csC_emitI(fs, OP_INHERIT);      /* ...and do the inherit */
+        tokuC_exp2stack(fs, &v);          /* put it on stack... */
+        tokuC_load(fs, cls);              /* load class... */
+        tokuC_emitI(fs, OP_INHERIT);      /* ...and do the inherit */
         cs.super = 1; /* true; have superclass */
     }
     linenum = lx->line;
     expectnext(lx, '{');
     nm = classbody(lx, &havemt);
     if (nm > 0) { /* have methods? */
-        int nb = csO_ceillog2(nm + (nm == 1));
+        int nb = tokuO_ceillog2(nm + (nm == 1));
         nb |= havemt * 0x80; /* flag for creating metalist */
         SET_ARG_S(&fs->p->code[pc], 0, nb);
     } else if (havemt)
         SET_ARG_S(&fs->p->code[pc], 0, 0x80);
     expectmatch(lx, '}', '{', linenum);
     if (cs.super) /* have superclass? */
-        csC_pop(fs, 2); /* pop superclass and class copy */
+        tokuC_pop(fs, 2); /* pop superclass and class copy */
     fs->cs = cs.prev;
     if (e) initexp(e, EXP_FINEXPR, pc);
 }
@@ -1167,7 +1163,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
         case TK_DOTS: {
             expect_cond(lx, lx->fs->p->isvararg,
                         "cannot use '...' outside of vararg function");
-            initexp(e, EXP_VARARG, csC_vararg(lx->fs, TOKU_MULTRET));
+            initexp(e, EXP_VARARG, tokuC_vararg(lx->fs, TOKU_MULTRET));
             break;
         }
         case '[': {
@@ -1178,7 +1174,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             tabledef(lx, e);
             return;
         }
-        case TK_FN: csY_scan(lx); /* skip 'fn' */
+        case TK_FN: tokuY_scan(lx); /* skip 'fn' */
             /* fall through */
         case '|': {
             int linenum = lx->line;
@@ -1187,7 +1183,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             return;
         }
         case TK_CLASS: {
-            csY_scan(lx); /* skip 'class' */
+            tokuY_scan(lx); /* skip 'class' */
             klass(lx, e);
             return;
         }
@@ -1196,7 +1192,7 @@ static void simpleexp(Lexer *lx, ExpInfo *e) {
             return;
         }
     }
-    csY_scan(lx);
+    tokuY_scan(lx);
 }
 
 
@@ -1273,9 +1269,9 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
     uop = getunopr(lx->t.tk);
     if (uop != OPR_NOUNOPR) {
         int linenum = lx->line;
-        csY_scan(lx); /* skip operator */
+        tokuY_scan(lx); /* skip operator */
         subexpr(lx, e, UNARY_PRIORITY);
-        csC_unary(lx->fs, e, uop, linenum);
+        tokuC_unary(lx->fs, e, uop, linenum);
     } else
         simpleexp(lx, e);
     op = getbinopr(lx->t.tk);
@@ -1283,10 +1279,10 @@ static Binopr subexpr(Lexer *lx, ExpInfo *e, int limit) {
         ExpInfo e2 = INIT_EXP;
         Binopr next;
         int linenum = lx->line;
-        csY_scan(lx); /* skip operator */
-        csC_prebinary(lx->fs, e, op, linenum);
+        tokuY_scan(lx); /* skip operator */
+        tokuC_prebinary(lx->fs, e, op, linenum);
         next = subexpr(lx, &e2, priority[op].right);
-        csC_binary(lx->fs, e, &e2, op, linenum);
+        tokuC_binary(lx->fs, e, &e2, op, linenum);
         op = next;
     }
     leaveCstack(lx);
@@ -1337,9 +1333,9 @@ static void checkreadonly(Lexer *lx, ExpInfo *var) {
         default: return; /* cannot be read-only */
     }
     if (varid) {
-        const char *msg = csS_pushfstring(lx->C,
+        const char *msg = tokuS_pushfstring(lx->C,
             "attempt to assign to read-only variable '%s'", getstr(varid));
-        csP_semerror(lx, msg);
+        tokuP_semerror(lx, msg);
     }
 }
 
@@ -1351,22 +1347,22 @@ static void adjustassign(Lexer *lx, int nvars, int nexps, ExpInfo *e) {
     if (eismulret(e)) {
         need++; /* do not count '...' or the function being called */
         if (need > 0) { /* more variables than values? */
-            csC_setreturns(fs, e, need);
+            tokuC_setreturns(fs, e, need);
             need = 0; /* no more values needed */
         } else /* otherwise more values than variables */
-            csC_setreturns(fs, e, 0); /* call should return no values */
+            tokuC_setreturns(fs, e, 0); /* call should return no values */
     } else {
         if (e->et != EXP_VOID) /* have one or more expressions? */
-            csC_exp2stack(fs, e); /* finalize the last expression */
+            tokuC_exp2stack(fs, e); /* finalize the last expression */
         if (need > 0) { /* more variables than values? */
-            csC_nil(fs, need); /* assign them as nil */
+            tokuC_nil(fs, need); /* assign them as nil */
             return; /* done */
         }
     }
     if (need > 0) /* more variables than values? */
-        csC_reserveslots(fs, need); /* slots for call results or varargs */
+        tokuC_reserveslots(fs, need); /* slots for call results or varargs */
     else /* otherwise more values than variables */
-        csC_pop(fs, -need); /* pop them (if any) */
+        tokuC_pop(fs, -need); /* pop them (if any) */
 }
 
 
@@ -1382,8 +1378,8 @@ struct LHS_assign {
 
 static int dostore(FunctionState *fs, ExpInfo *v, int nvars, int left) {
     if (eisindexed(v))
-        return csC_storevar(fs, v, nvars+left-1);
-    csC_store(fs, v);
+        return tokuC_storevar(fs, v, nvars+left-1);
+    tokuC_store(fs, v);
     return 0;
 }
 
@@ -1403,20 +1399,20 @@ static int compound_assign(Lexer *lx, struct LHS_assign *lhs, int nvars,
     if (nvars != nexps)
         adjustassign(lx, nvars, nexps, &e);
     else
-        csC_exp2stack(lx->fs, &e);
+        tokuC_exp2stack(lx->fs, &e);
     initexp(&e2, EXP_FINEXPR, 0); /* set as finalized (on stack) */
     do { /* do 'op' and store */
         e = check_exp(lhs != NULL, lhs->v);
         toku_assert(eisvar(&e));
         if (eisindexed(&e))
-            csC_load(fs, first-temp);
-        csC_exp2stack(fs, &e);
-        csC_load(fs, first+temp-1);
-        csC_binary(fs, &e, &e2, op, linenum);
+            tokuC_load(fs, first-temp);
+        tokuC_exp2stack(fs, &e);
+        tokuC_load(fs, first+temp-1);
+        tokuC_binary(fs, &e, &e2, op, linenum);
         left += dostore(fs, &lhs->v, temp+1, left+nvars-1);
         lhs = lhs->prev;
     } while (--temp);
-    csC_pop(fs, nvars); /* remove rhs expressions */
+    tokuC_pop(fs, nvars); /* remove rhs expressions */
     return left;
 }
 
@@ -1440,7 +1436,7 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars, int *comp) {
             case '/': case '&': case '|': case TK_IDIV:
             case TK_POW: case TK_SHL: case TK_SHR: case TK_CONCAT: {
                 Binopr op = getbinopr(tk);
-                csY_scan(lx); /* skip operator */
+                tokuY_scan(lx); /* skip operator */
                 *comp = 1; /* indicate this is compound assignment */
                 return compound_assign(lx, lhs, nvars, op);
             }
@@ -1452,7 +1448,7 @@ static int assign(Lexer *lx, struct LHS_assign *lhs, int nvars, int *comp) {
                 if (nvars != nexps)
                     adjustassign(lx, nvars, nexps, &e);
                 else
-                    csC_exp2stack(lx->fs, &e);
+                    tokuC_exp2stack(lx->fs, &e);
             }
         }
     }
@@ -1465,11 +1461,11 @@ static int ppmm(Lexer *lx, ExpInfo *v, Binopr op) {
     FunctionState *fs = lx->fs;
     ExpInfo copy = *v; /* copy of variable we are assigning to */
     int linenum = lx->line;
-    csY_scan(lx); /* skip '+' */
+    tokuY_scan(lx); /* skip '+' */
     toku_assert(eisvar(v));
-    csC_load(fs, fs->sp - 1);
-    csC_dischargevars(fs, v);
-    csC_binimmediate(fs, v, 1, op, linenum);
+    tokuC_load(fs, fs->sp - 1);
+    tokuC_dischargevars(fs, v);
+    tokuC_binimmediate(fs, v, 1, op, linenum);
     return dostore(fs, &copy, 1, 0);
 }
 
@@ -1478,7 +1474,7 @@ static void expstm(Lexer *lx) {
     struct LHS_assign v = { .v = INIT_EXP };
     suffixedexp(lx, &v.v);
     if (v.v.et == EXP_CALL) /* call? */
-        csC_setreturns(lx->fs, &v.v, 0); /* call statement returns nothing */
+        tokuC_setreturns(lx->fs, &v.v, 0); /* call statement returns nothing */
     else { /* otherwise it must be assignment */
         int left = 0;
         if (check(lx, '=') || check(lx, ',')) {
@@ -1492,13 +1488,13 @@ static void expstm(Lexer *lx) {
             checkreadonly(lx, &v.v);
             switch (tk) {
                 case '+': {
-                    csY_scan(lx);
+                    tokuY_scan(lx);
                     if (check(lx, '+')) /* 'var++'? */
                         goto incdec;
                     goto compassign;
                 }
                 case '-': {
-                    csY_scan(lx);
+                    tokuY_scan(lx);
                     if (check(lx, '-')) { /* 'var--'? */
                     incdec:
                         left = ppmm(lx, &v.v, op);
@@ -1509,7 +1505,7 @@ static void expstm(Lexer *lx) {
                 case '*': case '%': case '/': case '&':
                 case '|': case TK_IDIV: case TK_POW:
                 case TK_SHL: case TK_SHR: case TK_CONCAT: {
-                    csY_scan(lx);
+                    tokuY_scan(lx);
                 compassign:
                     left = compound_assign(lx, &v, 1, op);
                     break;
@@ -1517,7 +1513,7 @@ static void expstm(Lexer *lx) {
                 default: expecterror(lx, '=');
             }
         }
-        csC_adjuststack(lx->fs, left);
+        tokuC_adjuststack(lx->fs, left);
     }
 }
 
@@ -1531,8 +1527,8 @@ static int getlocalattribute(Lexer *lx) {
         else if (strcmp(attr, "close") == 0)
             return VARTBC; /* to-be-closed variable */
         else
-            csP_semerror(lx,
-                csS_pushfstring(lx->C, "unknown attribute '%s'", attr));
+            tokuP_semerror(lx,
+                tokuS_pushfstring(lx->C, "unknown attribute '%s'", attr));
     }
     return VARREG;
 }
@@ -1543,7 +1539,7 @@ static int newlocalvar(Lexer *lx, OString *name, int ign) {
         ExpInfo dummy;
         int limit = lx->fs->scope->nactlocals - 1;
         if (t_unlikely(searchlocal(lx->fs, name, &dummy, limit) >= 0))
-            csP_semerror(lx, csS_pushfstring(lx->C,
+            tokuP_semerror(lx, tokuS_pushfstring(lx->C,
                         "redefinition of local variable '%s'", getstr(name)));
     }
     return addlocal(lx, name);
@@ -1553,7 +1549,7 @@ static int newlocalvar(Lexer *lx, OString *name, int ign) {
 static void checkclose(FunctionState *fs, int level) {
     if (level != -1) {
         scopemarkclose(fs);
-        csC_emitIL(fs, OP_TBC, level);
+        tokuC_emitIL(fs, OP_TBC, level);
     }
 }
 
@@ -1571,7 +1567,7 @@ static void localstm(Lexer *lx) {
         getlocalvar(fs, vidx)->s.kind = kind;
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
-                csP_semerror(fs->lx,
+                tokuP_semerror(fs->lx,
                         "multiple to-be-closed variables in a local list");
             toclose = fs->nactlocals + nvars;
         }
@@ -1617,7 +1613,7 @@ static void localclass(Lexer *lx) {
 static void blockstm(Lexer *lx) {
     int linenum = lx->line;
     Scope s;
-    csY_scan(lx); /* skip '{' */
+    tokuY_scan(lx); /* skip '{' */
     enterscope(lx->fs, &s, 0); /* explicit scope */
     decl_list(lx, '}'); /* body */
     expectmatchblk(lx, linenum);
@@ -1639,27 +1635,27 @@ static void paramlist(Lexer *lx) {
                     break;
                 }
                 case TK_DOTS: {
-                    csY_scan(lx);
+                    tokuY_scan(lx);
                     isvararg = 1;
                     break;
                 }
-                default: csY_syntaxerror(lx, "<name> or '...' expected");
+                default: tokuY_syntaxerror(lx, "<name> or '...' expected");
             }
         } while (!isvararg && match(lx, ','));
     }
     adjustlocals(lx, nparams);
     fn->arity = fs->nactlocals;
     if (isvararg) setvararg(fs, fn->arity);
-    csC_reserveslots(fs, fs->nactlocals);
+    tokuC_reserveslots(fs, fs->nactlocals);
 }
 
 
 /* emit closure instruction */
 static void codeclosure(Lexer *lx, ExpInfo *e, int linenum) {
     FunctionState *fs = lx->fs->prev;
-    initexp(e, EXP_FINEXPR, csC_emitIL(fs, OP_CLOSURE, fs->np - 1));
-    csC_fixline(fs, linenum);
-    csC_reserveslots(fs, 1); /* space for closure */
+    initexp(e, EXP_FINEXPR, tokuC_emitIL(fs, OP_CLOSURE, fs->np - 1));
+    tokuC_fixline(fs, linenum);
+    tokuC_reserveslots(fs, 1); /* space for closure */
 }
 
 
@@ -1698,22 +1694,22 @@ static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int linenum, int del) 
 static void fnstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var, e;
-    csY_scan(lx); /* skip 'fn' */
+    tokuY_scan(lx); /* skip 'fn' */
     dottedname(lx, &var);
     funcbody(lx, &e, 0, linenum, '(');
     checkreadonly(lx, &var);
-    csC_storepop(fs, &var, linenum);
+    tokuC_storepop(fs, &var, linenum);
 }
 
 
 static void classstm(Lexer *lx, int linenum) {
     FunctionState *fs = lx->fs;
     ExpInfo var;
-    csY_scan(lx); /* skip 'class' */
+    tokuY_scan(lx); /* skip 'class' */
     dottedname(lx, &var);
     klass(lx, NULL);
     checkreadonly(lx, &var);
-    csC_storepop(fs, &var, linenum);
+    tokuC_storepop(fs, &var, linenum);
 }
 
 
@@ -1735,10 +1731,10 @@ typedef struct {
 /* convert literal information into text */
 static const char *literal2text(toku_State *T, LiteralInfo *li) {
     switch (li->tt) {
-        case TOKU_VNUMINT: return csS_pushfstring(C, " (%I)", li->lit.i);
-        case TOKU_VNUMFLT: return csS_pushfstring(C, " (%f)", li->lit.n);
+        case TOKU_VNUMINT: return tokuS_pushfstring(C, " (%I)", li->lit.i);
+        case TOKU_VNUMFLT: return tokuS_pushfstring(C, " (%f)", li->lit.n);
         case TOKU_VSHRSTR:case TOKU_VLNGSTR:
-            return csS_pushfstring(C, " (%s)", getstr(li->lit.str));
+            return tokuS_pushfstring(C, " (%s)", getstr(li->lit.str));
         default: toku_assert(0); return NULL; /* invalid literal */
     }
 }
@@ -1843,10 +1839,10 @@ static void checkduplicate(Lexer *lx, SwitchState *ss, ExpInfo *e,
     if (!checkliteral(ss, e, &what))
          checkK(lx, e, li, ss->firstli, &extra, &what);
     if (t_unlikely(what)) { /* have duplicate? */
-        const char *msg = csS_pushfstring(lx->C,
+        const char *msg = tokuS_pushfstring(lx->C,
                             "duplicate %s literal%s in switch statement",
                             what, (extra ? literal2text(lx->C, li) : ""));
-        csP_semerror(lx, msg);
+        tokuP_semerror(lx, msg);
     }
 }
 
@@ -1855,8 +1851,8 @@ static void addliteralinfo(Lexer *lx, SwitchState *ss, ExpInfo *e) {
     ParserState *ps = lx->ps;
     LiteralInfo li;
     checkduplicate(lx, ss, e, &li);
-    csP_checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
-    csM_growarray(lx->C, ps->literals.arr, ps->literals.size,
+    tokuP_checklimit(lx->fs, ps->literals.len, MAX_CODE, "switch cases");
+    tokuM_growarray(lx->C, ps->literals.arr, ps->literals.size,
                   ps->literals.len, MAX_CODE, "switch literals", LiteralInfo);
     ps->literals.arr[ps->literals.len++] = li;
 }
@@ -1878,8 +1874,8 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
         addliteralinfo(lx, ss, e);
         if (ss->isconst) { /* both are constant values? */
             TValue v;
-            csC_const2v(lx->fs, e, &v);
-            return csV_raweq(&ss->v, &v) + 1; /* NOMATCH or MATCH */
+            tokuC_const2v(lx->fs, e, &v);
+            return tokuV_raweq(&ss->v, &v) + 1; /* NOMATCH or MATCH */
         } /* else fall-through */
     } /* else fall-through */
     ss->nomatch = 0; /* we don't know... */
@@ -1896,10 +1892,10 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
 static int codeconstexp(FunctionState *fs, ExpInfo *e) {
     int res = 0;
     fs->opbarrier |= 1;
-    csC_exp2val(fs, e);
+    tokuC_exp2val(fs, e);
     if (eisconstant(e)) {
         ExpInfo pres = *e;
-        csC_exp2stack(fs, e);
+        tokuC_exp2stack(fs, e);
         *e = pres;
         res = 1; /* true; 'e' is a constant */
     }
@@ -1911,7 +1907,7 @@ static int codeconstexp(FunctionState *fs, ExpInfo *e) {
 static void removeliterals(Lexer *lx, int nliterals) {
     ParserState *ps = lx->ps;
     if (ps->literals.len < ps->literals.size / 3) /* too many literals? */
-        csM_shrinkarray(lx->C, ps->literals.arr, ps->literals.size,
+        tokuM_shrinkarray(lx->C, ps->literals.arr, ps->literals.size,
                         ps->literals.size / 2, LiteralInfo);
     ps->literals.len = nliterals;
 }
@@ -1929,14 +1925,14 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
             if (ss->c == CASE && check(lx, TK_CASE)) {
                 /* had previous case that is followed by another case */
                 toku_assert(ftjmp == NOJMP); /* can't have open 'ftjump' */
-                ftjmp = csC_jmp(fs, OP_JMP); /* new fall-through jump */
-                csC_patchtohere(fs, ss->jmp); /* patch test jump */
+                ftjmp = tokuC_jmp(fs, OP_JMP); /* new fall-through jump */
+                tokuC_patchtohere(fs, ss->jmp); /* patch test jump */
             }
             if (match(lx, TK_CASE)) { /* 'case'? */
                 ExpInfo e = INIT_EXP; /* case expression */
                 int match, linenum;
                 if (t_unlikely(ss->havedefault))
-                    csP_semerror(lx, "'default' must be the last case");
+                    tokuP_semerror(lx, "'default' must be the last case");
                 storecontext(fs, &ctxcase); /* case might get optimized away */
                 linenum = lx->line;
                 expr(lx, &e);           /* get the case expression... */
@@ -1954,9 +1950,8 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                 } else { /* else must check for match */
                     toku_assert(!ss->nomatch);
                     ss->c = CASE; /* regular case */
-                    csC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
-                    ss->jmp = csC_test(fs, OP_TESTPOP, 0, linenum);
-                    fs->pcswtest = ss->jmp;
+                    tokuC_emitI(fs, OP_EQPRESERVE); /* EQ but preserves lhs */
+                    ss->jmp = tokuC_test(fs, OP_TESTPOP, 0, linenum);
                 }
             } else if (!ss->havedefault) { /* don't have 'default'? */
                 expectnext(lx, ':');
@@ -1965,14 +1960,14 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
                     ss->nomatch = 0; /* default is the match */
                     loadcontext(fs, ctxbefore); /* remove them */
                 } else if (ss->c == CASE) /* have test jump? */
-                    csC_patchtohere(fs, ss->jmp); /* fix it */
+                    tokuC_patchtohere(fs, ss->jmp); /* fix it */
                 ss->havedefault = 1; /* now have 'default' */
                 ss->c = CDFLT;
                 storecontext(fs, &ctxdefault); /* store 'default' context */
             } else /* otherwise duplicate 'default' case */
-                csP_semerror(lx, "multiple default cases in switch");
+                tokuP_semerror(lx, "multiple default cases in switch");
             if (ftjmp != NOJMP) { /* have fall-through jump to patch? */
-                csC_patchtohere(fs, ftjmp); /* patch it */
+                tokuC_patchtohere(fs, ftjmp); /* patch it */
                 ftjmp = NOJMP; /* reset */
             }
         } else if (ss->c != CNONE) { /* or have previous case?... */
@@ -1984,13 +1979,13 @@ static void switchbody(Lexer *lx, SwitchState *ss, FuncContext *ctxbefore) {
             } else if (ss->c == CMISMATCH) /* case optimized away? */
                 loadcontext(fs, &ctxcase); /* remove statement */
         } else /* ...otherwise error */
-            csP_semerror(lx, "expect at least one 'case' or 'default' label");
+            tokuP_semerror(lx, "expect at least one 'case' or 'default' label");
     }
     toku_assert(ftjmp == NOJMP); /* no more fall-through jumps */
     if (ctxend.pc != -1) /* had a compile-time match and 'ctxend' is stored? */
         loadcontext(fs, &ctxend); /* trim off dead code */
     else if (ss->c == CASE) /* 'case' is last (have test)? */
-        csC_patchtohere(fs, ss->jmp); /* patch it */
+        tokuC_patchtohere(fs, ss->jmp); /* patch it */
     else if (ss->nomatch) /* compile-time no match? */
         loadcontext(fs, ctxbefore); /* remove the whole switch */
     removeliterals(lx, ss->firstli);
@@ -2003,7 +1998,6 @@ static void switchstm(Lexer *lx) {
     ExpInfo e;
     FuncContext ctxbefore;
     FunctionState *fs = lx->fs;
-    int old_pcswtest = fs->pcswtest;
     Scope *prev = fs->switchscope;
     SwitchState ss = {
         .isconst = 0, .nomatch = 1,
@@ -2014,10 +2008,10 @@ static void switchstm(Lexer *lx) {
     enterscope(fs, &s, CFMS);
     storecontext(fs, &ctxbefore);
     fs->switchscope = &s; /* set the current 'switch' scope */
-    csY_scan(lx); /* skip 'switch' */
+    tokuY_scan(lx); /* skip 'switch' */
     expr(lx, &e); /* get the 'switch' expression... */
     if ((ss.isconst = codeconstexp(fs, &e))) /* constant expression? */
-        csC_const2v(fs, &e, &ss.v); /* get its value */
+        tokuC_const2v(fs, &e, &ss.v); /* get its value */
     addlocallit(lx, "(switch)"); /* switch expression temporary */
     adjustlocals(lx, 1); /* register switch temporary */
     linenum = lx->line;
@@ -2025,7 +2019,6 @@ static void switchstm(Lexer *lx) {
     switchbody(lx, &ss, &ctxbefore);
     expectmatch(lx, '}', '{', linenum);
     leavescope(fs);
-    fs->pcswtest = old_pcswtest;
     fs->switchscope = prev;
 }
 
@@ -2060,7 +2053,7 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
                 bodypc = currPC; /* adjust bodypc */
             } /* (otherwise condition is already optimized out) */
         } else /* otherwise emit condition test */
-            test = csC_test(fs, cb->opT, 0, cb->condline);
+            test = tokuC_test(fs, cb->opT, 0, cb->condline);
     }
     stm(lx); /* loop/if body */
     if (optaway) /* optimize away this statement? */
@@ -2069,15 +2062,15 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
         /* condition is true and body is cflow. end or this is 'if' */
         storecontext(fs, &cb->ctxend); /* this is end, rest is dead code */
     } else { /* otherwise unknown condition value */
-        jump = csC_jmp(fs, cb->opJ); /* loop or if jump */
+        jump = tokuC_jmp(fs, cb->opJ); /* loop or if jump */
         if (!cb->isif) { /* loop statement? */
             if (cb->pcClause != NOJMP) /* 'for' loop? */
-                csC_patch(fs, jump, cb->pcClause); /* jump to last clause */
+                tokuC_patch(fs, jump, cb->pcClause); /* jump to last clause */
             else if (istrue) { /* 'while' loop with true condition? */
-                csC_patch(fs, jump, bodypc); /* jump to start of the body */
+                tokuC_patch(fs, jump, bodypc); /* jump to start of the body */
                 fs->ls->pcloop = bodypc; /* convert it to infinite loop */ 
             } else /* 'while' loop with non-constant condition */
-                csC_patch(fs, jump, cb->pcCond); /* jump back to condition */
+                tokuC_patch(fs, jump, cb->pcCond); /* jump back to condition */
         }
     }
     target = currPC; /* set test jump target */
@@ -2087,14 +2080,14 @@ static void condbody(Lexer *lx, CondBodyState *cb) {
         if (target == currPC) { /* no else branch or it got removed? */
             if (jump != NOJMP) { /* have if jump (opJ)? */
                 toku_assert(*prevOP(fs) == cb->opJ);
-                csC_removelastjump(fs); /* remove that jump */
+                tokuC_removelastjump(fs); /* remove that jump */
                 target = currPC; /* adjust test target */
             } else toku_assert(optaway || istrue);
         } else if (jump != NOJMP) /* have else branch and 'if' jump (opJ) */
-            csC_patchtohere(fs, jump); /* (it jumps over else statement) */
+            tokuC_patchtohere(fs, jump); /* (it jumps over else statement) */
     }
     if (test != NOJMP) /* have condition test? */
-        csC_patch(fs, test, target); /* patch it */
+        tokuC_patch(fs, test, target); /* patch it */
     if (cb->ctxend.pc != NOPC) /* statement has "dead" code? */
         loadcontext(fs, &cb->ctxend); /* trim off dead code */
 }
@@ -2108,7 +2101,7 @@ static void ifstm(Lexer *lx) {
         .pcCond = currPC, .pcClause = NOJMP,
     };
     storecontext(fs, &cb.ctxbefore);
-    csY_scan(lx); /* skip 'if' */
+    tokuY_scan(lx); /* skip 'if' */
     cb.condline = lx->line;
     expr(lx, &cb.e);
     codeconstexp(fs, &cb.e);
@@ -2138,7 +2131,7 @@ static void whilestm(Lexer *lx) {
         .opT = OP_TESTPOP, .opJ = OP_JMPS,
         .pcCond = currPC, .pcClause = NOJMP,
     };
-    csY_scan(lx); /* skip 'while' */
+    tokuY_scan(lx); /* skip 'while' */
     enterloop(fs, &ls, 0);
     storecontext(fs, &cb.ctxbefore);
     cb.condline = lx->line;
@@ -2156,7 +2149,7 @@ static void patchforjmp(FunctionState *fs, int pc, int target, int back) {
     if (back) offset = -offset;
     toku_assert(offset >= 0);
     if (t_unlikely(offset > MAXJMP))
-        csY_syntaxerror(fs->lx, "control structure (for loop) too long");
+        tokuY_syntaxerror(fs->lx, "control structure (for loop) too long");
     SET_ARG_L(jmp, 1, offset);
 }
 
@@ -2166,7 +2159,7 @@ static int forexplist(Lexer *lx, ExpInfo *e, int limit) {
     int nexpr = 1;
     expr(lx, e);
     while (match(lx, ',')) {
-        csC_exp2stack(lx->fs, e);
+        tokuC_exp2stack(lx->fs, e);
         expr(lx, e);
         nexpr++;
     }
@@ -2186,7 +2179,7 @@ static void foreachstm(Lexer *lx) {
     ExpInfo e = INIT_EXP;
     Scope s;
     enterloop(fs, &ls, 1); /* enter loop (scope for control variables) */
-    csY_scan(lx); /* skip 'foreach' */
+    tokuY_scan(lx); /* skip 'foreach' */
     addlocallit(lx, "(foreach iter)");      /* iterator         (base)   */
     addlocallit(lx, "(foreach invariant)"); /* invariant state  (base+1) */
     addlocallit(lx, "(foreach cntlvar)");   /* control var      (base+2) */
@@ -2202,20 +2195,20 @@ static void foreachstm(Lexer *lx) {
     adjustassign(lx, VAR_N, forexplist(lx, &e, VAR_N), &e);
     adjustlocals(lx, VAR_N); /* register control variables */
     scopemarkclose(fs); /* last control variable might get closed */
-    csC_checkstack(fs, 3); /* extra space to call generator */
-    prep = csC_emitILL(fs, OP_FORPREP, base, 0);
+    tokuC_checkstack(fs, 3); /* extra space to call generator */
+    prep = tokuC_emitILL(fs, OP_FORPREP, base, 0);
     enterscope(fs, &s, 0); /* scope for declared locals */
     adjustlocals(lx, nvars); /* register delcared locals */
-    csC_reserveslots(fs, nvars); /* space for declared locals */
+    tokuC_reserveslots(fs, nvars); /* space for declared locals */
     stm(lx); /* body */
     leavescope(fs); /* leave declared locals scope */
     patchforjmp(fs, prep, currPC, 0);
     fs->ls->pcloop = currPC; /* generic loop starts here */
-    csC_emitILL(fs, OP_FORCALL, base, nvars);
-    csC_fixline(fs, linenum);
-    forend = csC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
+    tokuC_emitILL(fs, OP_FORCALL, base, nvars);
+    tokuC_fixline(fs, linenum);
+    forend = tokuC_emitILLL(fs, OP_FORLOOP, base, 0, nvars);
     patchforjmp(fs, forend, prep + getopSize(OP_FORPREP), 1);
-    csC_fixline(fs, linenum);
+    tokuC_fixline(fs, linenum);
     leaveloop(fs); /* leave loop (pops control variables) */
 }
 
@@ -2260,15 +2253,15 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
     if (check(lx, ')') || check(lx, ';')) /* no end clause? */
         return; /* done (converted to a 'while' or 'loop') */
     else {
-        bodyjmp = csC_jmp(fs, OP_JMP); /* insert jump in-between */
-        csC_fixline(fs, condline); /* this is condition jump */
+        bodyjmp = tokuC_jmp(fs, OP_JMP); /* insert jump in-between */
+        tokuC_fixline(fs, condline); /* this is condition jump */
         *pcClause = currPC; /* set end clause pc */
         expstm(lx); /* get the end clause expression statement */
         if (!inf) { /* loop is not infinite? */
-            loopjmp = csC_jmp(fs, OP_JMPS); /* emit jump, back to cond... */
-            csC_patch(fs, loopjmp, fs->ls->pcloop); /* ...and patch it */
+            loopjmp = tokuC_jmp(fs, OP_JMPS); /* emit jump, back to cond... */
+            tokuC_patch(fs, loopjmp, fs->ls->pcloop); /* ...and patch it */
         }
-        csC_patchtohere(fs, bodyjmp); /* patch jump from condition to body */
+        tokuC_patchtohere(fs, bodyjmp); /* patch jump from condition to body */
         fs->ls->pcloop = *pcClause; /* loop starts at end clause pc */
     }
 }
@@ -2284,7 +2277,7 @@ static void forstm(Lexer *lx) {
     };
     Scope s;
     int linenum, opt;
-    csY_scan(lx); /* skip 'for' */
+    tokuY_scan(lx); /* skip 'for' */
     enterscope(fs, &s, 0); /* enter initializer scope */
     linenum = lx->line;
     opt = match(lx, '(');
@@ -2311,13 +2304,13 @@ static void loopstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     struct LoopState ls;
     int jmp, lstart;
-    csY_scan(lx); /* skip 'loop' */
+    tokuY_scan(lx); /* skip 'loop' */
     lstart = currPC; /* store the pc where the loop starts */
     enterloop(fs, &ls, 0);
     stm(lx);
     if (!stmIsEnd(fs)) { /* statement (body) does not end control flow? */
-        jmp = csC_jmp(fs, OP_JMPS);
-        csC_patch(fs, jmp, lstart); /* jump back to loop start */
+        jmp = tokuC_jmp(fs, OP_JMPS);
+        tokuC_patch(fs, jmp, lstart); /* jump back to loop start */
     }
     leaveloop(fs);
 }
@@ -2342,16 +2335,16 @@ static int needtoclose(Lexer *lx, const Scope *limit) {
 static void continuestm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     LoopState *ls = fs->ls;
-    csY_scan(lx); /* skip 'continue' */
+    tokuY_scan(lx); /* skip 'continue' */
     if (t_unlikely(ls == NULL)) /* not in a loop? */
-        csP_semerror(lx, "'continue' outside of a loop statement");
+        tokuP_semerror(lx, "'continue' outside of a loop statement");
     if (needtoclose(lx, ls->s.prev))
-        csC_emitIL(fs, OP_CLOSE, stacklevel(fs, ls->s.nactlocals));
+        tokuC_emitIL(fs, OP_CLOSE, stacklevel(fs, ls->s.nactlocals));
     contadjust(fs, 0);
     if (is_genloop(&ls->s)) /* generic loop? */
         newpendingjump(lx, 0, 0, 0); /* 'continue' compiles as 'break' */
     else /* otherwise regular loop */
-        csC_patch(fs, csC_jmp(fs, OP_JMPS), ls->pcloop); /* backpatch */
+        tokuC_patch(fs, tokuC_jmp(fs, OP_JMPS), ls->pcloop); /* backpatch */
     expectnext(lx, ';');
     contadjust(fs, 1); /* adjust stack for compiler and symbolic execution */
     fs->lastisend = 3; /* statement is a continue */
@@ -2362,14 +2355,14 @@ static void breakstm(Lexer *lx) {
     FunctionState *fs = lx->fs;
     const Scope *cfs = getcfscope(fs); /* control flow scope */
     int adjust;
-    csY_scan(lx); /* skip 'break' */
+    tokuY_scan(lx); /* skip 'break' */
     if (t_unlikely(cfs == NULL)) /* no control flow scope? */
-        csP_semerror(lx, "'break' outside of a loop or switch statement");
+        tokuP_semerror(lx, "'break' outside of a loop or switch statement");
     adjust = fs->nactlocals - cfs->nactlocals;
     newpendingjump(lx, 1, needtoclose(lx, cfs->prev), adjust);
     expectnext(lx, ';');
     /* adjust stack for compiler and symbolic execution */
-    csC_adjuststack(fs, -adjust);
+    tokuC_adjuststack(fs, -adjust);
     fs->lastisend = 2; /* statement is a break */
 }
 
@@ -2379,16 +2372,16 @@ static void returnstm(Lexer *lx) {
     int first = fs->sp;
     int nret = 0;
     ExpInfo e = INIT_EXP;
-    csY_scan(lx); /* skip 'return' */
+    tokuY_scan(lx); /* skip 'return' */
     if (!check(lx, ';')) { /* have return values ? */
         nret = explist(lx, &e); /* get return values */
         if (eismulret(&e)) {
-            csC_setmulret(fs, &e);
+            tokuC_setmulret(fs, &e);
             nret = TOKU_MULTRET; /* return all values */
         } else
-            csC_exp2stack(fs, &e);
+            tokuC_exp2stack(fs, &e);
     }
-    csC_ret(fs, first, nret);
+    tokuC_ret(fs, first, nret);
     expectnext(lx, ';');
     fs->sp = first; /* removes all temp values */
     fs->lastisend = 1; /* statement is a return */
@@ -2410,7 +2403,7 @@ static void stm_(Lexer *lx) {
         case TK_BREAK: breakstm(lx); break;
         case TK_RETURN: returnstm(lx); break;
         case TK_LOOP: loopstm(lx); break;
-        case ';': csY_scan(lx); break;
+        case ';': tokuY_scan(lx); break;
         default: {
             expstm(lx);
             expectnext(lx, ';');
@@ -2430,7 +2423,7 @@ static void decl(Lexer *lx) {
     enterCstack(lx);
     switch (lx->t.tk) {
         case TK_LOCAL: {
-            csY_scan(lx); /* skip 'local' */
+            tokuY_scan(lx); /* skip 'local' */
             if (match(lx, TK_FN))
                 localfn(lx);
             else if (match(lx, TK_CLASS))
@@ -2469,8 +2462,8 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
     env->idx = 0;
     env->onstack = 1;
     env->kind = VARREG;
-    csG_objbarrier(lx->C, fs->p, env->name);
-    csY_scan(lx); /* scan for first token */
+    tokuG_objbarrier(lx->C, fs->p, env->name);
+    tokuY_scan(lx); /* scan for first token */
     decl_list(lx, 0); /* parse main body */
     expect(lx, TK_EOS);
     close_func(lx);
@@ -2478,23 +2471,23 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 
 
 /* parse source code */
-CSClosure *csP_parse(toku_State *T, BuffReader *br, Buffer *buff,
+CSClosure *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
     FunctionState fs;
-    CSClosure *cl = csF_newCSClosure(C, 1);
+    CSClosure *cl = tokuF_newCSClosure(C, 1);
     setclCSval2s(C, C->sp.p, cl); /* anchor main function closure */
-    csT_incsp(C);
-    lx.tab = csH_new(C); /* create table for scanner */
+    tokuT_incsp(C);
+    lx.tab = tokuH_new(C); /* create table for scanner */
     settval2s(C, C->sp.p, lx.tab); /* anchor it */
-    csT_incsp(C);
-    fs.p = cl->p = csF_newproto(C);
-    csG_objbarrier(C, cl, cl->p);
-    fs.p->source = csS_new(C, source);
-    csG_objbarrier(C, fs.p, fs.p->source);
+    tokuT_incsp(C);
+    fs.p = cl->p = tokuF_newproto(C);
+    tokuG_objbarrier(C, cl, cl->p);
+    fs.p->source = tokuS_new(C, source);
+    tokuG_objbarrier(C, fs.p, fs.p->source);
     lx.buff = buff;
     lx.ps = ps;
-    csY_setinput(C, &lx, br, fs.p->source);
+    tokuY_setinput(C, &lx, br, fs.p->source);
     toku_assert(!ps->gt.len && !ps->literals.len && !ps->actlocals.len);
     mainfunc(&fs, &lx);
     toku_assert(!fs.prev && fs.nupvals == 1 && !lx.fs);

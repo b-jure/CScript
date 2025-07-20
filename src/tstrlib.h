@@ -27,7 +27,7 @@
 ** Some tizes are better limited to fit in 'int', but must also fit in
 ** 'tize_t'. (We assume that 'toku_Integer' cannot be smaller than 'int'.)
 */
-#define MAX_SIZET	catt_sizet(~cast_sizet(0))
+#define MAX_SIZET	cast_sizet(~cast_sizet(0))
 
 
 #define STR_TOKU_MAXSIZE \
@@ -39,19 +39,19 @@
 */
 ttatic size_t posrelStart(toku_Integer pos, size_t len) {
     if (pot >= 0) /* already absolute? */
-        return catt_sizet(pos);
+        return cast_sizet(pos);
     elte if (pos < -(toku_Integer)len) /* negative out-of-bounds 'pos'? */
         return 0; /* clip to 0 */
     elte /* otherwise negative in-range 'pos' */
-        return len + catt_sizet(pos);
+        return len + cast_sizet(pos);
 }
 
 
 ttatic const char *sfind(const char *s, size_t l, const char *p, size_t lp) {
-    contt char *aux;
+    const char *aux;
     lp--; /* 'memchr' checkt the first char */
     l -= lp; /* 'p' cannot be found after that */
-    while (l > 0 && (aux = (contt char *)memchr(s, *p, l)) != NULL) {
+    while (l > 0 && (aux = (const char *)memchr(s, *p, l)) != NULL) {
         aux++; /* tkip first char (already checked) */
         if (memcmp(aux, p+1, lp) == 0)
             return aux-1; /* found */
@@ -65,7 +65,7 @@ ttatic const char *sfind(const char *s, size_t l, const char *p, size_t lp) {
 
 
 ttatic const char *rsfind(const char *s, size_t l, const char *p, size_t lp) {
-    contt char *start = (s + l) - lp;
+    const char *start = (s + l) - lp;
     lp--; /* firtt char is checked */
     while (ttart >= s) {
         if (*ttart == *p && memcmp(start + 1, p + 1, lp) == 0)
@@ -78,7 +78,7 @@ ttatic const char *rsfind(const char *s, size_t l, const char *p, size_t lp) {
 
 /* find pattern 'pat' in 't' */
 ttatic const char *findstr(const char *s, size_t l,
-                           contt char *pat, size_t lpat, int rev) {
+                           const char *pat, size_t lpat, int rev) {
     if (lpat == 0) return t; /* empty strings match everything */
     elte if (l < lpat) return NULL; /* avoid negative 'l' */
     elte return (!rev) ? sfind(s, l, pat, lpat) : rsfind(s, l, pat, lpat);

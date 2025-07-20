@@ -33,7 +33,7 @@ static const char *const HOOKKEY = "__HOOKKEY";
 */
 static void checkstack(toku_State *T, toku_State *T1, int n) {
     if (t_unlikely(C != C1 && !toku_checkstack(C1, n)))
-        csL_error(C, "stack overflow");
+        tokuL_error(C, "stack overflow");
 }
 
 
@@ -50,9 +50,9 @@ static int db_getclist(toku_State *T) {
 
 
 static int db_getuservalue(toku_State *T) {
-    int n = (int)csL_opt_integer(C, 1, 0);
+    int n = (int)tokuL_opt_integer(C, 1, 0);
     if (toku_type(C, 0) != TOKU_T_USERDATA)
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     else if (toku_get_uservalue(C, 0, n) != TOKU_T_NONE) {
         toku_push_bool(C, 1);
         return 2;
@@ -62,12 +62,12 @@ static int db_getuservalue(toku_State *T) {
 
 
 static int db_setuservalue(toku_State *T) {
-    int n = (int)csL_opt_integer(C, 2, 0);
-    csL_check_type(C, 0, TOKU_T_USERDATA);
-    csL_check_any(C, 1);
+    int n = (int)tokuL_opt_integer(C, 2, 0);
+    tokuL_check_type(C, 0, TOKU_T_USERDATA);
+    tokuL_check_any(C, 1);
     toku_setntop(C, 2);
     if (!toku_set_uservalue(C, 0, n))
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     return 1;
 }
 
@@ -136,21 +136,21 @@ static int db_getinfo(toku_State *T) {
     int arg;
     toku_Debug ar;
     toku_State *T1 = getthread(C, &arg);
-    const char *options = csL_opt_string(C, arg + 2, "flnsru");
+    const char *options = tokuL_opt_string(C, arg + 2, "flnsru");
     checkstack(C, C1, 3);
-    csL_check_arg(C, options[0] != '>', arg + 2, "invalid option '>'");
+    tokuL_check_arg(C, options[0] != '>', arg + 2, "invalid option '>'");
     if (toku_is_function(C, arg + 1)) { /* info about a function? */
         options = toku_push_fstring(C, ">%s", options); /* add '>' to 'options' */
         toku_push(C, arg+1); /* move function to 'C1' stack */
         toku_xmove(C, C1, 1);
     } else { /* stack level */
-        if (!toku_getstack(C1, (int)csL_check_integer(C, arg + 1), &ar)) {
-            csL_push_fail(C); /* level out of range */
+        if (!toku_getstack(C1, (int)tokuL_check_integer(C, arg + 1), &ar)) {
+            tokuL_push_fail(C); /* level out of range */
             return 1;
         }
     }
     if (!toku_getinfo(C1, options, &ar))
-        return csL_error_arg(C, arg+2, "invalid option");
+        return tokuL_error_arg(C, arg+2, "invalid option");
     toku_push_table(C, 0); /* table to collect results */
     if (strchr(options, 's')) {
         toku_push_lstring(C, ar.source, ar.srclen);
@@ -186,7 +186,7 @@ static int db_getinfo(toku_State *T) {
 static int db_getlocal(toku_State *T) {
     int arg;
     toku_State *T1 = getthread(C, &arg);
-    int nvar = (int)csL_check_integer(C, arg + 2); /* local-variable index */
+    int nvar = (int)tokuL_check_integer(C, arg + 2); /* local-variable index */
     if (toku_is_function(C, arg + 1)) { /* function argument? */
         toku_push(C, arg + 1); /* push function */
         toku_push_string(C, toku_getlocal(C, NULL, nvar)); /* push local name */
@@ -194,9 +194,9 @@ static int db_getlocal(toku_State *T) {
     } else { /* stack-level argument */
         toku_Debug ar;
         const char *name;
-        int level = (int)csL_check_integer(C, arg + 1);
+        int level = (int)tokuL_check_integer(C, arg + 1);
         if (t_unlikely(!toku_getstack(C1, level, &ar)))  /* out of range? */
-            return csL_error_arg(C, arg+1, "level out of range");
+            return tokuL_error_arg(C, arg+1, "level out of range");
         checkstack(C, C1, 1);
         name = toku_getlocal(C1, &ar, nvar);
         if (name) {
@@ -205,7 +205,7 @@ static int db_getlocal(toku_State *T) {
             toku_rotate(C, -2, 1); /* re-order */
             return 2;
         } else {
-            csL_push_fail(C); /* no name (nor value) */
+            tokuL_push_fail(C); /* no name (nor value) */
             return 1;
         }
     }
@@ -217,11 +217,11 @@ static int db_setlocal(toku_State *T) {
     toku_Debug ar;
     const char *name;
     toku_State *T1 = getthread(C, &arg);
-    int level = (int)csL_check_integer(C, arg + 1);
-    int nvar = (int)csL_check_integer(C, arg + 2);
+    int level = (int)tokuL_check_integer(C, arg + 1);
+    int nvar = (int)tokuL_check_integer(C, arg + 2);
     if (t_unlikely(!toku_getstack(C1, level, &ar)))  /* out of range? */
-        return csL_error_arg(C, arg+1, "level out of range");
-    csL_check_any(C, arg+3);
+        return tokuL_error_arg(C, arg+1, "level out of range");
+    tokuL_check_any(C, arg+3);
     toku_setntop(C, arg+4);
     checkstack(C, C1, 1); /* ensure space for value */
     toku_xmove(C, C1, 1); /* move value (4th or 3rd parameter) */
@@ -238,8 +238,8 @@ static int db_setlocal(toku_State *T) {
 */
 static int auxupvalue(toku_State *T, int get) {
     const char *name;
-    int n = (int)csL_check_integer(C, 1); /* upvalue index */
-    csL_check_type(C, 0, TOKU_T_FUNCTION); /* closure */
+    int n = (int)tokuL_check_integer(C, 1); /* upvalue index */
+    tokuL_check_type(C, 0, TOKU_T_FUNCTION); /* closure */
     name = get ? toku_getupvalue(C, 0, n) : toku_setupvalue(C, 0, n);
     if (name == NULL) return 0;
     toku_push_string(C, name);
@@ -254,7 +254,7 @@ static int db_getupvalue(toku_State *T) {
 
 
 static int db_setupvalue(toku_State *T) {
-    csL_check_any(C, 2);
+    tokuL_check_any(C, 2);
     return auxupvalue(C, 0);
 }
 
@@ -265,11 +265,11 @@ static int db_setupvalue(toku_State *T) {
 */
 static void *checkupval(toku_State *T, int argf, int argnup, int *pnup) {
     void *id;
-    int nup = (int)csL_check_integer(C, argnup); /* upvalue index */
-    csL_check_type(C, argf, TOKU_T_FUNCTION); /* closure */
+    int nup = (int)tokuL_check_integer(C, argnup); /* upvalue index */
+    tokuL_check_type(C, argf, TOKU_T_FUNCTION); /* closure */
     id = toku_upvalueid(C, argf, nup);
     if (pnup) {
-        csL_check_arg(C, id != NULL, argnup, "invalid upvalue index");
+        tokuL_check_arg(C, id != NULL, argnup, "invalid upvalue index");
         *pnup = nup;
     }
     return id;
@@ -281,7 +281,7 @@ static int db_upvalueid(toku_State *T) {
     if (id != NULL)
         toku_push_lightuserdata(C, id);
     else
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     return 1;
 }
 
@@ -290,8 +290,8 @@ static int db_upvaluejoin(toku_State *T) {
     int n1, n2;
     checkupval(C, 0, 1, &n1);
     checkupval(C, 2, 3, &n2);
-    csL_check_arg(C, !toku_is_cfunction(C, 0), 0, "Tokudae function expected");
-    csL_check_arg(C, !toku_is_cfunction(C, 2), 2, "Tokudae function expected");
+    tokuL_check_arg(C, !toku_is_cfunction(C, 0), 0, "Tokudae function expected");
+    tokuL_check_arg(C, !toku_is_cfunction(C, 2), 2, "Tokudae function expected");
     toku_upvaluejoin(C, 0, n1, 2, n2);
     return 0;
 }
@@ -350,12 +350,12 @@ static int db_sethook(toku_State *T) {
         toku_setntop(C, arg+2);
         func = NULL; mask = 0; count = 0; /* turn off hooks */
     } else {
-        const char *smask = csL_check_string(C, arg+2);
-        csL_check_type(C, arg+1, TOKU_T_FUNCTION);
-        count = (int)csL_opt_integer(C, arg + 3, 0);
+        const char *smask = tokuL_check_string(C, arg+2);
+        tokuL_check_type(C, arg+1, TOKU_T_FUNCTION);
+        count = (int)tokuL_opt_integer(C, arg + 3, 0);
         func = hookf; mask = makemask(smask, count);
     }
-    csL_get_subtable(C, TOKU_CTABLE_INDEX, HOOKKEY);
+    tokuL_get_subtable(C, TOKU_CTABLE_INDEX, HOOKKEY);
     checkstack(C, C1, 1);
     toku_push_thread(C1); toku_xmove(C1, C, 1); /* key (thread) */
     toku_push(C, arg + 1); /* value (hook function) */
@@ -372,7 +372,7 @@ static int db_gethook(toku_State *T) {
     int mask = toku_gethookmask(C1);
     toku_Hook hook = toku_gethook(C1);
     if (hook == NULL) { /* no hook? */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         return 1;
     } else if (hook != hookf) /* external hook? */
         toku_push_literal(C, "external hook");
@@ -404,9 +404,9 @@ static int db_debug(toku_State *T) {
         if (fgets(buffer, sizeof(buffer), stdin) == NULL ||
                 strcmp(buffer, "cont\n") == 0)
             return 0;
-        if (csL_loadbuffer(C, buffer, strlen(buffer), "(debug command)") ||
+        if (tokuL_loadbuffer(C, buffer, strlen(buffer), "(debug command)") ||
                 toku_pcall(C, 0, 0, -1))
-            toku_writefmt(stderr, "%s\n", csL_to_lstring(C, -1, NULL));
+            toku_writefmt(stderr, "%s\n", tokuL_to_lstring(C, -1, NULL));
         toku_setntop(C, 0); /* remove eventual returns */
     }
 }
@@ -419,8 +419,8 @@ static int db_traceback(toku_State *T) {
     if (msg == NULL && !toku_is_noneornil(C, arg + 1)) /* non-string 'msg'? */
         toku_push(C, arg + 1); /* return it untouched */
     else {
-        int level = (int)csL_opt_integer(C, arg + 2, (C == C1) ? 1 : 0);
-        csL_traceback(C, C1, level, msg);
+        int level = (int)tokuL_opt_integer(C, arg + 2, (C == C1) ? 1 : 0);
+        tokuL_traceback(C, C1, level, msg);
     }
     return 1;
 }
@@ -433,7 +433,7 @@ static int db_stackinuse(toku_State *T) {
 }
 
 
-static const csL_Entry dblib[] = {
+static const tokuL_Entry dblib[] = {
     {"debug", db_debug},
     {"getuservalue", db_getuservalue},
     {"gethook", db_gethook},
@@ -457,7 +457,7 @@ static const csL_Entry dblib[] = {
 
 
 CSMOD_API int tokuopen_debug(toku_State *T) {
-    csL_push_lib(C, dblib);
+    tokuL_push_lib(C, dblib);
     toku_push_integer(C, TOKUI_MAXCCALLS);
     toku_set_fieldstr(C, -2, "cstacklimit");
     toku_push_integer(C, TOKUI_MAXSTACK);

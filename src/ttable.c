@@ -95,11 +95,11 @@ static void newhasharray(toku_State *cr, Table *t, t_uint size) {
     int nbits;
     if (size < MINHSIZE)
         size = MINHSIZE;
-    nbits = csO_ceillog2(size);
+    nbits = tokuO_ceillog2(size);
     if (t_unlikely(nbits > MAXHBITS || (1u << nbits) > MAXHSIZE))
-        csD_runerror(cr, "hashtable overflow");
+        tokuD_runerror(cr, "hashtable overflow");
     size = twoto(nbits);
-    t->node = csM_newarray(cr, size, Node);
+    t->node = tokuM_newarray(cr, size, Node);
     inithash(htnode(t, 0), size);
     t->size = nbits;
     t->lastfree = htnode(t, size);
@@ -114,8 +114,8 @@ t_sinline void htpreinit(Table *t) {
 
 
 /* create new table of specific size */
-Table *csH_newsz(toku_State *T, int size) {
-    GCObject *o = csG_new(C, sizeof(Table), TOKU_VTABLE);
+Table *tokuH_newsz(toku_State *T, int size) {
+    GCObject *o = tokuG_new(C, sizeof(Table), TOKU_VTABLE);
     Table *t = gco2ht(o);
     htpreinit(t);
     settval2s(C, C->sp.p++, t); /* assume EXTRA_STACK */
@@ -126,19 +126,19 @@ Table *csH_newsz(toku_State *T, int size) {
 
 
 /* create new hashtable with minimum size */
-Table *csH_new(toku_State *T) {
-    return csH_newsz(C, MINHSIZE);
+Table *tokuH_new(toku_State *T) {
+    return tokuH_newsz(C, MINHSIZE);
 }
 
 
 static inline void freehash(toku_State *T, Table *t) {
-    csM_freearray(C, t->node, htsize(t));
+    tokuM_freearray(C, t->node, htsize(t));
 }
 
 
-void csH_free(toku_State *T, Table *t) {
+void tokuH_free(toku_State *T, Table *t) {
     freehash(C, t);
-    csM_free(C, t);
+    tokuM_free(C, t);
 }
 
 
@@ -156,7 +156,7 @@ static Node *mainposition(const Table *t, const TValue *k) {
         }
         case TOKU_VLNGSTR: {
             OString *s = strval(k);
-            return hashpow2(t, csS_hashlngstr(s));
+            return hashpow2(t, tokuS_hashlngstr(s));
         }
         case TOKU_VNUMINT: {
             toku_Integer i = ival(k);
@@ -224,14 +224,14 @@ static void insertfrom(toku_State *T, Table *src, Table *dest) {
         if (!isempty(nodeval(oldn))) {
             TValue key;
             getnodekey(C, &key, oldn);
-            csH_set(C, dest, &key, nodeval(oldn));
+            tokuH_set(C, dest, &key, nodeval(oldn));
         }
     }
 }
 
 
 /* resize hashtable to new size */
-void csH_resize(toku_State *T, Table *t, t_uint newsize) {
+void tokuH_resize(toku_State *T, Table *t, t_uint newsize) {
     Table newht;
     if (t_unlikely(newsize < MINHSIZE))
         newsize = MINHSIZE;
@@ -251,7 +251,7 @@ static void rehash(toku_State *T, Table *t) {
         usednodes += !isempty(nodeval(n));
     }
     usednodes++; /* for one extra key */
-    csH_resize(C, t, usednodes);
+    tokuH_resize(C, t, usednodes);
 }
 
 
@@ -259,20 +259,20 @@ static void rehash(toku_State *T, Table *t) {
 ** WARNING: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val) {
+void tokuH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val) {
     Node *mp;
     TValue aux;
     if (t_unlikely(ttisnil(key))) {
-        csD_runerror(C, "index is nil");
+        tokuD_runerror(C, "index is nil");
     } else if (ttisflt(key)) {
         toku_Number f = fval(key);
         toku_Integer k;
-        if (csO_n2i(f, &k, N2IEQ)) { /* does key fit in an integer? */
+        if (tokuO_n2i(f, &k, N2IEQ)) { /* does key fit in an integer? */
             setival(&aux, k);
             key = &aux; /* insert it as an integer */
         }
         else if (t_unlikely(t_numisnan(f))) /* float is NaN? */
-            csD_runerror(C, "index is NaN");
+            tokuD_runerror(C, "index is NaN");
         /* else */
     } /* fall through */
     if (ttisnil(val))
@@ -283,7 +283,7 @@ void csH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val) {
         Node *f = getfreepos(t); /* get next free position */
         if (f == NULL) { /* no free position ? */
             rehash(C, t); /* grow table */
-            csH_set(C, t, key, val); /* insert key */
+            tokuH_set(C, t, key, val); /* insert key */
             return; /* done, key must be a new key */
         }
         othern = mainposfromnode(t, mp);
@@ -309,7 +309,7 @@ void csH_newkey(toku_State *T, Table *t, const TValue *key, const TValue *val) {
         }
     }
     setnodekey(C, mp, key); /* set key */
-    csG_barrierback(C, obj2gco(t), key); /* set 't' as gray */
+    tokuG_barrierback(C, obj2gco(t), key); /* set 't' as gray */
     toku_assert(isempty(nodeval(mp))); /* value slot must be empty */
     setobj(C, nodeval(mp), val); /* set value */
 }
@@ -353,7 +353,7 @@ static int eqkey(const TValue *k, const Node *n, int deadok) {
         case TOKU_VSHRSTR:
             return eqshrstr(strval(k), keystrval(n));
         case TOKU_VLNGSTR:
-            return csS_eqlngstr(strval(k), keystrval(n));
+            return tokuS_eqlngstr(strval(k), keystrval(n));
         default: /* rest of the objects are compared by pointer identity */
             toku_assert(iscollectable(k));
             return (gcoval(k) == keygcoval(n));
@@ -387,14 +387,14 @@ static t_uint getindex(toku_State *T, Table *t, const TValue *k) {
     slot = getgeneric(t, k, 1);
     if (t_unlikely(isabstkey(slot))) {
         toku_assert(0);
-        csD_runerror(C, "invalid key passed to 'nextfield'"); /* not found */
+        tokuD_runerror(C, "invalid key passed to 'nextfield'"); /* not found */
     }
     t_uint i = cast(Node *, slot) - htnode(t, 0); /* key index in hash table */
     return i + 1; /* return next slot index */
 }
 
 
-int csH_next(toku_State *T, Table *t, SPtr key) {
+int tokuH_next(toku_State *T, Table *t, SPtr key) {
     t_uint i = getindex(C, t, s2v(key));
     for (; cast_int(i) < htsize(t); i++) {
         Node *slot = htnode(t, i);
@@ -409,21 +409,21 @@ int csH_next(toku_State *T, Table *t, SPtr key) {
 
 
 /* insert all the key-value pairs from src into dest */
-void csH_copykeys(toku_State *T, Table *dest, Table *src) {
+void tokuH_copykeys(toku_State *T, Table *dest, Table *src) {
     TValue k;
     int sz = htsize(src);
     for (int i = 0; i < sz; i++) {
         Node *n = htnode(src, i);
         if (!isempty(nodeval(n))) {
             getnodekey(C, &k, n);
-            csH_set(C, dest, &k, nodeval(n));
-            csG_barrierback(C, obj2gco(dest), nodeval(n));
+            tokuH_set(C, dest, &k, nodeval(n));
+            tokuG_barrierback(C, obj2gco(dest), nodeval(n));
         }
     }
 }
 
 
-const TValue *csH_getshortstr(Table *t, OString *key) {
+const TValue *tokuH_getshortstr(Table *t, OString *key) {
     Node *n = hashstr(t, key);
     for (;;) {
         if (keyisshrstr(n) && eqshrstr(key, keystrval(n)))
@@ -438,9 +438,9 @@ const TValue *csH_getshortstr(Table *t, OString *key) {
 }
 
 
-const TValue *csH_getstr(Table *t, OString *key) {
+const TValue *tokuH_getstr(Table *t, OString *key) {
     if (key->tt_ == TOKU_VSHRSTR)
-        return csH_getshortstr(t, key);
+        return tokuH_getshortstr(t, key);
     else {
         TValue k;
         setstrval(cast(toku_State *, NULL), &k, key);
@@ -449,7 +449,7 @@ const TValue *csH_getstr(Table *t, OString *key) {
 }
 
 
-const TValue *csH_getint(Table *t, toku_Integer key) {
+const TValue *tokuH_getint(Table *t, toku_Integer key) {
     Node *n = hashint(t, key);
     for (;;) {
         if (keyisint(n) && keyival(n) == key)
@@ -464,15 +464,15 @@ const TValue *csH_getint(Table *t, toku_Integer key) {
 }
 
 
-const TValue *csH_get(Table *t, const TValue *key) {
+const TValue *tokuH_get(Table *t, const TValue *key) {
     switch (ttypetag(key)) {
-        case TOKU_VSHRSTR: return csH_getstr(t, strval(key));
-        case TOKU_VNUMINT: return csH_getint(t, ival(key));
+        case TOKU_VSHRSTR: return tokuH_getstr(t, strval(key));
+        case TOKU_VNUMINT: return tokuH_getint(t, ival(key));
         case TOKU_VNIL: return &absentkey;
         case TOKU_VNUMFLT: {
             toku_Integer i;
-            if (csO_tointeger(key, &i, N2IEQ))
-                return csH_getint(t, i);
+            if (tokuO_tointeger(key, &i, N2IEQ))
+                return tokuH_getint(t, i);
         } /* else fall through */
         default:  {
             toku_assert(!ttisnil(key));
@@ -486,10 +486,10 @@ const TValue *csH_get(Table *t, const TValue *key) {
 ** WARNING: when using this function the caller probably needs to
 ** check a GC barrier.
 */
-void csH_finishset(toku_State *T, Table *t, const TValue *slot,
+void tokuH_finishset(toku_State *T, Table *t, const TValue *slot,
                                 const TValue *key, const TValue *val) {
     if (isabstkey(slot))
-        csH_newkey(C, t, key, val);
+        tokuH_newkey(C, t, key, val);
     else
         setobj(C, cast(TValue *, slot), val);
 }
@@ -498,21 +498,21 @@ void csH_finishset(toku_State *T, Table *t, const TValue *slot,
 /*
 ** Ditto for a GC barrier.
 */
-void csH_set(toku_State *T, Table *t, const TValue *key, const TValue *val) {
-    const TValue *slot = csH_get(t, key);
-    csH_finishset(C, t, slot, key, val);
+void tokuH_set(toku_State *T, Table *t, const TValue *key, const TValue *val) {
+    const TValue *slot = tokuH_get(t, key);
+    tokuH_finishset(C, t, slot, key, val);
 }
 
 
 /*
 ** Ditto for a GC barrier.
 */
-void csH_setstr(toku_State *T, Table *t, OString *key, const TValue *val) {
-    const TValue *slot = csH_getstr(t, key);
+void tokuH_setstr(toku_State *T, Table *t, OString *key, const TValue *val) {
+    const TValue *slot = tokuH_getstr(t, key);
     if (isabstkey(slot)) {
         TValue k;
         setstrval(C, &k, key);
-        csH_newkey(C, t, &k, val);
+        tokuH_newkey(C, t, &k, val);
     } else
         setobj(C, cast(TValue *, slot), val);
 }
@@ -521,19 +521,19 @@ void csH_setstr(toku_State *T, Table *t, OString *key, const TValue *val) {
 /*
 ** Ditto for a GC barrier.
 */
-void csH_setint(toku_State *T, Table *t, toku_Integer key, const TValue *val) {
-    const TValue *slot = csH_getint(t, key);
+void tokuH_setint(toku_State *T, Table *t, toku_Integer key, const TValue *val) {
+    const TValue *slot = tokuH_getint(t, key);
     if (isabstkey(slot)) {
         TValue k;
         setival(&k, key);
-        csH_newkey(C, t, &k, val);
+        tokuH_newkey(C, t, &k, val);
     } else
         setobj(C, cast(TValue *, slot), val);
 }
 
 
 /* length of a table is the number of key-value pairs */
-int csH_len(const Table *t) {
+int tokuH_len(const Table *t) {
     int len = 0;
     Node *n = htnode(t, 0);
     toku_assert(!(htsize(t)&(htsize(t)-1)) && htsize(t) >= 4);

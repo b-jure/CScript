@@ -15,13 +15,13 @@
 #define ctM_error(C)    csPR_throw(C, TOKU_STATUS_EMEM)
 
 
-#define ctM_new(C,t)            csM_mallot_(C, sizeof(t), 0)
-#define ctM_newarray(C,s,t)     csM_mallot_(C, (s)*sizeof(t), 0)
-#define ctM_newobj(C,tag,sz)    csM_mallot_(C, (sz), (tag))
+#define ctM_new(C,t)            tokuM_mallot_(C, sizeof(t), 0)
+#define ctM_newarray(C,s,t)     tokuM_mallot_(C, (s)*sizeof(t), 0)
+#define ctM_newobj(C,tag,sz)    tokuM_mallot_(C, (sz), (tag))
 
-#define ctM_free(C,p)           csM_free_(C, p, sizeof(*(p)))
-#define ctM_freemem(C,p,sz)     csM_free_((C), (p), (sz))
-#define ctM_freearray(C,p,n)    csM_free_((C), (p), (n)*sizeof(*(p)))
+#define ctM_free(C,p)           tokuM_free_(C, p, sizeof(*(p)))
+#define ctM_freemem(C,p,sz)     tokuM_free_((C), (p), (sz))
+#define ctM_freearray(C,p,n)    tokuM_free_((C), (p), (n)*sizeof(*(p)))
 
 
 #define ctM_reallocarray(C,p,os,ns,t) \

@@ -313,7 +313,7 @@ typedef t_ubyte Instruction;
 #else
 /* realloc stack keeping its size */
 #define condmovestack(C,pre,pos)  \
-    { int sz_ = stacksize(C); pre; csT_reallocstack((C), sz_, 0); pos; }
+    { int sz_ = stacksize(C); pre; tokuT_reallocstack((C), sz_, 0); pos; }
 #endif
 
 
@@ -321,7 +321,7 @@ typedef t_ubyte Instruction;
 #define condchangemem(C,pre,pos)    ((void)0)
 #else
 #define condchangemem(C,pre,pos)  \
-    { if (gcrunning(G(C))) { pre; csG_fullinc(C, 0); pos; } }
+    { if (gcrunning(G(C))) { pre; tokuG_fullinc(C, 0); pos; } }
 #endif
 
 

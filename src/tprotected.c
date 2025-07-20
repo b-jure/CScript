@@ -85,7 +85,7 @@ void csPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop) {
             break;
         }
         case TOKU_STATUS_EERROR: { /* error while handling error? */
-            setstrval2s(C, oldtop, csS_newlit(C, "error in error handling"));
+            setstrval2s(C, oldtop, tokuS_newlit(C, "error in error handling"));
             break;
         }
         case TOKU_STATUS_OK: { /* closing upvalue? */
@@ -113,7 +113,7 @@ t_noret csPR_throw(toku_State *T, int errcode) {
         TOKUI_THROW(C, C->errjmp); /* jump to it */
     } else { /* thread has no error handler */
         GState *gs = G(C);
-        csT_resetthread(C, errcode); /* close all */
+        tokuT_resetthread(C, errcode); /* close all */
         if (gs->mainthread->errjmp) { /* mainthread has error handler? */
             /* copy over error object */
             setobj2s(C, gs->mainthread->sp.p++, s2v(C->sp.p));
@@ -159,28 +159,28 @@ int csPR_call(toku_State *T, ProtectedFn fn, void *ud,
         C->allowhook = old_allowhook;
         status = csPR_close(C, old_top, status);
         csPR_seterrorobj(C, status, restorestack(C, old_top));
-        csT_shrinkstack(C); /* restore stack (overflow might of happened) */
+        tokuT_shrinkstack(C); /* restore stack (overflow might of happened) */
     }
     C->errfunc = old_errfunc;
     return status;
 }
 
 
-/* auxiliary structure to call 'csF_close' in protected mode */
+/* auxiliary structure to call 'tokuF_close' in protected mode */
 struct PCloseData {
     SPtr level;
     int status;
 };
 
 
-/* auxiliary function to call 'csF_close' in protected mode */
+/* auxiliary function to call 'tokuF_close' in protected mode */
 static void closep(toku_State *T, void *ud) {
     struct PCloseData *pcd = (struct PCloseData*)ud;
-    csF_close(C, pcd->level, pcd->status);
+    tokuF_close(C, pcd->level, pcd->status);
 }
 
 
-/* call 'csF_close' in protected mode */
+/* call 'tokuF_close' in protected mode */
 int csPR_close(toku_State *T, ptrdiff_t level, int status) {
     CallFrame *old_cf = C->cf;
     t_ubyte old_allowhook = C->allowhook;
@@ -199,7 +199,7 @@ int csPR_close(toku_State *T, ptrdiff_t level, int status) {
 }
 
 
-/* auxiliary structure to call 'csP_parse' in protected mode */
+/* auxiliary structure to call 'tokuP_parse' in protected mode */
 struct PParseData {
     BuffReader *br;
     Buffer buff;
@@ -208,25 +208,25 @@ struct PParseData {
 };
 
 
-/* auxiliary function to call 'csP_pparse' in protected mode */
+/* auxiliary function to call 'tokuP_pparse' in protected mode */
 static void pparse(toku_State *T, void *userdata) {
     struct PParseData *ppd = cast(struct PParseData *, userdata);
-    CSClosure *cl = csP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
+    CSClosure *cl = tokuP_parse(C, ppd->br, &ppd->buff, &ppd->ps, ppd->source);
     toku_assert(cl->nupvalues == cl->p->sizeupvals);
-    csF_initupvals(C, cl);
+    tokuF_initupvals(C, cl);
 }
 
 
-/* call 'csP_parse' in protected mode */
+/* call 'tokuP_parse' in protected mode */
 int csPR_parse(toku_State *T, BuffReader *br, const char *name) {
     int status;
     struct PParseData pd = { .br = br, .source = name };
     incnnyc(C);
     status = csPR_call(C, pparse, &pd, savestack(C, C->sp.p), C->errfunc);
-    csR_freebuffer(C, &pd.buff);
-    csM_freearray(C, pd.ps.actlocals.arr, pd.ps.actlocals.size);
-    csM_freearray(C, pd.ps.literals.arr, pd.ps.literals.size);
-    csM_freearray(C, pd.ps.gt.arr, pd.ps.gt.size);
+    tokuR_freebuffer(C, &pd.buff);
+    tokuM_freearray(C, pd.ps.actlocals.arr, pd.ps.actlocals.size);
+    tokuM_freearray(C, pd.ps.literals.arr, pd.ps.literals.size);
+    tokuM_freearray(C, pd.ps.gt.arr, pd.ps.gt.size);
     decnnyc(C);
     return status;
 }

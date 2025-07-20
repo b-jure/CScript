@@ -134,10 +134,10 @@ static void setprogdir(toku_State *T) {
     DWORD nsize = sizeof(buff)/sizeof(char);
     DWORD n = GetModuleFileNameA(NULL, buff, nsize); /* get exec. name */
     if (n == 0 || n == nsize || (lb = strrchr(buff, '\\')) == NULL)
-        csL_error(C, "unable to get ModuleFileName");
+        tokuL_error(C, "unable to get ModuleFileName");
     else {
         *lb = '\0'; /* cut name on the last '\\' to get the path */
-        csL_gsub(C, toku_to_string(C, -1), toku_EXEC_DIR, buff);
+        tokuL_gsub(C, toku_to_string(C, -1), toku_EXEC_DIR, buff);
         toku_remove(C, -2); /* remove original string */
     }
 }
@@ -206,7 +206,7 @@ static toku_CFunction csys_symbolf(toku_State *T, void *lib, const char *sym) {
 
 
 static int searcher_preload(toku_State *T) {
-    const char *name = csL_check_string(C, 0);
+    const char *name = tokuL_check_string(C, 0);
     toku_get_cfieldstr(C, toku_PRELOAD_TABLE); /* get ctable[__PRELOAD] */
     if (toku_get_fieldstr(C, -1, name) == toku_T_NIL) { /* 'name' not found? */
         toku_push_fstring(C, "no field package.preload['%s']", name);
@@ -282,13 +282,13 @@ static int look_for_func(toku_State *T, const char *path, const char *sym) {
 
 
 static int pkg_loadlib(toku_State *T) {
-    const char *path = csL_check_string(C, 0);
-    const char *init = csL_check_string(C, 1);
+    const char *path = tokuL_check_string(C, 0);
+    const char *init = tokuL_check_string(C, 1);
     int res = look_for_func(C, path, init);
     if (t_likely(res == 0)) /* no errors? */
         return 1; /* return the loaded function */
     else { /* error; error message is on top of the stack */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         toku_insert(C, -2);
         toku_push_string(C, (res == ERRLIB) ? LIB_FAIL : "init");
         return 3;  /* return fail, error message, and where */
@@ -334,49 +334,49 @@ static int readable (const char *filename) {
 **         no file 'blublu.so'
 */
 static void push_notfound_error(toku_State *T, const char *path) {
-    csL_Buffer b;
-    csL_buff_init(C, &b);
-    csL_buff_push_string(&b, "no file '");
-    csL_buff_push_gsub(&b, path, TOKU_PATH_SEP, "'" PREFIX "no file '");
-    csL_buff_push_string(&b, "'");
-    csL_buff_end(&b);
+    tokuL_Buffer b;
+    tokuL_buff_init(C, &b);
+    tokuL_buff_push_string(&b, "no file '");
+    tokuL_buff_push_gsub(&b, path, TOKU_PATH_SEP, "'" PREFIX "no file '");
+    tokuL_buff_push_string(&b, "'");
+    tokuL_buff_end(&b);
 }
 
 
 static const char *search_path(toku_State *T, const char *name, const char *path,
                               const char *sep, const char *dirsep) {
-    csL_Buffer buff;
+    tokuL_Buffer buff;
     char *pathname; /* path with name inserted */
     char *endpathname; /* its end */
     const char *filename;
     /* separator is non-empty and appears in 'name'? */
     if (*sep != '\0' && strchr(name, *sep) != NULL)
-        name = csL_gsub(C, name, sep, dirsep); /* replace it by 'dirsep' */
-    csL_buff_init(C, &buff);
+        name = tokuL_gsub(C, name, sep, dirsep); /* replace it by 'dirsep' */
+    tokuL_buff_init(C, &buff);
     /* add path to the buffer, replacing marks ('?') with the file name */
-    csL_buff_push_gsub(&buff, path, TOKU_PATH_MARK, name);
-    csL_buff_push(&buff, '\0');
-    pathname = csL_buffptr(&buff); /* writable list of file names */
-    endpathname = pathname + csL_bufflen(&buff) - 1;
+    tokuL_buff_push_gsub(&buff, path, TOKU_PATH_MARK, name);
+    tokuL_buff_push(&buff, '\0');
+    pathname = tokuL_buffptr(&buff); /* writable list of file names */
+    endpathname = pathname + tokuL_bufflen(&buff) - 1;
     while ((filename = get_next_filename(&pathname, endpathname)) != NULL) {
         if (readable(filename)) /* does file exist and is readable? */
             return toku_push_string(C, filename); /* save and return name */
     }
-    csL_buff_end(&buff); /* push path to create error message */
+    tokuL_buff_end(&buff); /* push path to create error message */
     push_notfound_error(C, toku_to_string(C, -1)); /* create error message */
     return NULL; /* not found */
 }
 
 
 static int pkg_searchpath(toku_State *T) {
-    const char *fname = search_path(C, csL_check_string(C, 0),
-                                       csL_check_string(C, 1),
-                                       csL_opt_string(C, 2, "."),
-                                       csL_opt_string(C, 3, TOKU_DIRSEP));
+    const char *fname = search_path(C, tokuL_check_string(C, 0),
+                                       tokuL_check_string(C, 1),
+                                       tokuL_opt_string(C, 2, "."),
+                                       tokuL_opt_string(C, 3, TOKU_DIRSEP));
     if (fname != NULL) {
         return 1;
     } else { /* error message is on top of the stack */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         toku_insert(C, -2);
         return 2; /* return fail + error message */
     }
@@ -389,7 +389,7 @@ static const char *find_file(toku_State *T, const char *name,
     toku_get_fieldstr(C, toku_upvalueindex(0), pname); /* get 'package[pname]' */
     path = toku_to_string(C, -1);
     if (t_unlikely(path == NULL)) /* path template is not a string? */
-        csL_error(C, "'package.%s' must be a string", pname);
+        tokuL_error(C, "'package.%s' must be a string", pname);
     /* otherwise, search for the path in the 'path' template */
     return search_path(C, name, path, ".", dirsep);
 }
@@ -400,7 +400,7 @@ static int check_load(toku_State *T, int res, const char *filename) {
         toku_push_string(C, filename); /* will be 2nd argument to module */
         return 2; /* return open function and file name */
     } else
-        return csL_error(C, "error loading module '%s' from file '%s':"
+        return tokuL_error(C, "error loading module '%s' from file '%s':"
                             PREFIX "%s", toku_to_string(C, 1), filename,
                             toku_to_string(C, -1));
 }
@@ -408,14 +408,14 @@ static int check_load(toku_State *T, int res, const char *filename) {
 
 static int searcher_Tokudae(toku_State *T) {
     const char *filename;
-    const char *name = csL_check_string(C, 0);
+    const char *name = tokuL_check_string(C, 0);
     filename = find_file(C, name, "path", TOKU_DIRSEP);
     if (filename == NULL) return 1; /* module not found in this path */
-    return check_load(C, (csL_loadfile(C, filename) == TOKU_STATUS_OK), filename);
+    return check_load(C, (tokuL_loadfile(C, filename) == TOKU_STATUS_OK), filename);
 }
 
 
-static const csL_Entry pkg_funcs[] = {
+static const tokuL_Entry pkg_funcs[] = {
     {"loadlib", pkg_loadlib},
     {"searchpath", pkg_searchpath},
     /* placeholders */
@@ -430,18 +430,18 @@ static const csL_Entry pkg_funcs[] = {
 
 static void find_loader(toku_State *T, const char *name) {
     int i;
-    csL_Buffer msg; /* to build error message */
+    tokuL_Buffer msg; /* to build error message */
     /* push 'package.searchers' list to index 2 in the stack */
     if (t_unlikely(toku_get_fieldstr(C, toku_upvalueindex(0), "searchers") != toku_T_LIST))
-        csL_error(C, "'package.searchers' must be list");
-    csL_buff_init(C, &msg);
+        tokuL_error(C, "'package.searchers' must be list");
+    tokuL_buff_init(C, &msg);
     for (i = 0; ; i++) { /* iter over available searchers to find a loader */
-        csL_buff_push_string(&msg, PREFIX); /* error-message prefix */
+        tokuL_buff_push_string(&msg, PREFIX); /* error-message prefix */
         if (t_unlikely(toku_get_index(C, 2, i) == toku_T_NIL)) { /* no more? */
             toku_pop(C, 1); /* remove nil */
-            csL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
-            csL_buff_end(&msg); /* create error message */
-            csL_error(C, "module '%s' not found:%s", name, toku_to_string(C,-1));
+            tokuL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
+            tokuL_buff_end(&msg); /* create error message */
+            tokuL_error(C, "module '%s' not found:%s", name, toku_to_string(C,-1));
         }
         toku_push_string(C, name);
         toku_call(C, 1, 2); /* call it */
@@ -449,17 +449,17 @@ static void find_loader(toku_State *T, const char *name) {
             return; /* module loader found */
         } else if (toku_is_string(C, -2)) { /* searcher returned error msg? */
             toku_pop(C, 1); /* remove extra return */
-            csL_buff_push_stack(&msg); /* concatenate error message */
+            tokuL_buff_push_stack(&msg); /* concatenate error message */
         } else { /* no error message */
             toku_pop(C, 2); /* remove both returns */
-            csL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
+            tokuL_buffsub(&msg, PREFIX_LEN); /* remove prefix */
         }
     }
 }
 
 
 static int l_import(toku_State *T) {
-    const char *name = csL_check_string(C, 0);
+    const char *name = tokuL_check_string(C, 0);
     toku_setntop(C, 1); /* __LOADED table will be at index 1 */
     toku_get_cfieldstr(C, toku_LOADED_TABLE); /* get __LOADED table */
     toku_get_fieldstr(C, 1, name); /* get __LOADED[name] */
@@ -488,7 +488,7 @@ static int l_import(toku_State *T) {
 }
 
 
-static const csL_Entry load_funcs[] = {
+static const tokuL_Entry load_funcs[] = {
     {"import", l_import},
     {NULL, NULL}
 };
@@ -550,7 +550,7 @@ static void create_clibs_userdata(toku_State *T) {
 static int load_func(toku_State *T, const char *filename, const char *modname) {
     const char *openfunc;
     const char *mark;
-    modname = csL_gsub(C, modname, ".", TOKU_OFSEP);
+    modname = tokuL_gsub(C, modname, ".", TOKU_OFSEP);
     mark = strchr(modname, *TOKU_IGMARK);
     if (mark) { /* have '-' (ignore mark)? */
         openfunc = toku_push_lstring(C, modname, mark - modname);
@@ -562,7 +562,7 @@ static int load_func(toku_State *T, const char *filename, const char *modname) {
 
 
 static int searcher_C(toku_State *T) {
-    const char *name = csL_check_string(C, 0);
+    const char *name = tokuL_check_string(C, 0);
     const char *filename = find_file(C, name, "cpath", TOKU_DIRSEP);
     if (filename == NULL) return 1;  /* module not found in this path */
     return check_load(C, (load_func(C, filename, name) == 0), filename);
@@ -571,7 +571,7 @@ static int searcher_C(toku_State *T) {
 
 static int searcher_Croot(toku_State *T) {
     const char *filename;
-    const char *name = csL_check_string(C, 0);
+    const char *name = tokuL_check_string(C, 0);
     const char *p = strchr(name, '.');
     int res;
     if (p == NULL) return 0; /* is root */
@@ -650,18 +650,18 @@ static void setpath(toku_State *T, const char *fieldname, const char *envname,
         toku_push_string(C, path); /* nothing to change */
     else { /* path contains a ";;": insert default path in its place */
         size_t len = strlen(path);
-        csL_Buffer b;
-        csL_buff_init(C, &b);
+        tokuL_Buffer b;
+        tokuL_buff_init(C, &b);
         if (path < dfltmark) { /* is there a prefix before ';;'? */
-            csL_buff_push_lstring(&b, path, dfltmark - path); /* add it */
-            csL_buff_push(&b, *TOKU_PATH_SEP);
+            tokuL_buff_push_lstring(&b, path, dfltmark - path); /* add it */
+            tokuL_buff_push(&b, *TOKU_PATH_SEP);
         }
-        csL_buff_push_string(&b, dflt); /* add default */
+        tokuL_buff_push_string(&b, dflt); /* add default */
         if (dfltmark < path + len - 2) { /* is there a suffix after ';;'? */
-            csL_buff_push(&b, *TOKU_PATH_SEP);
-            csL_buff_push_lstring(&b, dfltmark+2, (path+len-2)-dfltmark);
+            tokuL_buff_push(&b, *TOKU_PATH_SEP);
+            tokuL_buff_push_lstring(&b, dfltmark+2, (path+len-2)-dfltmark);
         }
-        csL_buff_end(&b);
+        tokuL_buff_end(&b);
     }
     setprogdir(C);
     toku_set_fieldstr(C, -3, fieldname); /* package[fieldname] = path value */
@@ -671,7 +671,7 @@ static void setpath(toku_State *T, const char *fieldname, const char *envname,
 
 CSMOD_API int tokuopen_package(toku_State *T) {
     create_clibs_userdata(C); /* create clibs userdata */
-    csL_push_lib(C, pkg_funcs); /* create 'package' table */
+    tokuL_push_lib(C, pkg_funcs); /* create 'package' table */
     create_searchers_array(C); /* set 'package.searchers' */
     setpath(C, "path", TOKU_PATH_VAR, TOKU_PATH_DEFAULT); /* 'package.path' */
     setpath(C, "cpath", TOKU_CPATH_VAR, TOKU_CPATH_DEFAULT); /* 'package.cpath' */
@@ -680,14 +680,14 @@ CSMOD_API int tokuopen_package(toku_State *T) {
                        TOKU_EXEC_DIR "\n" TOKU_IGMARK "\n");
     toku_set_fieldstr(C, -2, "config");
     /* ctable[__LOADED] = table */
-    csL_get_subtable(C, TOKU_CTABLE_INDEX, TOKU_LOADED_TABLE);
+    tokuL_get_subtable(C, TOKU_CTABLE_INDEX, TOKU_LOADED_TABLE);
     toku_set_fieldstr(C, -2, "loaded"); /* 'package.loaded' = __LOADED */
     /* ctable[__PRELOAD] = table */
-    csL_get_subtable(C, TOKU_CTABLE_INDEX, TOKU_PRELOAD_TABLE);
+    tokuL_get_subtable(C, TOKU_CTABLE_INDEX, TOKU_PRELOAD_TABLE);
     toku_set_fieldstr(C, -2, "preload"); /* 'package.preload' = __PRELOAD */
     toku_push_globaltable(C); /* open library into global table */
     toku_push(C, -2); /* set 'package' as upvalue for next lib */
-    csL_set_funcs(C, load_funcs, 1);
+    tokuL_set_funcs(C, load_funcs, 1);
     toku_pop(C, 1); /* pop global table */
     return 1; /* return 'package' table */
 }

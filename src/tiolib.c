@@ -65,7 +65,7 @@ static int checkmode(const char *mode) {
 
 /* ISO C definition */
 #define t_popen(C,c,m) \
-        ((void)c, (void)m, csL_error(C, "'popen' not supported"), (FILE*)0)
+        ((void)c, (void)m, tokuL_error(C, "'popen' not supported"), (FILE*)0)
 #define t_pclose(C,file)    ((void)C, (void)file, -1)
 
 #endif                          /* } */
@@ -141,10 +141,10 @@ static int checkmode(const char *mode) {
 #define IO_OUTPUT	(IO_PREFIX "stdout")
 
 
-typedef csL_Stream CStream;
+typedef tokuL_Stream CStream;
 
 
-#define tocstream(C)    ((CStream *)csL_check_userdata(C, 0, TOKU_FILEHANDLE))
+#define tocstream(C)    ((CStream *)tokuL_check_userdata(C, 0, TOKU_FILEHANDLE))
 
 #define isclosed(p)     ((p)->closef == NULL)
 #define markclosed(p)   ((p)->closef = NULL)
@@ -155,7 +155,7 @@ typedef csL_Stream CStream;
 static FILE *tofile(toku_State *T) {
     CStream *p = tocstream(C);
     if (t_unlikely(isclosed(p)))
-        csL_error(C, "attempt to use a closed file");
+        tokuL_error(C, "attempt to use a closed file");
     toku_assert(p->f);
     return p->f;
 }
@@ -170,8 +170,8 @@ static FILE *tofile(toku_State *T) {
 static CStream *new_cstream(toku_State *T) {
     CStream *p = (CStream *)toku_push_userdata(C, sizeof(CStream), 0);
     p->closef = NULL; /* mark as closed */
-    csL_set_usermethods(C, TOKU_FILEHANDLE_METHODS);
-    csL_set_metalist(C, TOKU_FILEHANDLE);
+    tokuL_set_usermethods(C, TOKU_FILEHANDLE_METHODS);
+    tokuL_set_metalist(C, TOKU_FILEHANDLE);
     return p;
 }
 
@@ -195,7 +195,7 @@ static int f_gc(toku_State *T) {
 static int closef(toku_State *T) {
     CStream *p = tocstream(C);
     errno = 0; /* reset errno */
-    return csL_fileresult(C, (fclose(p->f) == 0), NULL);
+    return tokuL_fileresult(C, (fclose(p->f) == 0), NULL);
 }
 
 
@@ -212,18 +212,18 @@ static void open_and_check(toku_State *T, const char *fname, const char *mode) {
     CStream *p = new_file(C);
     p->f = fopen(fname, mode);
     if (t_unlikely(p->f == NULL))
-        csL_error(C, "cannot open file '%s' (%s)", fname, strerror(errno));
+        tokuL_error(C, "cannot open file '%s' (%s)", fname, strerror(errno));
 }
 
 
 static int io_open(toku_State *T) {
-    const char *fname = csL_check_string(C, 0);
-    const char *mode = csL_opt_string(C, 1, "r");
+    const char *fname = tokuL_check_string(C, 0);
+    const char *mode = tokuL_opt_string(C, 1, "r");
     CStream *p = new_file(C);
-    csL_check_arg(C, checkmode(mode), 1, "invalid mode");
+    tokuL_check_arg(C, checkmode(mode), 1, "invalid mode");
     errno = 0;
     p->f = fopen(fname, mode);
-    return (p->f == NULL) ? csL_fileresult(C, 0, fname) : 1;
+    return (p->f == NULL) ? tokuL_fileresult(C, 0, fname) : 1;
 }
 
 
@@ -243,7 +243,7 @@ static FILE *getiofile(toku_State *T, const char *fname) {
     toku_get_cfieldstr(C, fname);
     p = (CStream *)toku_to_userdata(C, -1);
     if (t_unlikely(isclosed(p)))
-        csL_error(C, "default %s file is closed", fname + IOPREF_LEN);
+        tokuL_error(C, "default %s file is closed", fname + IOPREF_LEN);
     return p->f;
 }
 
@@ -251,7 +251,7 @@ static FILE *getiofile(toku_State *T, const char *fname) {
 static int io_flush(toku_State *T) {
     FILE *f = getiofile(C, IO_OUTPUT);
     errno = 0;
-    return csL_fileresult(C, fflush(f) == 0, NULL);
+    return tokuL_fileresult(C, fflush(f) == 0, NULL);
 }
 
 
@@ -286,19 +286,19 @@ static int io_output(toku_State *T) {
 static int io_pclose(toku_State *T) {
     CStream *p = tocstream(C);
     errno = 0;
-    return csL_execresult(C, t_pclose(C, p->f));
+    return tokuL_execresult(C, t_pclose(C, p->f));
 }
 
 
 static int io_popen(toku_State *T) {
-    const char *cmd = csL_check_string(C, 0);
-    const char *mode = csL_opt_string(C, 1, "r");
+    const char *cmd = tokuL_check_string(C, 0);
+    const char *mode = tokuL_opt_string(C, 1, "r");
     CStream *p = new_cstream(C);
-    csL_check_arg(C, t_checkmodep(mode), 1, "invalid mode");
+    tokuL_check_arg(C, t_checkmodep(mode), 1, "invalid mode");
     errno = 0;
     p->f = t_popen(C, cmd, mode);
     p->closef = &io_pclose;
-    return (p->f == NULL) ? csL_fileresult(C, 0, cmd) : 1;
+    return (p->f == NULL) ? tokuL_fileresult(C, 0, cmd) : 1;
 }
 
 
@@ -306,16 +306,16 @@ static int io_tmpfile(toku_State *T) {
     CStream *p = new_file(C);
     errno = 0;
     p->f = tmpfile();
-    return (p->f == NULL) ? csL_fileresult(C, 0, NULL) : 1;
+    return (p->f == NULL) ? tokuL_fileresult(C, 0, NULL) : 1;
 }
 
 
 static int io_type(toku_State *T) {
     CStream *p;
-    csL_check_any(C, 0);
-    p = (CStream *)csL_test_userdata(C, 0, TOKU_FILEHANDLE);
+    tokuL_check_any(C, 0);
+    p = (CStream *)tokuL_test_userdata(C, 0, TOKU_FILEHANDLE);
     if (p == NULL) /* not a file? */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     else if (isclosed(p)) /* closed file? */
         toku_push_literal(C, "closed file");
     else /* open file */
@@ -346,7 +346,7 @@ static int iter_readline(toku_State *T);
 */
 static void aux_lines(toku_State *T, int toclose) {
     int n = toku_getntop(C) - 1;
-    csL_check_arg(C, n <= MAXARGLINE, MAXARGLINE + 1, "too many arguments");
+    tokuL_check_arg(C, n <= MAXARGLINE, MAXARGLINE + 1, "too many arguments");
     toku_push(C, 0); /* file */
     toku_push_integer(C, n); /* number of arguments to read */
     toku_push_bool(C, toclose); /* to (not)close file when finished */
@@ -369,7 +369,7 @@ static int io_lines(toku_State *T) {
         tofile(C); /* check that it's a valid file handle */
         toclose = 0; /* do not close it after iteration */
     } else { /* open a new file */
-        const char *fname = csL_check_string(C, 0);
+        const char *fname = tokuL_check_string(C, 0);
         open_and_check(C, fname, "r");
         toku_replace(C, 0); /* put file at index 0 */
         toclose = 1; /* close it after iteration */
@@ -531,21 +531,21 @@ static int test_eof(toku_State *T, FILE *f) {
 
 
 static int read_line(toku_State *T, FILE *f, int chop) {
-    csL_Buffer b;
+    tokuL_Buffer b;
     int c;
-    csL_buff_init(C, &b);
+    tokuL_buff_init(C, &b);
     do { /* may need to read several chunks to get whole line */
-        char *buff = csL_buff_prep(&b); /* preallocate buffer space */
+        char *buff = tokuL_buff_prep(&b); /* preallocate buffer space */
         int i = 0;
         t_lockfile(f); /* no memory errors can happen inside the lock */
         while (i < CSL_BUFFERSIZE && (c = t_getc(f)) != EOF && c != '\n')
             buff[i++] = c;/* read up to end of line or buffer limit */
         t_unlockfile(f);
-        csL_buffadd(&b, i);
+        tokuL_buffadd(&b, i);
     } while (c != EOF && c != '\n'); /* repeat until end of line */
     if (!chop && c == '\n') /* want a newline and have one? */
-        csL_buff_push(&b, c); /* add ending newline to result */
-    csL_buff_end(&b); /* close buffer */
+        tokuL_buff_push(&b, c); /* add ending newline to result */
+    tokuL_buff_end(&b); /* close buffer */
     /* return ok if read something (either a newline or something else) */
     return (c == '\n' || toku_len(C, -1) > 0);
 }
@@ -553,26 +553,26 @@ static int read_line(toku_State *T, FILE *f, int chop) {
 
 static void read_all(toku_State *T, FILE *f) {
     size_t nr;
-    csL_Buffer b;
-    csL_buff_init(C, &b);
+    tokuL_Buffer b;
+    tokuL_buff_init(C, &b);
     do { /* read file in chunks of CSL_BUFFERSIZE bytes */
-        char *p = csL_buff_prep(&b);
+        char *p = tokuL_buff_prep(&b);
         nr = fread(p, sizeof(char), CSL_BUFFERSIZE, f);
-        csL_buffadd(&b, nr);
+        tokuL_buffadd(&b, nr);
     } while (nr == CSL_BUFFERSIZE);
-    csL_buff_end(&b); /* close buffer */
+    tokuL_buff_end(&b); /* close buffer */
 }
 
 
 static int read_chars(toku_State *T, FILE *f, size_t n) {
     size_t nr; /* number of chars actually read */
     char *p;
-    csL_Buffer b;
-    csL_buff_init(C, &b);
-    p = csL_buff_ensure(&b, n); /* prepare buffer to read whole block */
+    tokuL_Buffer b;
+    tokuL_buff_init(C, &b);
+    p = tokuL_buff_ensure(&b, n); /* prepare buffer to read whole block */
     nr = fread(p, sizeof(char), n, f); /* try to read 'n' chars */
-    csL_buffadd(&b, nr);
-    csL_buff_end(&b); /* close buffer */
+    tokuL_buffadd(&b, nr);
+    tokuL_buff_end(&b); /* close buffer */
     return (nr > 0); /* true if read something */
 }
 
@@ -587,34 +587,34 @@ static int aux_read(toku_State *T, FILE *f, int first) {
         n = first + 1; /* return 1 result */
     } else {
         /* ensure stack space for all results and for auxlib's buffer */
-        csL_check_stack(C, nargs + TOKU_MINSTACK, "too many arguments");
+        tokuL_check_stack(C, nargs + TOKU_MINSTACK, "too many arguments");
         success = 1;
         for (n = first; nargs-- && success; n++) {
             if (toku_type(C, n) == TOKU_T_NUMBER) {
-                size_t l = csL_check_integer(C, n);
+                size_t l = tokuL_check_integer(C, n);
                 success = (l == 0) ? test_eof(C, f) : read_chars(C, f, l);
             } else {
                 size_t lp;
-                const char *p = csL_check_lstring(C, n, &lp);
+                const char *p = tokuL_check_lstring(C, n, &lp);
                 if (t_unlikely(lp > 1))
-                    return csL_error_arg(C, n, "format string too long");
+                    return tokuL_error_arg(C, n, "format string too long");
                 else {
                     switch (*p) {
                         case 'n': success = read_number(C, f); break;
                         case 'l': success = read_line(C, f, 1); break;
                         case 'L': success = read_line(C, f, 0); break;
                         case 'a': read_all(C, f); success = 1; break;
-                        default: return csL_error_arg(C, n, "invalid format");
+                        default: return tokuL_error_arg(C, n, "invalid format");
                     }
                 }
             }
         }
     }
     if (ferror(f))
-        return csL_fileresult(C, 0, NULL);
+        return tokuL_fileresult(C, 0, NULL);
     if (!success) {
         toku_pop(C, 1); /* remove last result */
-        csL_push_fail(C); /* push nil instead */
+        tokuL_push_fail(C); /* push nil instead */
     }
     return n - first;
 }
@@ -632,9 +632,9 @@ static int iter_readline(toku_State *T) {
     int n = toku_to_integer(C, toku_upvalueindex(1));
     int i;
     if (isclosed(p)) /* file is already closed? */
-        return csL_error(C, "file is already closed");
+        return tokuL_error(C, "file is already closed");
     toku_setntop(C, 1);
-    csL_check_stack(C, n, "too many arguments");
+    tokuL_check_stack(C, n, "too many arguments");
     for (i = 1; i <= n; i++) /* push arguments to 'aux_read' */
         toku_push(C, toku_upvalueindex(2 + i));
     n = aux_read(C, p->f, 1); /* 'n' is number of results */
@@ -644,7 +644,7 @@ static int iter_readline(toku_State *T) {
     else { /* first result is false: EOF or error */
         if (n > 1) { /* is there error information? */
             /* 2nd result is error message */
-            return csL_error(C, "%s", toku_to_string(C, -n + 1));
+            return tokuL_error(C, "%s", toku_to_string(C, -n + 1));
         }
         if (toku_to_bool(C, toku_upvalueindex(2))) { /* generator created file? */
             toku_setntop(C, 0); /* clear stack */
@@ -670,14 +670,14 @@ static int aux_write(toku_State *T, FILE *f, int arg) {
             status = status && (len > 0);
         } else { /* string */
             size_t l;
-            const char *s = csL_check_lstring(C, arg, &l);
+            const char *s = tokuL_check_lstring(C, arg, &l);
             status = status && (fwrite(s, sizeof(char), l, f) == l);
         }
     }
     if (t_likely(status))
         return 1; /* file handle already on stack top */
     else
-        return csL_fileresult(C, status, NULL);
+        return tokuL_fileresult(C, status, NULL);
 }
 
 
@@ -688,7 +688,7 @@ static int io_write(toku_State *T) {
 
 
 /* function for 'io' library */
-static const csL_Entry iolib[] = {
+static const tokuL_Entry iolib[] = {
     {"open", io_open},
     {"close", io_close},
     {"flush", io_flush},
@@ -727,7 +727,7 @@ static int f_lines(toku_State *T) {
 static int f_flush(toku_State *T) {
     FILE *f = tofile(C);
     errno = 0;
-    return csL_fileresult(C, fflush(f) == 0, NULL);
+    return tokuL_fileresult(C, fflush(f) == 0, NULL);
 }
 
 
@@ -735,11 +735,11 @@ static int f_seek(toku_State *T) {
     static const int whence[] = { SEEK_SET, SEEK_CUR, SEEK_END };
     static const char *whence_names[] = { "set", "cur", "end", NULL };
     FILE *f = tofile(C);
-    int opt = csL_check_option(C, 1, "cur", whence_names);
-    t_seeknum offset = (t_seeknum)csL_opt_integer(C, 2, 0);
+    int opt = tokuL_check_option(C, 1, "cur", whence_names);
+    t_seeknum offset = (t_seeknum)tokuL_opt_integer(C, 2, 0);
     int res = fseek(f, offset, whence[opt]);
     if (t_unlikely(res))
-        return csL_fileresult(C, 0, NULL); /* error */
+        return tokuL_fileresult(C, 0, NULL); /* error */
     else {
         /* 't_ftell' shouldn't fail as 'fseek' was successful */
         toku_push_integer(C, (toku_Integer)t_ftell(f));
@@ -758,15 +758,15 @@ static int f_setvbuf(toku_State *T) {
     static const int modes[] = { _IONBF, _IOLBF, _IOFBF };
     static const char *mode_names[] = { "no", "line", "full", NULL };
     FILE *f = tofile(C);
-    int opt = csL_check_option(C, 1, NULL, mode_names);
-    toku_Integer sz = csL_opt_integer(C, 2, CSL_BUFFERSIZE);
+    int opt = tokuL_check_option(C, 1, NULL, mode_names);
+    toku_Integer sz = tokuL_opt_integer(C, 2, CSL_BUFFERSIZE);
     int res = setvbuf(f, NULL, modes[opt], (size_t)sz);
-    return csL_fileresult(C, (res == 0), NULL);
+    return tokuL_fileresult(C, (res == 0), NULL);
 }
 
 
 /* methods for file handles */
-static const csL_Entry f_methods[] = {
+static const tokuL_Entry f_methods[] = {
     {"read", f_read},
     {"write", f_write},
     {"lines", f_lines},
@@ -779,7 +779,7 @@ static const csL_Entry f_methods[] = {
 
 
 static void create_filehandle_methods(toku_State *T) {
-    csL_push_methods(C, TOKU_FILEHANDLE_METHODS, f_methods);
+    tokuL_push_methods(C, TOKU_FILEHANDLE_METHODS, f_methods);
     toku_pop(C, 1); /* remove methods table */
 }
 
@@ -801,7 +801,7 @@ static int f_tostring(toku_State *T) {
 }
 
 
-static const csL_MetaEntry f_meta[] = {
+static const tokuL_MetaEntry f_meta[] = {
     {TOKU_MT_GETIDX, f_getidx},
     {TOKU_MT_GC, f_gc},
     {TOKU_MT_CLOSE, f_gc},
@@ -812,7 +812,7 @@ static const csL_MetaEntry f_meta[] = {
 
 
 static void create_filehandle_metalist(toku_State *T) {
-    csL_push_metalist(C, TOKU_FILEHANDLE, f_meta);
+    tokuL_push_metalist(C, TOKU_FILEHANDLE, f_meta);
     toku_push_literal(C, TOKU_FILEHANDLE);
     toku_set_index(C, -2, TOKU_MT_NAME); /* set __name */
     toku_pop(C, 1); /* remove metalist */
@@ -825,7 +825,7 @@ static void create_filehandle_metalist(toku_State *T) {
 static int io_noclose(toku_State *T) {
     CStream *p = tocstream(C);
     p->closef = &io_noclose; /* keep file opened */
-    csL_push_fail(C);
+    tokuL_push_fail(C);
     toku_push_literal(C, "cannot close standard file");
     return 2;
 }
@@ -845,7 +845,7 @@ static void create_stdfile(toku_State *T, FILE *f, const char *k,
 
 
 CSMOD_API int tokuopen_io(toku_State *T) {
-    csL_push_lib(C, iolib); /* 'io' table */
+    tokuL_push_lib(C, iolib); /* 'io' table */
     create_filehandle_methods(C);
     create_filehandle_metalist(C);
     /* create (and set) default files */

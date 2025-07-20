@@ -103,8 +103,8 @@ static const char *skipws(const char *s, size_t *pl, int rev) {
 
 static int split_into_list(toku_State *T, int rev) {
     size_t ls;
-    const char *s = csL_check_lstring(C, 0, &ls); /* string */
-    toku_Integer n = csL_opt_integer(C, 2, TOKU_INTEGER_MAX-1); /* maxsplit */
+    const char *s = tokuL_check_lstring(C, 0, &ls); /* string */
+    toku_Integer n = tokuL_opt_integer(C, 2, TOKU_INTEGER_MAX-1); /* maxsplit */
     int arr = toku_getntop(C);
     int i = 0;
     const char *aux;
@@ -147,7 +147,7 @@ static int split_into_list(toku_State *T, int rev) {
             return 1; /* done */
     } else { /* else split by pattern */
         size_t lpat;
-        const char *pat = csL_check_lstring(C, 1, &lpat);
+        const char *pat = tokuL_check_lstring(C, 1, &lpat);
         const char *e = s+ls;
         toku_push_list(C, 1);
         if (n < 1 || lpat == 0) goto pushs;
@@ -184,10 +184,10 @@ static int s_rsplit(toku_State *T) {
 
 static int s_startswith(toku_State *T) {
     size_t l1, l2, posi, posj;
-    const char *s1 = csL_check_lstring(C, 0, &l1);
-    const char *s2 = csL_check_lstring(C, 1, &l2);
-    toku_Integer i = csL_opt_integer(C, 2, 0);
-    toku_Integer j = csL_opt_integer(C, 3, -1);
+    const char *s1 = tokuL_check_lstring(C, 0, &l1);
+    const char *s2 = tokuL_check_lstring(C, 1, &l2);
+    toku_Integer i = tokuL_opt_integer(C, 2, 0);
+    toku_Integer j = tokuL_opt_integer(C, 3, -1);
     if (j < -(toku_Integer)l1) /* 'j' would be less than 0? */
         goto l_fail; /* empty interval */
     else { /* convert to positions */
@@ -202,12 +202,12 @@ static int s_startswith(toku_State *T) {
         if (k == l2)
             return 1; /* return index after 's2' in 's1' */
         else {
-            csL_push_fail(C);
+            tokuL_push_fail(C);
             toku_insert(C, -2);
         }
     } else {
     l_fail:
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         toku_push_integer(C, -1); /* invalid range */
     }
     return 2; /* return fail and invalid or non-matching index */
@@ -216,16 +216,16 @@ static int s_startswith(toku_State *T) {
 
 static int s_reverse(toku_State *T) {
     size_t l, i;
-    csL_Buffer b;
-    const char *s = csL_check_lstring(C, 0, &l);
+    tokuL_Buffer b;
+    const char *s = tokuL_check_lstring(C, 0, &l);
     if (l > 1) { /* non trivial string? */
-        char *p = csL_buff_initsz(C, &b, l);
+        char *p = tokuL_buff_initsz(C, &b, l);
         char *end = p + l - 1;
         for (i = 0; p < end; i++) {
             *p++ = s[l-i-1];
             *end-- = s[i];
         }
-        csL_buff_endsz(&b, l);
+        tokuL_buff_endsz(&b, l);
     }
     return 1; /* return string */
 }
@@ -233,17 +233,17 @@ static int s_reverse(toku_State *T) {
 
 static int s_repeat(toku_State *T) {
     size_t l, lsep;
-    const char *s = csL_check_lstring(C, 0, &l);
-    toku_Integer n = csL_check_integer(C, 1);
-    const char *sep = csL_opt_lstring(C, 2, "", &lsep);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    toku_Integer n = tokuL_check_integer(C, 1);
+    const char *sep = tokuL_opt_lstring(C, 2, "", &lsep);
     if (t_unlikely(n <= 0))
         toku_push_literal(C, "");
     else if (l+lsep < l || l+lsep > STR_TOKU_MAXSIZE/n)
-        csL_error(C, "resulting string too large");
+        tokuL_error(C, "resulting string too large");
     else {
-        csL_Buffer b;
+        tokuL_Buffer b;
         size_t totalsize = (size_t)n*l + (size_t)(n-1)*lsep;
-        char *p = csL_buff_initsz(C, &b, totalsize);
+        char *p = tokuL_buff_initsz(C, &b, totalsize);
         while (n-- > 1) {
             memcpy(p, s, l*sizeof(char)); p += l;
             if (lsep > 0) { /* branch costs less than empty 'memcpy' copium */
@@ -252,21 +252,21 @@ static int s_repeat(toku_State *T) {
             }
         }
         memcpy(p, s, l*sizeof(char)); /* last copy without separator */
-        csL_buff_endsz(&b, totalsize);
+        tokuL_buff_endsz(&b, totalsize);
     }
     return 1; /* return final string */
 }
 
 
-static void auxjoinstr(csL_Buffer *b, const char *s, size_t l,
+static void auxjoinstr(tokuL_Buffer *b, const char *s, size_t l,
                                       const char *sep, size_t lsep) {
-    csL_buff_push_lstring(b, s, l);
+    tokuL_buff_push_lstring(b, s, l);
     if (lsep > 0) /* non empty separator? */
-        csL_buff_push_lstring(b, sep, lsep);
+        tokuL_buff_push_lstring(b, sep, lsep);
 }
 
 
-static void joinfromtable(toku_State *T, csL_Buffer *b,
+static void joinfromtable(toku_State *T, tokuL_Buffer *b,
                           const char *sep, size_t lsep) {
     toku_push_nil(C);
     while (toku_nextfield(C, 1) != 0) {
@@ -283,7 +283,7 @@ static void joinfromtable(toku_State *T, csL_Buffer *b,
 }
 
 
-static void joinfromlist(toku_State *T, csL_Buffer *b,
+static void joinfromlist(toku_State *T, tokuL_Buffer *b,
                          const char *sep, size_t lsep, int len) {
     int i = toku_find_index(C, 1, 0, 0, --len);
     while (i >= 0) {
@@ -300,21 +300,21 @@ static void joinfromlist(toku_State *T, csL_Buffer *b,
 
 
 static int s_join(toku_State *T) {
-    csL_Buffer b;
+    tokuL_Buffer b;
     size_t lsep;
-    const char *sep = csL_check_lstring(C, 0, &lsep);
+    const char *sep = tokuL_check_lstring(C, 0, &lsep);
     int t = toku_type(C, 1);
-    csL_expect_arg(C, (t == TOKU_T_LIST || t == TOKU_T_TABLE), 1, "list/table");
-    csL_buff_init(C, &b);
+    tokuL_expect_arg(C, (t == TOKU_T_LIST || t == TOKU_T_TABLE), 1, "list/table");
+    tokuL_buff_init(C, &b);
     if (t == TOKU_T_LIST) {
         int len = toku_len(C, 1);
         if (len > 0)
             joinfromlist(C, &b, sep, lsep, len);
     } else
         joinfromtable(C, &b, sep, lsep);
-    if (csL_bufflen(&b) > 0 && lsep > 0) /* buffer has separator? */
-        csL_buffsub(&b, lsep); /* remove it */
-    csL_buff_end(&b);
+    if (tokuL_bufflen(&b) > 0 && lsep > 0) /* buffer has separator? */
+        tokuL_buffsub(&b, lsep); /* remove it */
+    tokuL_buff_end(&b);
     return 1; /* return final string */
 }
 
@@ -375,12 +375,12 @@ static int s_join(toku_State *T) {
 #define MAX_FORMAT	32
 
 
-static void addquoted(csL_Buffer *b, const char *s, size_t len) {
-    csL_buff_push(b, '"');
+static void addquoted(tokuL_Buffer *b, const char *s, size_t len) {
+    tokuL_buff_push(b, '"');
     while (len--) {
         if (*s == '"' || *s == '\\' || *s == '\n') {
-            csL_buff_push(b, '\\');
-            csL_buff_push(b, *s);
+            tokuL_buff_push(b, '\\');
+            tokuL_buff_push(b, *s);
         }
         else if (iscntrl(uchar(*s))) {
             char buff[10];
@@ -388,13 +388,13 @@ static void addquoted(csL_Buffer *b, const char *s, size_t len) {
                 t_snprintf(buff, sizeof(buff), "\\%d", (int)uchar(*s));
             else
                 t_snprintf(buff, sizeof(buff), "\\%03d", (int)uchar(*s));
-            csL_buff_push_string(b, buff);
+            tokuL_buff_push_string(b, buff);
         }
         else
-            csL_buff_push(b, *s);
+            tokuL_buff_push(b, *s);
         s++;
     }
-    csL_buff_push(b, '"');
+    tokuL_buff_push(b, '"');
 }
 
 
@@ -427,7 +427,7 @@ static int quotefloat(toku_State *T, char *buff, toku_Number n) {
 }
 
 
-static void addliteral(toku_State *T, csL_Buffer *b, int arg) {
+static void addliteral(toku_State *T, tokuL_Buffer *b, int arg) {
     switch (toku_type(C, arg)) {
         case TOKU_T_STRING: {
             size_t len;
@@ -436,7 +436,7 @@ static void addliteral(toku_State *T, csL_Buffer *b, int arg) {
             break;
         }
         case TOKU_T_NUMBER: {
-            char *buff = csL_buff_ensure(b, MAX_ITEM);
+            char *buff = tokuL_buff_ensure(b, MAX_ITEM);
             int nb;
             if (!toku_is_integer(C, arg)) /* float? */
                 nb = quotefloat(C, buff, toku_to_number(C, arg));
@@ -447,16 +447,16 @@ static void addliteral(toku_State *T, csL_Buffer *b, int arg) {
                     : TOKU_INTEGER_FMT; /* else use default format */
                 nb = t_snprintf(buff, MAX_ITEM, format, (toku_Integer)n);
             }
-            csL_buffadd(b, nb);
+            tokuL_buffadd(b, nb);
             break;
         }
         case TOKU_T_NIL: case TOKU_T_BOOL: {
-            csL_to_lstring(C, arg, NULL);
-            csL_buff_push_stack(b);
+            tokuL_to_lstring(C, arg, NULL);
+            tokuL_buff_push_stack(b);
             break;
         }
         default:
-            csL_error_arg(C, arg, "value has no literal form");
+            tokuL_error_arg(C, arg, "value has no literal form");
     }
 }
 
@@ -488,7 +488,7 @@ static void checkformat(toku_State *T, const char *form, const char *flags,
         }
     }
     if (!isalpha(uchar(*spec))) /* did not go to the end? */
-        csL_error(C, "invalid conversion specification: '%s'", form);
+        tokuL_error(C, "invalid conversion specification: '%s'", form);
 }
 
 
@@ -502,7 +502,7 @@ static const char *getformat(toku_State *T, const char *strfrmt, char *form) {
     len++;  /* adds following character (should be the specifier) */
     /* still needs space for '%', '\0', plus a length modifier */
     if (len >= MAX_FORMAT - 10)
-        csL_error(C, "invalid format (too long)");
+        tokuL_error(C, "invalid format (too long)");
     *(form++) = '%';
     memcpy(form, strfrmt, len*sizeof(char));
     *(form + len) = '\0';
@@ -528,27 +528,27 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
     int arg = 0;
     const char *efmt = fmt + lfmt;
     const char *flags;
-    csL_Buffer b;
-    csL_buff_init(C, &b);
+    tokuL_Buffer b;
+    tokuL_buff_init(C, &b);
     while (fmt < efmt) {
         if (*fmt != T_FMTC) { /* not % */
-            csL_buff_push(&b, *fmt++);
+            tokuL_buff_push(&b, *fmt++);
             continue;
         } else if (*++fmt == T_FMTC) { /* %% */
-            csL_buff_push(&b, *fmt++);
+            tokuL_buff_push(&b, *fmt++);
             continue;
         } /* else '%' */
         char form[MAX_FORMAT]; /* to store the format ('%...') */
         int maxitem = MAX_ITEM; /* maximum length for the result */
-        char *buff = csL_buff_ensure(&b, maxitem); /* to put result */
+        char *buff = tokuL_buff_ensure(&b, maxitem); /* to put result */
         int nb = 0; /* number of bytes in result */
         if (++arg > top) /* too many format specifiers? */
-            return csL_error_arg(C, arg, "missing format value");
+            return tokuL_error_arg(C, arg, "missing format value");
         fmt = getformat(C, fmt, form);
         switch (*fmt++) {
             case 'c': {
                 checkformat(C, form, T_FMTFLAGSC, 0);
-                nb = t_snprintf(buff, maxitem, form, (int)csL_check_integer(C, arg));
+                nb = t_snprintf(buff, maxitem, form, (int)tokuL_check_integer(C, arg));
                 break;
             }
             case 'd': case 'i':
@@ -560,7 +560,7 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
             case 'o': case 'x': case 'X':
                 flags = T_FMTFLAGSX;
             intcase: {
-                toku_Integer n = csL_check_integer(C, arg);
+                toku_Integer n = tokuL_check_integer(C, arg);
                 checkformat(C, form, flags, 1);
                 addlenmod(form, TOKU_INTEGER_FMTLEN);
                 nb = t_snprintf(buff, maxitem, form, (TOKU_INTEGER)n);
@@ -569,14 +569,14 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
             case 'a': case 'A':
                 checkformat(C, form, T_FMTFLAGSF, 1);
                 addlenmod(form, TOKU_NUMBER_FMTLEN);
-                nb = toku_number2strx(C, buff, maxitem, form, csL_check_number(C, arg));
+                nb = toku_number2strx(C, buff, maxitem, form, tokuL_check_number(C, arg));
                 break;
             case 'f':
                      maxitem = MAX_ITEMF; /* extra space for '%f' */
-                     buff = csL_buff_ensure(&b, maxitem);
+                     buff = tokuL_buff_ensure(&b, maxitem);
                      /* fall through */
             case 'e': case 'E': case 'g': case 'G': {
-                toku_Number n = csL_check_number(C, arg);
+                toku_Number n = tokuL_check_number(C, arg);
                 checkformat(C, form, T_FMTFLAGSF, 1);
                 addlenmod(form, TOKU_NUMBER_FMTLEN);
                 nb = t_snprintf(buff, maxitem, form, (TOKU_NUMBER)n);
@@ -594,44 +594,44 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
             }
             case 'q': {
                 if (form[2] != '\0') /* modifiers? */
-                    return csL_error(C, "specifier '%%q' cannot have modifiers");
+                    return tokuL_error(C, "specifier '%%q' cannot have modifiers");
                 addliteral(C, &b, arg);
                 break;
             }
             case 's': {
                 size_t l;
-                const char *s = csL_to_lstring(C, arg, &l);
+                const char *s = tokuL_to_lstring(C, arg, &l);
                 if (form[2] == '\0') /* no modifiers? */
-                    csL_buff_push_stack(&b); /* keep entire string */
+                    tokuL_buff_push_stack(&b); /* keep entire string */
                 else {
-                    csL_check_arg(C, l == strlen(s), arg, "string contains zeros");
+                    tokuL_check_arg(C, l == strlen(s), arg, "string contains zeros");
                     checkformat(C, form, T_FMTFLAGSC, 1);
                     if (strchr(form, '.') == NULL && l >= 100) {
                         /* no precision and string is too long to be formatted */
-                        csL_buff_push_stack(&b); /* keep entire string */
+                        tokuL_buff_push_stack(&b); /* keep entire string */
                     }
                     else { /* format the string into 'buff' */
                         nb = t_snprintf(buff, maxitem, form, s);
-                        toku_pop(C, 1); /* remove result from 'csL_tolstring' */
+                        toku_pop(C, 1); /* remove result from 'tokuL_tolstring' */
                     }
                 }
                 break;
             }
             default: { /* also treat cases 'pnLlh' */
-                return csL_error(C, "invalid conversion '%s' to 'format'", form);
+                return tokuL_error(C, "invalid conversion '%s' to 'format'", form);
             }
         }
         toku_assert(nb < maxitem);
-        csL_buffadd(&b, nb);
+        tokuL_buffadd(&b, nb);
     }
-    csL_buff_end(&b);
+    tokuL_buff_end(&b);
     return 1; /* return formatted string */
 }
 
 
 static int s_fmt(toku_State *T) {
     size_t lfmt;
-    const char *fmt = csL_check_lstring(C, 0, &lfmt);
+    const char *fmt = tokuL_check_lstring(C, 0, &lfmt);
     if (lfmt == 0) {
         toku_push_literal(C, "");
         return 1;
@@ -644,9 +644,9 @@ static int s_fmt(toku_State *T) {
 
 static int auxtocase(toku_State *T, int (*f)(int c)) {
     size_t l, posi, posj, endpos;
-    const char *s = csL_check_lstring(C, 0, &l);
-    toku_Integer i = csL_opt_integer(C, 1, 0);
-    toku_Integer j = csL_opt_integer(C, 2, -1);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    toku_Integer i = tokuL_opt_integer(C, 1, 0);
+    toku_Integer j = tokuL_opt_integer(C, 2, -1);
     if (j < -(toku_Integer)l) /* 'j' would be less than 0? */
         goto l_done; /* empty interval */
     else { /* convert to positions */
@@ -657,8 +657,8 @@ static int auxtocase(toku_State *T, int (*f)(int c)) {
     if (l == 0 || posj < posi) {
         l_done: toku_push(C, 0);
     } else {
-        csL_Buffer b;
-        char *p = csL_buff_initsz(C, &b, l);
+        tokuL_Buffer b;
+        char *p = tokuL_buff_initsz(C, &b, l);
         memcpy(p, s, posi);
         while (posi < posj) {
             p[posi] = f(s[posi]); posi++;
@@ -666,7 +666,7 @@ static int auxtocase(toku_State *T, int (*f)(int c)) {
         }
         p[posi] = f(s[posi]);
         memcpy(p+endpos, s+endpos, l-endpos);
-        csL_buff_endsz(&b, l);
+        tokuL_buff_endsz(&b, l);
     }
     return 1; /* return final string */
 }
@@ -684,10 +684,10 @@ static int s_tolower(toku_State *T) {
 
 static int auxfind(toku_State *T, int rev) {
     size_t l, lpat, posi, posj;
-    const char *s = csL_check_lstring(C, 0, &l);
-    const char *pat = csL_check_lstring(C, 1, &lpat);
-    toku_Integer i = csL_opt_integer(C, 2, 0);
-    toku_Integer j = csL_opt_integer(C, 3, -1);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    const char *pat = tokuL_check_lstring(C, 1, &lpat);
+    toku_Integer i = tokuL_opt_integer(C, 2, 0);
+    toku_Integer j = tokuL_opt_integer(C, 3, -1);
     if (j < -(toku_Integer)l) /* 'j' would be less than 0? */
         goto l_fail; /* empty interval */
     else { /* convert to positions */
@@ -698,7 +698,7 @@ static int auxfind(toku_State *T, int rev) {
     if (posi <= posj && (p = findstr(s+posi, (posj-posi)+1, pat, lpat, rev)))
         toku_push_integer(C, p-s); /* start index */
     else {
-        l_fail: csL_push_fail(C); /* nothing was found */
+        l_fail: tokuL_push_fail(C); /* nothing was found */
     }
     return 1;
 }
@@ -716,10 +716,10 @@ static int s_rfind(toku_State *T) {
 
 static int aux_span(toku_State *T, int complement) {
     size_t l, lb, posi, posj, startpos;
-    const char *s = csL_check_lstring(C, 0, &l);
-    const char *b = csL_check_lstring(C, 1, &lb);
-    toku_Integer i = csL_opt_integer(C, 2, 0);
-    toku_Integer j = csL_opt_integer(C, 3, -1);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    const char *b = tokuL_check_lstring(C, 1, &lb);
+    toku_Integer i = tokuL_opt_integer(C, 2, 0);
+    toku_Integer j = tokuL_opt_integer(C, 3, -1);
     if (j < -(toku_Integer)l) /* 'j' would be less than 0? */
         goto l_fail; /* empty interval */
     else { /* convert to positions */
@@ -729,7 +729,7 @@ static int aux_span(toku_State *T, int complement) {
     }
     if (posj < posi) { /* empty interval? */
     l_fail:
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         return 1;
     } else if (complement) { /* strcspn */
         if (lb == 0) { /* 'b' is empty string? */
@@ -773,28 +773,28 @@ static int s_cspan(toku_State *T) {
 
 static int s_replace(toku_State *T) {
     size_t l, lpat, lv;
-    const char *s = csL_check_lstring(C, 0, &l);
-    const char *pat = csL_check_lstring(C, 1, &lpat);
-    const char *v = csL_check_lstring(C, 2, &lv);
-    toku_Integer n = csL_opt_integer(C, 3, TOKU_INTEGER_MAX);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    const char *pat = tokuL_check_lstring(C, 1, &lpat);
+    const char *v = tokuL_check_lstring(C, 2, &lv);
+    toku_Integer n = tokuL_opt_integer(C, 3, TOKU_INTEGER_MAX);
     if (n <= 0) /* no replacements? */
         toku_push(C, 0); /* return original string */
     else if (lpat == 0) /* pattern is empty string? */
         toku_push_lstring(C, v, lv); /* return replacement string */
     else {
-        csL_Buffer b;
+        tokuL_Buffer b;
         const char *p;
-        csL_buff_init(C, &b);
+        tokuL_buff_init(C, &b);
         while (n > 0 && (p = findstr(s, l, pat, lpat, 0))) {
             size_t sz = p - s;
-            csL_buff_push_lstring(&b, s, sz); /* push prefix */
-            csL_buff_push_lstring(&b, v, lv); /* push replacement text */
+            tokuL_buff_push_lstring(&b, s, sz); /* push prefix */
+            tokuL_buff_push_lstring(&b, v, lv); /* push replacement text */
             l -= sz + lpat; /* subtract prefix and pattern length */
             s = p + lpat; /* go after the pattern */
             n--; /* one less replacement to do */
         }
-        csL_buff_push_lstring(&b, s, l); /* push remaining string */
-        csL_buff_end(&b);
+        tokuL_buff_push_lstring(&b, s, l); /* push remaining string */
+        tokuL_buff_end(&b);
     }
     return 1; /* return final string */
 }
@@ -803,9 +803,9 @@ static int s_replace(toku_State *T) {
 // TODO: update docs
 static int s_substr(toku_State *T) {
     size_t l, posi, posj;
-    const char *s = csL_check_lstring(C, 0, &l);
-    toku_Integer i = csL_opt_integer(C, 1, 0);
-    toku_Integer j = csL_opt_integer(C, 2, -1);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    toku_Integer i = tokuL_opt_integer(C, 1, 0);
+    toku_Integer j = tokuL_opt_integer(C, 2, -1);
     if (toku_to_bool(C, 3)) { /* positions must be absolute? */
         if (!(i < 0 || j < 0 || j < i))
             posi = i, posj = j;
@@ -862,22 +862,22 @@ static void auxlowercase(char *d, const char *s, size_t posi, size_t posj) {
 
 static int auxcase(toku_State *T, void (*f)(char*,const char*,size_t,size_t)) {
     size_t l;
-    const char *s = csL_check_lstring(C, 0, &l);
-    toku_Integer i = csL_opt_integer(C, 1, 0);
-    toku_Integer j = csL_opt_integer(C, 2, -1);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    toku_Integer i = tokuL_opt_integer(C, 1, 0);
+    toku_Integer j = tokuL_opt_integer(C, 2, -1);
     if (j >= -(toku_Integer)l) { /* 'j' would be greater than 0? */
         size_t posi = posrelStart(i, l);
         size_t posj = posrelEnd(j, l);
         if (posj < posi || l == 0) /* empty interval or empty string */
             goto l_empty;
         else { /* otherwise build the new string */
-            csL_Buffer b;
-            char *p = csL_buff_initsz(C, &b, l);
+            tokuL_Buffer b;
+            char *p = tokuL_buff_initsz(C, &b, l);
             memcpy(p, s, posi);
             f(p, s, posi, posj);
             posj++; /* go past the last index that was swapped */
             memcpy(p+posj, s+posj, l-posj);
-            csL_buff_endsz(&b, l);
+            tokuL_buff_endsz(&b, l);
         }
     } else { /* otherwise 'j' would be less than 0 */
         l_empty: toku_push(C, 0); /* get original string */
@@ -916,7 +916,7 @@ static int getbytes_list(toku_State *T, const char *s, size_t posi, size_t posj)
 
 static int getbytes_bytes(toku_State *T, const char *s, size_t posi, size_t posj) {
     int n = cast_int(posj - posi) + 1;
-    csL_check_stack(C, n, strtoolong);
+    tokuL_check_stack(C, n, strtoolong);
     for (int k = 0; k < n; k++) pushbyte(C, s, posi, k);
     return n; /* return 'n' bytes */
 }
@@ -924,11 +924,11 @@ static int getbytes_bytes(toku_State *T, const char *s, size_t posi, size_t posj
 
 static int auxgetbytes(toku_State *T, int pack) {
     size_t l;
-    const char *s = csL_check_lstring(C, 0, &l);
-    toku_Integer i = csL_opt_integer(C, 1, 0);
+    const char *s = tokuL_check_lstring(C, 0, &l);
+    toku_Integer i = tokuL_opt_integer(C, 1, 0);
     toku_Integer j;
     if (!toku_is_noneornil(C, 2)) /* have ending position? */
-        j = csL_check_integer(C, 2); /* get it */
+        j = tokuL_check_integer(C, 2); /* get it */
     else { /* no ending position, set default one */
         if (!pack) { /* not packing bytes into list? */
             if (i < -(toku_Integer)l) /* 'i' would be less than 0? */
@@ -947,7 +947,7 @@ static int auxgetbytes(toku_State *T, int pack) {
             if (posj >= posi) { /* non-empty interval? */
                 if (t_unlikely((posj-posi)+1 <= (posj-posi) ||
                             cast_sizet(TOKU_MAXINT) <= (posj-posi)+1))
-                    return csL_error(C, strtoolong);
+                    return tokuL_error(C, strtoolong);
                 else if (pack) /* pack bytes into a list? */
                     return getbytes_list(C, s, posi, posj);
                 else /* otherwise get bytes by pushing them on stack */
@@ -973,14 +973,14 @@ static int s_bytes(toku_State *T) {
 static int s_char(toku_State *T) {
     int n = toku_getntop(C); /* number of arguments */
     if (n > 0) { /* have at least 1 argument? */
-        csL_Buffer b;
-        char *p = csL_buff_initsz(C, &b, cast_uint(n));
+        tokuL_Buffer b;
+        char *p = tokuL_buff_initsz(C, &b, cast_uint(n));
         for (int i=0; i<n; i++) {
-            toku_Unsigned c = (toku_Unsigned)csL_check_integer(C, i);
-            csL_check_arg(C, c <= (toku_Unsigned)UCHAR_MAX, i, "value out of range");
+            toku_Unsigned c = (toku_Unsigned)tokuL_check_integer(C, i);
+            tokuL_check_arg(C, c <= (toku_Unsigned)UCHAR_MAX, i, "value out of range");
             p[i] = cast_char(uchar(c));
         }
-        csL_buff_endsz(&b, cast_uint(n));
+        tokuL_buff_endsz(&b, cast_uint(n));
     } else /* otherwise no arguments were provided */
         toku_push_literal(C, ""); /* push empty string (a bit faster) */
     return 1;
@@ -991,8 +991,8 @@ static int s_char(toku_State *T) {
 static int s_cmp(toku_State *T) {
     int res;
     size_t l1, l2;
-    const char *s1 = csL_check_lstring(C, 0, &l1);
-    const char *s2 = csL_check_lstring(C, 1, &l2);
+    const char *s1 = tokuL_check_lstring(C, 0, &l1);
+    const char *s2 = tokuL_check_lstring(C, 1, &l2);
     size_t i = 0;
     if (l2 > l1) l1 = l2;
     while (l1-- && uchar(s1[i]) == uchar(s2[i])) i++;
@@ -1006,7 +1006,7 @@ static int s_cmp(toku_State *T) {
 }
 
 
-static const csL_Entry strlib[] = {
+static const tokuL_Entry strlib[] = {
     {"split", s_split},
     {"rsplit", s_rsplit},
     {"startswith", s_startswith},
@@ -1071,7 +1071,7 @@ static void set_string_bytes(toku_State *T) {
 
 
 CSMOD_API int tokuopen_string(toku_State *T) {
-    csL_push_lib(C, strlib);
+    tokuL_push_lib(C, strlib);
     set_string_bytes(C);
     return 1;
 }

@@ -28,7 +28,7 @@
 #define CACHEINDEX  1
 
 
-/* repeated error message when cloning objects (for 'csL_check_stack') */
+/* repeated error message when cloning objects (for 'tokuL_check_stack') */
 static const char *errclone = "too many values to clone";
 
 
@@ -81,7 +81,7 @@ static void clonelist(toku_State *T, int index) {
     int absi; /* absolute index of list value */
     toku_Integer l;
     toku_assert(CACHEINDEX < index);
-    csL_check_stack(C, 4, errclone); /* list+value+cache */
+    tokuL_check_stack(C, 4, errclone); /* list+value+cache */
     l = toku_len(C, index);
     toku_push_list(C, cast_int(l));
     absi = toku_getntop(C);
@@ -96,7 +96,7 @@ static void clonelist(toku_State *T, int index) {
 static void clonetable(toku_State *T, int index) {
     int absi; /* absolute index for table key */
     toku_assert(CACHEINDEX < index);
-    csL_check_stack(C, 6, errclone); /* table+2xkey+value+cache */
+    tokuL_check_stack(C, 6, errclone); /* table+2xkey+value+cache */
     toku_push_table(C, cast_int(toku_len(C, index)));
     toku_push_nil(C); /* initial key for 'toku_nextfield' */
     absi = toku_gettop(C);
@@ -149,7 +149,7 @@ static void clonesuperclass(toku_State *T, int index) {
 
 static void cloneclass(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
-    csL_check_stack(C, 4, errclone); /* class+(list/table/superclass)+cache */
+    tokuL_check_stack(C, 4, errclone); /* class+(list/table/superclass)+cache */
     toku_push_class(C);
     clonemetalist(C, index);
     clonemethods(C, index);
@@ -172,7 +172,7 @@ static void cloneuserdata(toku_State *T, int index) {
     void *p;
     t_uint nuv = toku_numuservalues(C, check_exp(CACHEINDEX < index, index));
     size_t size = toku_lenudata(C, index);
-    csL_check_stack(C, 5, errclone); /* udata+(mlist/methods/2xudval)+cache */
+    tokuL_check_stack(C, 5, errclone); /* udata+(mlist/methods/2xudval)+cache */
     p = toku_push_userdata(C, size, nuv);
     memcpy(p, toku_to_userdata(C, index), size);
     clonemethods(C, index);
@@ -185,7 +185,7 @@ static void cloneuserdata(toku_State *T, int index) {
 
 static void cloneinstance(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
-    csL_check_stack(C, 4, errclone); /* ins+class+cache */
+    tokuL_check_stack(C, 4, errclone); /* ins+class+cache */
     toku_get_class(C, index);
     if (!checkcachetop(C))
         cloneclass(C, toku_gettop(C));
@@ -204,7 +204,7 @@ static void cloneinstance(toku_State *T, int index) {
 static void clonebmethod(toku_State *T, int index) {
     int type;
     toku_assert(CACHEINDEX < index);
-    csL_check_stack(C, 5, errclone); /* bmethod+self+method+cache */
+    tokuL_check_stack(C, 5, errclone); /* bmethod+self+method+cache */
     type = toku_get_self(C, index);
     if (!checkcachetop(C)) {
         if (type == TOKU_T_USERDATA) /* self is userdata? */
@@ -257,7 +257,7 @@ static void auxclone(toku_State *T, int t, int index) {
 
 // TODO: add docs
 static int b_clone(toku_State *T) {
-    csL_check_any(C, 0);
+    tokuL_check_any(C, 0);
     toku_setntop(C, 1); /* leave only object to copy on top */
     toku_push_table(C, 0); /* push cache table */
     toku_push(C, 0); /* copy of value to clone */
@@ -269,10 +269,10 @@ static int b_clone(toku_State *T) {
 
 
 static int b_error(toku_State *T) {
-    int level = csL_opt_integer(C, 1, 1);
+    int level = tokuL_opt_integer(C, 1, 1);
     toku_setntop(C, 1); /* leave only message on top */
     if (toku_type(C, 0) == TOKU_T_STRING && level >= 0) {
-        csL_where(C, level); /* push extra information */
+        tokuL_where(C, level); /* push extra information */
         toku_push(C, 0); /* push original error message... */
         toku_concat(C, 2); /* ...and concatenate it with extra information */
         /* error message with extra information is now on top */
@@ -285,7 +285,7 @@ static int b_assert(toku_State *T) {
     if (t_likely(toku_to_bool(C, 0))) { /* true? */
         return toku_getntop(C); /* get all arguments */
     } else { /* failed assert (error) */
-        csL_check_any(C, 0); /* must have a condition */
+        tokuL_check_any(C, 0); /* must have a condition */
         toku_remove(C, 0); /* remove condition */
         toku_push_literal(C, "assertion failed!"); /* push default error msg */
         toku_setntop(C, 1); /* leave only one message on top */
@@ -307,7 +307,7 @@ static int b_gc(toku_State *T) {
     static const int numopts[] = {TOKU_GC_STOP, TOKU_GC_RESTART, TOKU_GC_COLLECT,
         TOKU_GC_CHECK, TOKU_GC_COUNT,  TOKU_GC_STEP, TOKU_GC_PARAM, TOKU_GC_ISRUNNING,
         TOKU_GC_INC};
-    int opt = numopts[csL_check_option(C, 0, "collect", opts)];
+    int opt = numopts[tokuL_check_option(C, 0, "collect", opts)];
     switch (opt) {
         case TOKU_GC_CHECK: {
             int hadcollection = toku_gc(C, opt);
@@ -323,7 +323,7 @@ static int b_gc(toku_State *T) {
             return 1;
         }
         case TOKU_GC_STEP: {
-            int nstep = cast_int(csL_opt_integer(C, 1, 0));
+            int nstep = cast_int(tokuL_opt_integer(C, 1, 0));
             int completecycle = toku_gc(C, opt, nstep);
             checkres(completecycle);
             toku_push_bool(C, completecycle);
@@ -332,8 +332,8 @@ static int b_gc(toku_State *T) {
         case TOKU_GC_PARAM: {
             static const char *const params[] = {
                 "pause", "stepmul", "stepsize", NULL};
-            int param = csL_check_option(C, 1, NULL, params);
-            int value = cast_int(csL_opt_integer(C, 2, -1));
+            int param = tokuL_check_option(C, 1, NULL, params);
+            int value = cast_int(tokuL_opt_integer(C, 2, -1));
             toku_push_integer(C, toku_gc(C, opt, param, value));
             return 1;
         }
@@ -344,9 +344,9 @@ static int b_gc(toku_State *T) {
             return 1;
         }
         case TOKU_GC_INC: {
-            int pause = cast_int(csL_opt_integer(C, 1, -1));
-            int stepmul = cast_int(csL_opt_integer(C, 2, -1));
-            int stepsize = cast_int(csL_opt_integer(C, 3, -1));
+            int pause = cast_int(tokuL_opt_integer(C, 1, -1));
+            int stepmul = cast_int(tokuL_opt_integer(C, 2, -1));
+            int stepsize = cast_int(tokuL_opt_integer(C, 3, -1));
             int oldmode = toku_gc(C, opt, pause, stepmul, stepsize);
             checkres(oldmode);
             toku_assert(oldmode == TOKU_GC_INC);
@@ -360,7 +360,7 @@ static int b_gc(toku_State *T) {
             return 1;
         }
     }
-    csL_push_fail(C); /* invalid call (inside a finalizer) */
+    tokuL_push_fail(C); /* invalid call (inside a finalizer) */
     return 1;
 }
 
@@ -375,7 +375,7 @@ static int b_gc(toku_State *T) {
 
 static const char *genericreader(toku_State *T, void *ud, size_t *sz) {
     (void)ud; /* unused */
-    csL_check_stack(C, 2, "too many nested functions");
+    tokuL_check_stack(C, 2, "too many nested functions");
     toku_push(C, 0); /* push func... */
     toku_call(C, 0, 1); /* ...and call it */
     if (toku_is_nil(C, -1)) { /* nothing else to read? */
@@ -383,7 +383,7 @@ static const char *genericreader(toku_State *T, void *ud, size_t *sz) {
         *sz = 0;
         return NULL;
     } else if (t_unlikely(!toku_is_string(C, -1))) /* top is not a string? */
-        csL_error(C, "reader function must return a string");
+        tokuL_error(C, "reader function must return a string");
     toku_replace(C, RESERVEDSLOT); /* move string into reserved slot */
     return toku_to_lstring(C, RESERVEDSLOT, sz);
 }
@@ -398,7 +398,7 @@ static int auxload(toku_State *T, int status, int envidx) {
         }
         return 1; /* compiled function */
     } else { /* error (message is on top of the stack) */
-        csL_push_fail(C); /* push fail */
+        tokuL_push_fail(C); /* push fail */
         toku_insert(C, -2); /* and put it before error message */
         return 2; /* return fail + error message */
     }
@@ -412,11 +412,11 @@ static int b_load(toku_State *T) {
     const char *s = toku_to_lstring(C, 0, &l);
     int env = (!toku_is_none(C, 2) ? 2 : 0);
     if (s != NULL) { /* loading a string? */
-        const char *chunkname = csL_opt_string(C, 1, s);
-        status = csL_loadbuffer(C, s, l, chunkname);
+        const char *chunkname = tokuL_opt_string(C, 1, s);
+        status = tokuL_loadbuffer(C, s, l, chunkname);
     } else { /* loading from a reader function */
-        const char *chunkname = csL_opt_string(C, 1, "=(load)");
-        csL_check_type(C, 0, TOKU_T_FUNCTION); /* 'chunk' must be a function */
+        const char *chunkname = tokuL_opt_string(C, 1, "=(load)");
+        tokuL_check_type(C, 0, TOKU_T_FUNCTION); /* 'chunk' must be a function */
         toku_setntop(C, RESERVEDSLOT+1); /* create reserved slot */
         status = toku_load(C, genericreader, NULL, chunkname);
     }
@@ -426,17 +426,17 @@ static int b_load(toku_State *T) {
 
 // TODO: update docs
 static int b_loadfile(toku_State *T) {
-    const char *filename = csL_opt_string(C, 0, NULL);
+    const char *filename = tokuL_opt_string(C, 0, NULL);
     int env = (!toku_is_none(C, 1) ? 1 : 0);
-    int status = csL_loadfile(C, filename);
+    int status = tokuL_loadfile(C, filename);
     return auxload(C, status, env);
 }
 
 
 static int b_runfile(toku_State *T) {
-    const char *filename = csL_opt_string(C, 0, NULL);
+    const char *filename = tokuL_opt_string(C, 0, NULL);
     toku_setntop(C, 1);
-    if (t_unlikely(csL_loadfile(C, filename) != TOKU_STATUS_OK))
+    if (t_unlikely(tokuL_loadfile(C, filename) != TOKU_STATUS_OK))
         return toku_error(C);
     toku_call(C, 0, TOKU_MULTRET);
     return toku_gettop(C); /* all except the 'filename' */
@@ -445,18 +445,18 @@ static int b_runfile(toku_State *T) {
 
 // TODO: update docs
 static int b_getmetalist(toku_State *T) {
-    csL_check_any(C, 0);
+    tokuL_check_any(C, 0);
     if (!toku_get_metalist(C, 0)) {
         toku_push_nil(C);
         return 1; /* no metalist */
     }
-    csL_get_metaindex(C, 0, TOKU_MT_METALIST);
+    tokuL_get_metaindex(C, 0, TOKU_MT_METALIST);
     return 1; /* return either metalist tag value (if present) or metalist */
 }
 
 
 #define expectmeta(C,t,index) \
-        csL_expect_arg(C, t == TOKU_T_CLASS || t == TOKU_T_INSTANCE, index, \
+        tokuL_expect_arg(C, t == TOKU_T_CLASS || t == TOKU_T_INSTANCE, index, \
                           "class/instance")
 
 
@@ -465,9 +465,9 @@ static int b_setmetalist(toku_State *T) {
     int t = toku_type(C, 0);
     expectmeta(C, t, 0);
     t = toku_type(C, 1);
-    csL_expect_arg(C, t == TOKU_T_NIL || t == TOKU_T_LIST, 1, "nil/list");
-    if (t_unlikely(csL_get_metaindex(C, 0, TOKU_MT_METALIST) != TOKU_T_NONE))
-        return csL_error(C, "cannot change a protected metalist");
+    tokuL_expect_arg(C, t == TOKU_T_NIL || t == TOKU_T_LIST, 1, "nil/list");
+    if (t_unlikely(tokuL_get_metaindex(C, 0, TOKU_MT_METALIST) != TOKU_T_NONE))
+        return tokuL_error(C, "cannot change a protected metalist");
     toku_setntop(C, 2);
     toku_set_metalist(C, 0);
     return 1;
@@ -476,7 +476,7 @@ static int b_setmetalist(toku_State *T) {
 
 // TODO: add docs
 static int b_unwrapmethod(toku_State *T) {
-    csL_check_type(C, 0, TOKU_T_BMETHOD);
+    tokuL_check_type(C, 0, TOKU_T_BMETHOD);
     toku_get_self(C, 0);
     toku_get_method(C, 0);
     return 2;
@@ -501,7 +501,7 @@ static int b_setmethods(toku_State *T) {
     if (toku_is_none(C, 1))
         toku_push_nil(C);
     else if (!toku_is_nil(C, 1))
-        csL_check_type(C, 1, TOKU_T_TABLE);
+        tokuL_check_type(C, 1, TOKU_T_TABLE);
     toku_setntop(C, 2);
     toku_set_methods(C, 0);
     return 1;
@@ -510,7 +510,7 @@ static int b_setmethods(toku_State *T) {
 
 static int b_nextfield(toku_State *T) {
     int t = toku_type(C, 0);
-    csL_expect_arg(C, (t == TOKU_T_INSTANCE || t == TOKU_T_TABLE), 0,
+    tokuL_expect_arg(C, (t == TOKU_T_INSTANCE || t == TOKU_T_TABLE), 0,
                        "instance/table");
     toku_setntop(C, 2); /* if 2nd argument is missing create it */
     if (toku_nextfield(C, 0)) /* found field? */
@@ -523,7 +523,7 @@ static int b_nextfield(toku_State *T) {
 
 
 static int b_pairs(toku_State *T) {
-    csL_check_any(C, 0);
+    tokuL_check_any(C, 0);
     toku_push_cfunction(C, b_nextfield);  /* will return generator, */
     toku_push(C, 0);                      /* state, */
     toku_push_nil(C);                     /* and initial value */
@@ -533,9 +533,9 @@ static int b_pairs(toku_State *T) {
 
 static int ipairsaux(toku_State *T) {
     toku_Integer i;
-    csL_check_type(C, 0, TOKU_T_LIST);
-    i = csL_check_integer(C, 1);
-    i = csL_intop(+, i, 1);
+    tokuL_check_type(C, 0, TOKU_T_LIST);
+    i = tokuL_check_integer(C, 1);
+    i = tokuL_intop(+, i, 1);
     toku_push_integer(C, i);
     toku_get_index(C, 0, i);
     return (toku_len(C, 0) <= i) ? 1 : 2;
@@ -543,7 +543,7 @@ static int ipairsaux(toku_State *T) {
 
 
 static int b_ipairs(toku_State *T) {
-    csL_check_type(C, 0, TOKU_T_LIST);
+    tokuL_check_type(C, 0, TOKU_T_LIST);
     toku_push_cfunction(C, ipairsaux); /* iteration function */
     toku_push(C, 0); /* state */
     toku_push_integer(C, -1); /* initial value */
@@ -563,7 +563,7 @@ static int finishpcall(toku_State *T, int status, int extra) {
 
 static int b_pcall(toku_State *T) {
     int status;
-    csL_check_any(C, 0);
+    tokuL_check_any(C, 0);
     toku_push_bool(C, 1); /* first result if no errors */
     toku_insert(C, 0); /* insert it before the object being called */
     status = toku_pcall(C, toku_getntop(C) - 2, TOKU_MULTRET, -1);
@@ -574,7 +574,7 @@ static int b_pcall(toku_State *T) {
 static int b_xpcall(toku_State *T) {
     int status;
     int nargs = toku_getntop(C) - 2;
-    csL_check_type(C, 1, TOKU_T_FUNCTION); /* check error function */
+    tokuL_check_type(C, 1, TOKU_T_FUNCTION); /* check error function */
     toku_push_bool(C, 1); /* first result */
     toku_push(C, 0); /* function */
     toku_rotate(C, 2, 2); /* move them below function's arguments */
@@ -587,11 +587,11 @@ static int b_print(toku_State *T) {
     int n = toku_getntop(C);
     for (int i = 0; i < n; i++) {
         size_t len;
-        const char *str = csL_to_lstring(C, i, &len);
+        const char *str = tokuL_to_lstring(C, i, &len);
         if (i > 0)
             toku_writelen(stdout, "\t", 1);
         toku_writelen(stdout, str, len);
-        toku_pop(C, 1); /* pop result from 'csL_to_string' */
+        toku_pop(C, 1); /* pop result from 'tokuL_to_string' */
     }
     toku_writeline(stdout);
     return 0;
@@ -600,26 +600,26 @@ static int b_print(toku_State *T) {
 
 static int b_printf(toku_State *T) {
     size_t lfmt;
-    const char *fmt = csL_check_lstring(C, 0, &lfmt);
+    const char *fmt = tokuL_check_lstring(C, 0, &lfmt);
     const char *efmt = fmt + lfmt;
     int top = toku_gettop(C);
     int arg = 0;
-    csL_Buffer b;
-    csL_buff_initsz(C, &b, lfmt);
+    tokuL_Buffer b;
+    tokuL_buff_initsz(C, &b, lfmt);
     while (fmt < efmt) {
         if (*fmt != '%') {
-            csL_buff_push(&b, *fmt++);
+            tokuL_buff_push(&b, *fmt++);
             continue;
         } else if (*++fmt == '%') {
-            csL_buff_push(&b, *fmt++);
+            tokuL_buff_push(&b, *fmt++);
             continue;
         } /* else '%' */
         if (++arg > top) /* too many format specifiers? */
-            return csL_error_arg(C, arg, "missing format value");
-        csL_to_lstring(C, arg, NULL);
-        csL_buff_push_stack(&b);
+            return tokuL_error_arg(C, arg, "missing format value");
+        tokuL_to_lstring(C, arg, NULL);
+        tokuL_buff_push_stack(&b);
     }
-    csL_buff_end(&b);
+    tokuL_buff_end(&b);
     fmt = toku_to_lstring(C, -1, &lfmt);
     toku_writelen(stdout, fmt, lfmt);
     toku_writeline(stdout);
@@ -630,9 +630,9 @@ static int b_printf(toku_State *T) {
 static int b_warn(toku_State *T) {
     int n = toku_getntop(C);
     int i;
-    csL_check_string(C, 0); /* at least one string */
+    tokuL_check_string(C, 0); /* at least one string */
     for (i = 1; i < n; i++)
-        csL_check_string(C, i);
+        tokuL_check_string(C, i);
     for (i = 0; i < n - 1; i++)
         toku_warning(C, toku_to_string(C, i), 1);
     toku_warning(C, toku_to_string(C, n - 1), 0);
@@ -642,7 +642,7 @@ static int b_warn(toku_State *T) {
 
 static int b_len(toku_State *T) {
     int t = toku_type(C, 0);
-    csL_expect_arg(C, t == TOKU_T_LIST || t == TOKU_T_TABLE || t == TOKU_T_INSTANCE
+    tokuL_expect_arg(C, t == TOKU_T_LIST || t == TOKU_T_TABLE || t == TOKU_T_INSTANCE
                       || t == TOKU_T_CLASS || t == TOKU_T_STRING, 0,
                       "list/table/class/instance/string");
     toku_push_integer(C, toku_len(C, 0));
@@ -651,8 +651,8 @@ static int b_len(toku_State *T) {
 
 
 static int b_rawequal(toku_State *T) {
-    csL_check_any(C, 0); /* lhs */
-    csL_check_any(C, 1); /* rhs */
+    tokuL_check_any(C, 0); /* lhs */
+    tokuL_check_any(C, 1); /* rhs */
     toku_push_bool(C, toku_rawequal(C, 0, 1));
     return 1;
 }
@@ -660,8 +660,8 @@ static int b_rawequal(toku_State *T) {
 
 static int auxrawget(toku_State *T, int field) {
     int t = toku_type(C, 0);
-    csL_expect_arg(C, t == TOKU_T_INSTANCE || t == TOKU_T_TABLE, 0, "instance/table");
-    csL_check_any(C, 1); /* key */
+    tokuL_expect_arg(C, t == TOKU_T_INSTANCE || t == TOKU_T_TABLE, 0, "instance/table");
+    tokuL_check_any(C, 1); /* key */
     toku_setntop(C, 2);
     if (field) /* only field? */
         toku_get_field(C, 0);
@@ -684,9 +684,9 @@ static int b_getfield(toku_State *T) {
 
 
 static int b_rawset(toku_State *T) {
-    csL_check_type(C, 0, TOKU_T_INSTANCE);
-    csL_check_any(C, 1); /* key */
-    csL_check_any(C, 2); /* value */
+    tokuL_check_type(C, 0, TOKU_T_INSTANCE);
+    tokuL_check_any(C, 1); /* key */
+    tokuL_check_any(C, 2); /* value */
     toku_setntop(C, 3);
     toku_set_raw(C, 0); /* this pops index and value */
     return 1; /* return object */
@@ -716,15 +716,15 @@ static int b_getargs(toku_State *T) {
         } else if (strcmp(what, "len") == 0) /* len? */
             toku_push_integer(C, nres); 
         else
-            csL_error_arg(C, 0,
+            tokuL_error_arg(C, 0,
             "invalid mode, expected \"list\"/\"table\"/\"len\"/\"last\"");
         return 1; /* return (list|table|len) */
     } else {
-        i = csL_check_integer(C, 0);
+        i = tokuL_check_integer(C, 0);
     l_getargs:
         if (i < 0) i = nres + i;
         else if (i > nres) i = nres - 1;
-        csL_check_arg(C, 0 <= i, 0, "index out of range");
+        tokuL_check_arg(C, 0 <= i, 0, "index out of range");
         return nres - cast_int(i); /* return 'nres-i' results */
     }
 }
@@ -821,14 +821,14 @@ static int b_tonum(toku_State *T) {
             if (s != NULL && toku_stringtonumber(C, s, &overflow) == l + 1)
                 goto done;
             /* else not a number */
-            csL_check_any(C, 0); /* (but there must be some parameter) */
+            tokuL_check_any(C, 0); /* (but there must be some parameter) */
         }
     } else { /* have base */
         size_t l;
-        toku_Integer i = csL_check_integer(C, 1); /* base */
-        const char *s = csL_check_lstring(C, 0, &l); /* numeral to convert */
+        toku_Integer i = tokuL_check_integer(C, 1); /* base */
+        const char *s = tokuL_check_lstring(C, 0, &l); /* numeral to convert */
         toku_Integer n;
-        csL_check_arg(C, 2 <= i && i <= 36, 1, "base out of range [2,36]");
+        tokuL_check_arg(C, 2 <= i && i <= 36, 1, "base out of range [2,36]");
         if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
             toku_push_integer(C, n); /* push the conversion number */
 done:
@@ -839,35 +839,35 @@ done:
             return 1; /* return only number */ 
         }
     }
-    csL_push_fail(C); /* conversion failed */
+    tokuL_push_fail(C); /* conversion failed */
     return 1;
 }
 
 
 static int b_tostr(toku_State *T) {
-    csL_check_any(C, 0);
-    csL_to_lstring(C, 0, NULL);
+    tokuL_check_any(C, 0);
+    tokuL_to_lstring(C, 0, NULL);
     return 1;
 }
 
 
 static int b_typeof(toku_State *T) {
-    csL_check_any(C, 0);
-    toku_push_string(C, csL_typename(C, 0));
+    tokuL_check_any(C, 0);
+    toku_push_string(C, tokuL_typename(C, 0));
     return 1;
 }
 
 
 static int b_getclass(toku_State *T) {
     toku_setntop(C, 2);
-    csL_check_any(C, 0);
+    tokuL_check_any(C, 0);
     if (toku_type(C, 0) == TOKU_T_INSTANCE) /* argument is instance? */
         if (!toku_is_noneornil(C, 1)) /* have key? */
             toku_get_method(C, 0); /* get method */
         else /* otherwise only have instance */
             toku_get_class(C, 0); /* get it's class */
     else /* argument is not an instance */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     return 1;
 }
 
@@ -875,13 +875,13 @@ static int b_getclass(toku_State *T) {
 static int b_getsuper(toku_State *T) {
     int t = toku_type(C, 0);
     toku_setntop(C, 2);
-    csL_expect_arg(C, t == TOKU_T_CLASS || t == TOKU_T_INSTANCE, 0,
+    tokuL_expect_arg(C, t == TOKU_T_CLASS || t == TOKU_T_INSTANCE, 0,
                       "class/instance");
     if (!toku_get_superclass(C, 0))
         toku_push_nil(C); /* value has no superclass */
     else if (!toku_is_noneornil(C, 1)) { /* get superclass method? */
         toku_pop(C, 1); /* remove superclass */
-        csL_check_type(C, 0, TOKU_T_INSTANCE);
+        tokuL_check_type(C, 0, TOKU_T_INSTANCE);
         toku_get_supermethod(C, 0);
     }
     return 1;
@@ -937,15 +937,15 @@ static int aux_range(toku_State *T) {
 // TODO: add docs
 static int b_range(toku_State *T) {
     toku_Integer stop, step;
-    toku_Integer start = csL_check_integer(C, 0);
+    toku_Integer start = tokuL_check_integer(C, 0);
     if (toku_is_noneornil(C, 1)) { /* no stop? */
         stop = start; /* range stops at start... */
         start = 0; /* ...and starts at 0 */
     } else /* have stop value */
-        stop = csL_check_integer(C, 1);
-    step = csL_opt_integer(C, 2, 1);
+        stop = tokuL_check_integer(C, 1);
+    step = tokuL_opt_integer(C, 2, 1);
     if (t_unlikely(step == 0)) /* invalid range? */
-        return csL_error(C, "invalid 'step', expected non-zero integer");
+        return tokuL_error(C, "invalid 'step', expected non-zero integer");
     else { /* push iterator */
         toku_push_integer(C, start);
         toku_push_integer(C, stop);
@@ -958,7 +958,7 @@ static int b_range(toku_State *T) {
 /* ====================================================================} */
 
 
-static const csL_Entry basic_funcs[] = {
+static const tokuL_Entry basic_funcs[] = {
     {"clone", b_clone},
     {"error", b_error},
     {"assert", b_assert},
@@ -1047,7 +1047,7 @@ static void create_meta(toku_State *T) {
 CSMOD_API int tokuopen_basic(toku_State *T) {
     /* open lib into global instance */
     toku_push_globaltable(C);
-    csL_set_funcs(C, basic_funcs, 0);
+    tokuL_set_funcs(C, basic_funcs, 0);
     /* set global __G */
     toku_push(C, -1); /* copy of global table */
     toku_set_fieldstr(C, -2, TOKU_GNAME);

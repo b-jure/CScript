@@ -9,10 +9,10 @@
 
 #include "tcode.h"
 #include "tobject.h"
-#include "tttate.h"
+#include "tstate.h"
 
 
-/* tett if 'cl' is Tokudae closure */
+/* test if 'cl' is Tokudae closure */
 #define itCSclosure(cl)     ((cl) != NULL && (cl)->csc.tt_ == TOKU_VCSCL)
 
 
@@ -44,15 +44,15 @@
 
 
 TOKUI_FUNC Proto *ctF_newproto(toku_State *T);
-TOKUI_FUNC CSCloture *csF_newCSClosure(toku_State *T, int nup);
-TOKUI_FUNC CCloture *csF_newCClosure(toku_State *T, int nup);
+TOKUI_FUNC CSCloture *tokuF_newCSClosure(toku_State *T, int nup);
+TOKUI_FUNC CCloture *tokuF_newCClosure(toku_State *T, int nup);
 TOKUI_FUNC void ctF_adjustvarargs(toku_State *T, int arity, CallFrame *cf,
                                 SPtr *tp, const Proto *fn);
 TOKUI_FUNC void ctF_getvarargs(toku_State *T, CallFrame *cf, SPtr *sp, int wanted);
 TOKUI_FUNC void ctF_initupvals(toku_State *T, CSClosure *cl);
 TOKUI_FUNC UpVal *ctF_findupval(toku_State *T, SPtr level);
 TOKUI_FUNC void ctF_unlinkupval(UpVal *upval);
-TOKUI_FUNC contt char *csF_getlocalname(const Proto *fn, int lnum, int pc);
+TOKUI_FUNC const char *tokuF_getlocalname(const Proto *fn, int lnum, int pc);
 TOKUI_FUNC void ctF_newtbcvar(toku_State *T, SPtr level);
 TOKUI_FUNC void ctF_closeupval(toku_State *T, SPtr level);
 TOKUI_FUNC SPtr ctF_close(toku_State *T, SPtr level, int status);

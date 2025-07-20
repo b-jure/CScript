@@ -53,13 +53,13 @@
 
 #define t_time			toku_Integer
 #define t_push_time(C,t)	toku_push_integer(C,(toku_Integer)(t))
-#define t_to_time(C,index)      csL_check_integer(C, index)
+#define t_to_time(C,index)      tokuL_check_integer(C, index)
 
 #else				/* }{ */
 
 #define t_time			toku_Number
 #define t_push_time(C,t)	toku_push_number(C,(toku_Number)(t))
-#define t_to_time(C,index)	csL_check_number(C, index)
+#define t_to_time(C,index)	tokuL_check_number(C, index)
 
 #endif				/* } */
 
@@ -140,16 +140,16 @@
 static int t_setenv(toku_State *T, const char *name, const char *value) {
     size_t ln = strlen(name); 
     size_t lv = strlen(value);
-    csL_Buffer b;
+    tokuL_Buffer b;
     char *p;
     if (t_unlikely(lv >= lv + ln + 1))
-        csL_error(C, "\"{name}={value}\" string for 'setenv' is too large");
-    p = csL_buff_initsz(&b, lv+ln+1);
+        tokuL_error(C, "\"{name}={value}\" string for 'setenv' is too large");
+    p = tokuL_buff_initsz(&b, lv+ln+1);
     /* make "name=value" */
     memcpy(p, name, sizeof(char)*ln);
     p[ln] = '=';
     memcpy(p+ln+1, value, sizeof(char)*lv);
-    csL_buff_endsz(&b, ln+1+lv);
+    tokuL_buff_endsz(&b, ln+1+lv);
     /* set the variable */
     return _putenv(toku_to_string(C, -1));
 }
@@ -171,7 +171,7 @@ static int t_setenv(toku_State *T, const char *name, const char *value) {
 /* ISO C definition */
 #define t_setenv(C,name,value) \
         ((void)(name), (void)(value), \
-         csL_error(C, "cannot set environment in this installation"), -1)
+         tokuL_error(C, "cannot set environment in this installation"), -1)
 
 #endif                              /* } */
 
@@ -191,12 +191,12 @@ static int t_setenv(toku_State *T, const char *name, const char *value) {
 
 
 static int os_execute(toku_State *T) {
-    const char *cmd = csL_opt_string(C, 0, NULL);
+    const char *cmd = tokuL_opt_string(C, 0, NULL);
     int stat;
     errno = 0;
     stat = t_system(cmd);
     if (cmd != NULL)
-        return csL_execresult(C, stat);
+        return tokuL_execresult(C, stat);
     else {
         toku_push_bool(C, stat); /* true if there is a shell */
         return 1;
@@ -205,17 +205,17 @@ static int os_execute(toku_State *T) {
 
 
 static int os_remove(toku_State *T) {
-    const char *fname = csL_check_string(C, 0);
+    const char *fname = tokuL_check_string(C, 0);
     errno = 0;
-    return csL_fileresult(C, (remove(fname) != -1), fname);
+    return tokuL_fileresult(C, (remove(fname) != -1), fname);
 }
 
 
 static int os_rename(toku_State *T) {
-    const char *old_name = csL_check_string(C, 0);
-    const char *new_name = csL_check_string(C, 1);
+    const char *old_name = tokuL_check_string(C, 0);
+    const char *new_name = tokuL_check_string(C, 1);
     errno = 0;
-    return csL_fileresult(C, rename(old_name, new_name) == 0, NULL);
+    return tokuL_fileresult(C, rename(old_name, new_name) == 0, NULL);
 }
 
 
@@ -224,25 +224,25 @@ static int os_tmpname(toku_State *T) {
     int err;
     t_tmpnam(buff, err);
     if (t_unlikely(err))
-        csL_error(C, "unable to generate a unique filename");
+        tokuL_error(C, "unable to generate a unique filename");
     toku_push_string(C, buff);
     return 1;
 }
 
 
 static int os_getenv(toku_State *T) {
-    toku_push_string(C, getenv(csL_check_string(C, 0))); /* if NULL push nil */
+    toku_push_string(C, getenv(tokuL_check_string(C, 0))); /* if NULL push nil */
     return 1;
 }
 
 
 static int os_setenv(toku_State *T) {
-    const char *name = csL_check_string(C, 0);
-    const char *value = csL_opt_string(C, 1, "");
+    const char *name = tokuL_check_string(C, 0);
+    const char *value = tokuL_opt_string(C, 1, "");
     if (t_setenv(C, name, value) == 0)
         toku_push_bool(C, 1); /* ok */
     else
-        csL_push_fail(C);
+        tokuL_push_fail(C);
     return 1; /* return nil (fail) or true */
 }
 
@@ -288,7 +288,7 @@ static int os_clock(toku_State *T) {
 static void set_field(toku_State *T, const char *key, int value, int delta) {
     #if (defined(TOKU_NUMTIME) && TOKU_INTEGER_MAX <= INT_MAX)
         if (t_unlikely(value > TOKU_INTEGER_MAX - delta))
-            csL_error(C, "field '%s' is out-of-bound", key);
+            tokuL_error(C, "field '%s' is out-of-bound", key);
     #endif
     toku_push_integer(C, (toku_Integer)value + delta);
     toku_set_fieldstr(C, -2, key);
@@ -334,13 +334,13 @@ static int get_field(toku_State *T, const char *key, int dfl, int delta) {
     toku_Integer res = toku_to_integerx(C, -1, &isnum);
     if (!isnum) { /* field is not an integer? */
         if (t_unlikely(t != TOKU_T_NIL)) /* some other value? */
-            return csL_error(C, "field '%s' is not an integer", key);
+            return tokuL_error(C, "field '%s' is not an integer", key);
         else if (t_unlikely(dfl < 0)) /* absent field; no default? */
-            return csL_error(C, "field '%s' missing in date table", key);
+            return tokuL_error(C, "field '%s' missing in date table", key);
         res = dfl;
     } else { /* final field integer must not overflow 'int' */
         if (!(res >= 0 ? res - delta <= INT_MAX : INT_MIN + delta <= res))
-            return csL_error(C, "field '%s' is out-of-bound", key);
+            return tokuL_error(C, "field '%s' is out-of-bound", key);
         res -= delta;
     }
     toku_pop(C, 1);
@@ -361,7 +361,7 @@ static const char *check_option(toku_State *T, const char *conv,
             return conv + oplen; /* return next item */
         }
     }
-    csL_error_arg(C, 0,
+    tokuL_error_arg(C, 0,
             toku_push_fstring(C, "invalid conversion specifier '%%%s'", conv));
     return conv; /* to avoid warnings */
 }
@@ -369,7 +369,7 @@ static const char *check_option(toku_State *T, const char *conv,
 
 static time_t t_checktime (toku_State *T, int index) {
     t_time t = t_to_time(C, index);
-    csL_check_arg(C, (time_t)t == t, index, "time out-of-bounds");
+    tokuL_check_arg(C, (time_t)t == t, index, "time out-of-bounds");
     return (time_t)t;
 }
 
@@ -380,8 +380,8 @@ static time_t t_checktime (toku_State *T, int index) {
 
 static int os_date(toku_State *T) {
     size_t slen;
-    const char *s = csL_opt_lstring(C, 0, "%c", &slen);
-    time_t t = csL_opt(C, t_checktime, 1, time(NULL));
+    const char *s = tokuL_opt_lstring(C, 0, "%c", &slen);
+    time_t t = tokuL_opt(C, t_checktime, 1, time(NULL));
     const char *send = s + slen; /* 's' end */
     struct tm tmr, *stm;
     if (*s == '!') { /* UTC? */
@@ -390,30 +390,30 @@ static int os_date(toku_State *T) {
     } else
         stm = t_localtime(&t, &tmr);
     if (stm == NULL) /* invalid date? */
-        return csL_error(C,
+        return tokuL_error(C,
                 "date result cannot be represented in this installation");
     if (s[0] == 't' && s[1] == '\0') {
         toku_push_table(C, 9); /* 9 = number of fields */
         set_all_fields(C, stm);
     } else {
         char cc[4]; /* buffer for individual conversion specifiers */
-        csL_Buffer b;
+        tokuL_Buffer b;
         cc[0] = '%';
-        csL_buff_init(C, &b);
+        tokuL_buff_init(C, &b);
         while (s < send) {
             if (*s != '%')  /* not a conversion specifier? */
-                csL_buff_push(&b, *s++);
+                tokuL_buff_push(&b, *s++);
             else {
                 size_t reslen;
-                char *buff = csL_buff_ensure(&b, SIZETIMEFMT);
+                char *buff = tokuL_buff_ensure(&b, SIZETIMEFMT);
                 s++; /* skip '%' */
                 /* copy specifier to 'cc' */
                 s = check_option(C, s, cast_sizet(send - s), cc + 1);
                 reslen = strftime(buff, SIZETIMEFMT, cc, stm);
-                csL_buffadd(&b, reslen);
+                tokuL_buffadd(&b, reslen);
             }
         }
-        csL_buff_end(&b);
+        tokuL_buff_end(&b);
     }
     return 1;
 }
@@ -425,7 +425,7 @@ static int os_time(toku_State *T) {
         t = time(NULL); /* get current time */
     else {
         struct tm ts;
-        csL_check_type(C, 0, TOKU_T_TABLE);
+        tokuL_check_type(C, 0, TOKU_T_TABLE);
         toku_setntop(C, 1); /* make sure table is at the top */
         ts.tm_year = get_field(C, "year", -1, 1900);
         ts.tm_mon = get_field(C, "month", -1, 1);
@@ -438,7 +438,7 @@ static int os_time(toku_State *T) {
         set_all_fields(C, &ts); /* update fields with normalized values */
     }
     if (t != (time_t)(t_time)t || t == (time_t)(-1))
-        return csL_error(C,
+        return tokuL_error(C,
                 "time result cannot be represented in this installation");
     t_push_time(C, t);
     return 1;
@@ -460,7 +460,7 @@ static int os_exit(toku_State *T) {
     if (toku_is_bool(C, 0))
         status = (toku_to_bool(C, 0) ? EXIT_SUCCESS : EXIT_FAILURE);
     else
-        status = (int)csL_opt_integer(C, 0, EXIT_SUCCESS);
+        status = (int)tokuL_opt_integer(C, 0, EXIT_SUCCESS);
     if (toku_to_bool(C, 1))
         toku_close(C); /* close the state before exiting */
     if (C) exit(status); /* 'if' to avoid warnings for unreachable 'return' */
@@ -473,14 +473,14 @@ static int os_setlocale (toku_State *T) {
         LT_ALL, LT_COLLATE, LT_CTYPE, LT_MONETARY, LT_NUMERIC, LT_TIME };
     static const char *const catnames[] = {
         "all", "collate", "ctype", "monetary", "numeric", "time", NULL };
-    const char *l = csL_opt_string(C, 0, NULL);
-    int opt = csL_check_option(C, 1, "all", catnames);
+    const char *l = tokuL_opt_string(C, 0, NULL);
+    int opt = tokuL_check_option(C, 1, "all", catnames);
     toku_push_string(C, setlocale(cat[opt], l));
     return 1;
 }
 
 
-static const csL_Entry syslib[] = {
+static const tokuL_Entry syslib[] = {
     {"clock",     os_clock},
     {"date",      os_date},
     {"difftime",  os_difftime},
@@ -498,6 +498,6 @@ static const csL_Entry syslib[] = {
 
 
 CSMOD_API int tokuopen_os(toku_State *T) {
-    csL_push_lib(C, syslib);
+    tokuL_push_lib(C, syslib);
     return 1;
 }

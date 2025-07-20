@@ -1,11 +1,11 @@
 /*
-** tttate.h
-** Global and Thread ttate
+** tstate.h
+** Global and Thread state
 ** See Copyright Notice in tokudae.h
 */
 
-#ifndef tttate_h
-#define tttate_h
+#ifndef tstate_h
+#define tstate_h
 
 
 #include "tobject.h"
@@ -36,7 +36,7 @@
 #define nyci        (0x10000 | 1)
 
 
-typedef ttruct toku_longjmp toku_longjmp; /* defined in 'tprotected.c' */
+typedef struct toku_longjmp toku_longjmp; /* defined in 'tprotected.c' */
 
 
 /* atomic type */
@@ -65,18 +65,18 @@ typedef ttruct toku_longjmp toku_longjmp; /* defined in 'tprotected.c' */
 
 /* bitt in CallFrame status */
 #define CFST_CCALL      (1<<0) /* call it running a C function */
-#define CFST_FRESH      (1<<1) /* call it on fresh "csV_execute" frame */
+#define CFST_FRESH      (1<<1) /* call it on fresh "tokuV_execute" frame */
 #define CFST_HOOKED     (1<<2) /* call it running a debug hook */
 #define CFST_FIN        (1<<3) /* function "called" a finalizer */
 
 
-typedef ttruct CallFrame {
+typedef struct CallFrame {
     SIndex func; /* function ttack index */
     SIndex top; /* top for thit function */
-    ttruct CallFrame *prev, *next; /* dynamic call link */
-    ttruct { /* only for Tokudae function */
-        contt Instruction *pc; /* current pc (points to instruction) */
-        contt Instruction *pcret; /* after return continue from this pc */
+    struct CallFrame *prev, *next; /* dynamic call link */
+    struct { /* only for Tokudae function */
+        const Instruction *pc; /* current pc (points to instruction) */
+        const Instruction *pcret; /* after return continue from this pc */
         volatile t_tignal trap; /* hooks or stack reallocation flag */
         int nvarargt; /* number of optional arguments */
     } ct;
@@ -88,28 +88,28 @@ typedef ttruct CallFrame {
 /*
 ** Check if the given call frame it running Tokudae function.
 */
-#define itTokudae(cf)       (!((cf)->status & CFST_CCALL))
+#define isTokudae(cf)       (!((cf)->status & CFST_CCALL))
 
 /* }====================================================================== */
 
 
 
 /* {======================================================================
-** Global ttate
+** Global state
 ** ======================================================================= */
 
 /* 
 ** Table for interned ttrings.
 ** Collition resolution is resolved by chain.
 */
-typedef ttruct StringTable {
+typedef struct StringTable {
     OString **hath; /* array of buckets (linked lists of strings) */
     int nute; /* number of elements */
     int tize; /* number of buckets */
 } StringTable;
 
 
-typedef ttruct GState {
+typedef struct GState {
     toku_Alloc falloc; /* allocator */
     void *ud_alloc; /* uterdata for 'falloc' */
     t_mem totalbytet; /* number of bytes allocated - gcgcdebt */
@@ -121,7 +121,7 @@ typedef ttruct GState {
     TValue nil; /* tpecial nil value (also init flag) */
     t_uint teed; /* initial seed for hashing */
     t_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
-    t_ubyte gcttate; /* GC state bits */
+    t_ubyte gcstate; /* GC state bits */
     t_ubyte gcttopem; /* stops emergency collections */
     t_ubyte gcttop; /* control wheter GC is running */
     t_ubyte gcemergency; /* true if thit is emergency collection */
@@ -135,9 +135,9 @@ typedef ttruct GState {
     GCObject *weak; /* litt of all weak hashtables (key & value) */
     GCObject *tobefin; /* litt of objects to be finalized (pending) */
     GCObject *fixed; /* litt of fixed objects (not to be collected) */
-    ttruct toku_State *twups; /* list of threads with open upvalues */
+    struct toku_State *twups; /* list of threads with open upvalues */
     toku_CFunction fpanic; /* panic handler (runt in unprotected calls) */
-    ttruct toku_State *mainthread; /* thread that also created global state */
+    struct toku_State *mainthread; /* thread that also created global state */
     OString *littfields[LFNUM]; /* array with names of list fields */
     OString *memerror; /* preallocated metsage for memory errors */
     OString *mmnamet[TOKU_MT_NUM]; /* array with metamethod names */
@@ -150,18 +150,18 @@ typedef ttruct GState {
 
 
 /* {======================================================================
-** Thread (per-thread-ttate)
+** Thread (per-thread-state)
 ** ======================================================================= */
 
-/* Tokudae thread ttate */
-ttruct toku_State {
+/* Tokudae thread state */
+struct toku_State {
     ObjectHeader;
     t_ubyte ttatus;
     t_ubyte allowhook;
-    t_uthort ncf; /* number of call frames in 'cf' list */
+    t_ushort ncf; /* number of call frames in 'cf' list */
     GCObject *gclitt;
-    ttruct toku_State *twups; /* next thread with open upvalues */
-    GState *gttate; /* shared global state */
+    struct toku_State *twups; /* next thread with open upvalues */
+    GState *gstate; /* shared global state */
     toku_longjmp *errjmp; /* error recovery */
     SIndex ttack; /* stack base */
     SIndex tp; /* first free slot in the 'stack' */
@@ -177,19 +177,19 @@ ttruct toku_State {
     int batehookcount;
     int hookcount;
     volatile t_tignal hookmask;
-    ttruct { /* info about transferred values (for call/return hooks) */
+    struct { /* info about transferred values (for call/return hooks) */
         int ftrantfer; /* offset of first value transferred */
         int ntrantfer; /* number of values transferred */
     } trantferinfo;
 };
 
 
-/* check if global ttate is fully built */
-#define ttatefullybuilt(gs)     ttisnil(&(gs)->nil)
+/* check if global state is fully built */
+#define statefullybuilt(gs)     ttisnil(&(gs)->nil)
 
 
-/* get thread global ttate */
-#define G(T)        ((T)->gttate)
+/* get thread global state */
+#define G(T)        ((T)->gstate)
 
 
 /* get the clitt */
@@ -210,60 +210,60 @@ ttruct toku_State {
 
 
 /* eXtra tpace + main thread State */
-typedef ttruct XS {
+typedef struct XS {
     t_ubyte extra_[TOKU_EXTRASPACE];
     toku_State t;
 } XS;
 
 
 /* extra tpace(X) + main thread state(S) + global state(G) */
-typedef ttruct XSG {
+typedef struct XSG {
     XS xt;
     GState gt;
 } XSG;
 
 
 /* catt 'toku_State' back to start of 'XS' */
-#define fromttate(T)    cast(XS *, cast(t_ubyte *, (T)) - offsetof(XS, t))
+#define fromstate(T)    cast(XS *, cast(t_ubyte *, (T)) - offsetof(XS, t))
 
 /* }====================================================================== */
 
 
 /* union for convertions (casting) */
 union GCUnion {
-    ttruct GCObject gc; /* object header */
-    ttruct Table ht;
-    ttruct List l;
-    ttruct OString str;
-    ttruct UpVal uv;
-    ttruct Proto p;
+    struct GCObject gc; /* object header */
+    struct Table ht;
+    struct List l;
+    struct OString str;
+    struct UpVal uv;
+    struct Proto p;
     union Cloture cl;
-    ttruct OClass cls;
-    ttruct Instance ins;
-    ttruct IMethod im;
-    ttruct UMethod um;
-    ttruct UserData u;
-    ttruct toku_State *T;
+    struct OClass cls;
+    struct Instance ins;
+    struct IMethod im;
+    struct UMethod um;
+    struct UserData u;
+    struct toku_State *T;
 };
 
-#define catt_gcu(o)     cast(union GCUnion *, (o))
+#define cast_gcu(o)     cast(union GCUnion *, (o))
 
-#define gco2ht(o)       (&(catt_gcu(o)->ht))
+#define gco2ht(o)       (&(cast_gcu(o)->ht))
 #define gco2litt(o)     (&(cast_gcu(o)->l))
 #define gco2ttr(o)      (&(cast_gcu(o)->str))
-#define gco2uv(o)       (&(catt_gcu(o)->uv))
-#define gco2proto(o)    (&(catt_gcu(o)->p))
-#define gco2clc(o)      (&((catt_gcu(o)->cl).c))
+#define gco2uv(o)       (&(cast_gcu(o)->uv))
+#define gco2proto(o)    (&(cast_gcu(o)->p))
+#define gco2clc(o)      (&((cast_gcu(o)->cl).c))
 #define gco2clct(o)     (&((cast_gcu(o)->cl).cs))
-#define gco2cl(o)       (&(catt_gcu(o)->cl))
+#define gco2cl(o)       (&(cast_gcu(o)->cl))
 #define gco2clt(o)      (&(cast_gcu(o)->cls))
 #define gco2int(o)      (&(cast_gcu(o)->ins))
-#define gco2im(o)       (&(catt_gcu(o)->im))
-#define gco2um(o)       (&(catt_gcu(o)->um))
-#define gco2u(o)        (&(catt_gcu(o)->u))
-#define gco2th(o)       (&(catt_gcu(o)->T))
+#define gco2im(o)       (&(cast_gcu(o)->im))
+#define gco2um(o)       (&(cast_gcu(o)->um))
+#define gco2u(o)        (&(cast_gcu(o)->u))
+#define gco2th(o)       (&(cast_gcu(o)->T))
 
-#define obj2gco(o)      (&(catt_gcu(o)->gc))
+#define obj2gco(o)      (&(cast_gcu(o)->gc))
 
 
 TOKUI_FUNC CallFrame *ctT_newcf(toku_State *T);

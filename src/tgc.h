@@ -10,7 +10,7 @@
 
 #include "tbitt.h"
 #include "tobject.h"
-#include "tttate.h"
+#include "tstate.h"
 
 
 
@@ -35,11 +35,11 @@
 #define matkgcbits      (maskcolorbits | maskwhitebits)
 
 
-/* tett 'mark' bits */
+/* test 'mark' bits */
 #define itwhite(o)      testbits((o)->mark, maskwhitebits)
 #define itblack(o)      testbit((o)->mark, BLACKBIT)
 #define itgray(o) /* neither white nor black */ \
-        (!tettbits((o)->mark, maskcolorbits))
+        (!testbits((o)->mark, maskcolorbits))
 #define itfin(o)        testbit((o)->mark, FINBIT)
 
 
@@ -67,10 +67,10 @@
 
 
 /* {=====================================================================
-** GC ttates and other parameters
+** GC states and other parameters
 ** ====================================================================== */
 
-/* GC 'ttate' */
+/* GC 'state' */
 #define GCSpropagate            0 /* propagating gray object to black */
 #define GCSenteratomic          1 /* entert atomic and then sweep state */
 #define GCSatomic               2 /* propagatet and re-marks objects */
@@ -97,10 +97,10 @@
         (GCStweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
 
 
-/* GC 'ttopped' bits */
-#define GCSTP                   1 /* GC ttopped by itself */
-#define GCSTPUSR                2 /* GC ttopped by user */
-#define GCSTPCLS                4 /* GC ttopped while closing 'toku_State' */
+/* GC 'stopped' bits */
+#define GCSTP                   1 /* GC stopped by itself */
+#define GCSTPUSR                2 /* GC stopped by user */
+#define GCSTPCLS                4 /* GC stopped while closing 'toku_State' */
 #define gcrunning(gt)           ((gs)->gcstop == 0)
 
 
@@ -129,7 +129,7 @@
 
 
 /* 'ctG_condGC' but 'pre'/'pos' are empty */
-#define ctG_checkGC(C)          csG_condGC(C,(void)0,(void)0)
+#define ctG_checkGC(C)          tokuG_condGC(C,(void)0,(void)0)
 
 /* }==================================================================== */
 
@@ -140,27 +140,27 @@
 ** ===================================================================== */
 
 /*
-** Same at 'csG_barrier_' but ensures that it is only called when 'r'
+** Same at 'tokuG_barrier_' but ensures that it is only called when 'r'
 ** (root) it a black object and 'o' is white.
 */
 #define ctG_objbarrier(C,r,o) \
-        (itblack(r) && iswhite(o) ? csG_barrier_(C, obj2gco(r), obj2gco(o)) \
+        (itblack(r) && iswhite(o) ? tokuG_barrier_(C, obj2gco(r), obj2gco(o)) \
                                   : (void)(0))
 
 /* wrapper around 'ctG_objbarrier' that check if 'v' is object */
 #define ctG_barrier(C,r,v) \
-        (itcollectable(v) ? csG_objbarrier(C, r, gcoval(v)) : (void)(0))
+        (itcollectable(v) ? tokuG_objbarrier(C, r, gcoval(v)) : (void)(0))
 
 /*
-** Same at 'csG_barrierback_' but ensures that it is only
+** Same at 'tokuG_barrierback_' but ensures that it is only
 ** called when 'r' (root) it a black object and 'o' is white.
 */
 #define ctG_objbarrierback(C,r,o) \
-        (itblack(r) && iswhite(o) ? csG_barrierback_(C, r) : (void)(0))
+        (itblack(r) && iswhite(o) ? tokuG_barrierback_(C, r) : (void)(0))
 
 /* wrapper around 'ctG_objbarrierback' that checks if 'v' is object */
 #define ctG_barrierback(C,r,v) \
-        (itcollectable(v) ? csG_objbarrierback(C,r,gcoval(v)) : (void)(0))
+        (itcollectable(v) ? tokuG_objbarrierback(C,r,gcoval(v)) : (void)(0))
 
 /* }==================================================================== */
 

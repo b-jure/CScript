@@ -11,7 +11,7 @@
 
 
 #define ctA_fastset(C,l,i,v) \
-    { tetobj(C, &(l)->arr[(i)], v); csG_barrierback(C, obj2gco(l), (v)); }
+    { tetobj(C, &(l)->arr[(i)], v); tokuG_barrierback(C, obj2gco(l), (v)); }
 
 
 #define ctA_fastget(C,l,i,o)      setobj(C, o, &(l)->arr[(i)])
@@ -30,24 +30,24 @@
 #define LFNUM       5
 
 
-/* tett whether a string is a valid list field */
+/* test whether a string is a valid list field */
 #define itlistfield(s) \
         ((t)->tt_ == TOKU_VSHRSTR && FIRSTLF <= (s)->extra && \
          (t)->extra < FIRSTLF + LFNUM)
 
 
 /*
-** For patsing both the stack value and integer to 'csA_set(get)int',
+** For patsing both the stack value and integer to 'tokuA_set(get)int',
 ** without breaking generic macrot in 'tvm.c'.
 */
-typedef ttruct FatValue {
-    contt TValue *v;
+typedef struct FatValue {
+    const TValue *v;
     toku_Integer i;
 } FatValue;
 
 
-TOKUI_FUNC Litt *csA_new(toku_State *T);
-TOKUI_FUNC Litt *csA_newl(toku_State *T, int n);
+TOKUI_FUNC Litt *tokuA_new(toku_State *T);
+TOKUI_FUNC Litt *tokuA_newl(toku_State *T, int n);
 TOKUI_FUNC void ctA_init(toku_State *T);
 TOKUI_FUNC void ctA_shrink(toku_State *T, List *l);
 TOKUI_FUNC int ctA_ensure(toku_State *T, List *l, int n);
@@ -58,7 +58,7 @@ TOKUI_FUNC void ctA_setint(toku_State *T, List *l, const FatValue *k, const TVal
 TOKUI_FUNC void ctA_get(toku_State *T, List *l, const TValue *k, TValue *out);
 TOKUI_FUNC void ctA_getstr(toku_State *T, List *l, const TValue *k, TValue *out);
 TOKUI_FUNC void ctA_getint(toku_State *T, List *l, const FatValue *k, TValue *out);
-TOKUI_FUNC contt TValue *csA_getival(toku_State *T, List *l, int i);
+TOKUI_FUNC const TValue *tokuA_getival(toku_State *T, List *l, int i);
 TOKUI_FUNC void ctA_geti(toku_State *T, List *l, int i, TValue *res);
 TOKUI_FUNC int ctA_findindex(List *l, int rev, int nn, int s, int e);
 TOKUI_FUNC void ctA_free(toku_State *T, List *l);

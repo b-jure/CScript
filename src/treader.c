@@ -14,7 +14,7 @@
 
 
 
-void csR_init(toku_State *T, BuffReader *br, toku_Reader freader, void *ud) {
+void tokuR_init(toku_State *T, BuffReader *br, toku_Reader freader, void *ud) {
     br->n = 0;
     br->buff = NULL;
     br->reader = freader;
@@ -30,7 +30,7 @@ void csR_init(toku_State *T, BuffReader *br, toku_Reader freader, void *ud) {
 ** In case there is no more data to be read, 'reader' should set 'size'
 ** to 0 or return NULL.
 */
-int csR_fill(BuffReader *br) {
+int tokuR_fill(BuffReader *br) {
     size_t size;
     toku_State *T = br->C;
     const char *buff;
@@ -49,12 +49,12 @@ int csR_fill(BuffReader *br) {
 ** Read 'n' buffered bytes returning count of unread bytes or 0 if
 ** all bytes were read. 
 */
-size_t csR_readn(BuffReader *br, size_t n) {
+size_t tokuR_readn(BuffReader *br, size_t n) {
     while (n) {
         if (br->n == 0) {
-            if (csR_fill(br) == CSEOF)
+            if (tokuR_fill(br) == CSEOF)
                 return n;
-            br->n++; /* 'csR_fill' decremented it */
+            br->n++; /* 'tokuR_fill' decremented it */
             br->buff--; /* restore that character */
         }
         size_t min = (br->n <= n ? br->n : n);

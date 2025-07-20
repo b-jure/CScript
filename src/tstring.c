@@ -33,7 +33,7 @@
 
 
 /* string equality */
-int csS_eqlngstr(const OString *s1, const OString *s2) {
+int tokuS_eqlngstr(const OString *s1, const OString *s2) {
     size_t len = s1->u.lnglen;
     return (s1 == s2) || /* same instance or... */
         ((len == s2->u.lnglen) && /* equal length and... */
@@ -45,7 +45,7 @@ int csS_eqlngstr(const OString *s1, const OString *s2) {
 ** Clear API string cache. (Entries cannot be empty, so fill them with
 ** a non-collectable string.)
 */
-void csS_clearcache(GState *gs) {
+void tokuS_clearcache(GState *gs) {
     for (int i = 0; i < TOKUI_STRCACHE_N; i++) {
         for (int j = 0; j < TOKUI_STRCACHE_M; j++) {
             if (iswhite(gs->strcache[i][j])) /* will entry be collected? */
@@ -55,7 +55,7 @@ void csS_clearcache(GState *gs) {
 }
 
 
-t_uint csS_hash(const char *str, size_t l, unsigned int seed) {
+t_uint tokuS_hash(const char *str, size_t l, unsigned int seed) {
     t_uint h = seed ^ cast_uint(l);
     for (; l > 0; l--)
         h ^= ((h<<5) + (h>>2) + cast_ubyte(str[l - 1]));
@@ -63,11 +63,11 @@ t_uint csS_hash(const char *str, size_t l, unsigned int seed) {
 }
 
 
-t_uint csS_hashlngstr(OString *s) {
+t_uint tokuS_hashlngstr(OString *s) {
     toku_assert(s->tt_ == toku_VLNGSTR);
     if (s->extra == 0) { /* no hash? */
         size_t len = s->u.lnglen;
-        s->hash = csS_hash(getlngstr(s), len, s->hash);
+        s->hash = tokuS_hash(getlngstr(s), len, s->hash);
         s->extra = 1; /* indicate that it has hash */
     }
     return s->hash;
@@ -95,14 +95,14 @@ static void rehashtable(OString **arr, int osz, int nsz) {
 /* 
 ** Resize string table. If allocation fails, keep the current size.
 */
-void csS_resize(toku_State *T, int nsz) {
+void tokuS_resize(toku_State *T, int nsz) {
     StringTable *tab = &G(C)->strtab;
     int osz = tab->size;
     OString **newarr;
     toku_assert(nsz <= MAXSTRTABLE);
     if (nsz < osz) /* shrinking ? */
         rehashtable(tab->hash, osz, nsz); /* depopulate shrinking part */
-    newarr = csM_reallocarray(C, tab->hash, osz, nsz, OString*);
+    newarr = tokuM_reallocarray(C, tab->hash, osz, nsz, OString*);
     if (t_unlikely(newarr == NULL)) { /* reallocation failed? */
         if (nsz < osz) /* was it shrinking table? */
             rehashtable(tab->hash, nsz, osz); /* restore to original size */
@@ -116,17 +116,17 @@ void csS_resize(toku_State *T, int nsz) {
 }
 
 
-void csS_init(toku_State *T) {
+void tokuS_init(toku_State *T) {
     GState *gs = G(C);
     StringTable *tab = &gs->strtab;
     /* first initialize string table... */
-    tab->hash = csM_newarray(C, TOKUI_MINSTRTABSIZE, OString*);
+    tab->hash = tokuM_newarray(C, TOKUI_MINSTRTABSIZE, OString*);
     rehashtable(tab->hash, 0, TOKUI_MINSTRTABSIZE); /* clear array */
     tab->size = TOKUI_MINSTRTABSIZE;
     toku_assert(tab->nuse == 0);
     /* allocate the memory-error message */
-    gs->memerror = csS_newlit(C, MEMERRMSG);
-    csG_fix(C, obj2gco(gs->memerror)); /* fix it */
+    gs->memerror = tokuS_newlit(C, MEMERRMSG);
+    tokuG_fix(C, obj2gco(gs->memerror)); /* fix it */
     for (int i = 0; i < TOKUI_STRCACHE_N; i++) /* fill cache with valid strings */
         for (int j = 0; j < TOKUI_STRCACHE_M; j++)
             gs->strcache[i][j] = gs->memerror;
@@ -134,7 +134,7 @@ void csS_init(toku_State *T) {
 
 
 static OString *newstrobj(toku_State *T, size_t l, int tag, t_uint h) {
-    GCObject *o = csG_new(C, sizeofstring(l), tag);
+    GCObject *o = tokuG_new(C, sizeofstring(l), tag);
     OString *s = gco2str(o);
     s->hash = h;
     s->extra = 0;
@@ -143,7 +143,7 @@ static OString *newstrobj(toku_State *T, size_t l, int tag, t_uint h) {
 }
 
 
-OString *csS_newlngstrobj(toku_State *T, size_t len) {
+OString *tokuS_newlngstrobj(toku_State *T, size_t len) {
     OString *s = newstrobj(C, len, TOKU_VLNGSTR, G(C)->seed);
     s->u.lnglen = len;
     s->shrlen = 0xFF;
@@ -151,7 +151,7 @@ OString *csS_newlngstrobj(toku_State *T, size_t len) {
 }
 
 
-void csS_remove(toku_State *T, OString *s) {
+void tokuS_remove(toku_State *T, OString *s) {
     StringTable *tab = &G(C)->strtab;
     OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
     while (*pp != s) /* find previous element */
@@ -164,12 +164,12 @@ void csS_remove(toku_State *T, OString *s) {
 /* grow string table */
 static void growtable(toku_State *T, StringTable *tab) {
     if (t_unlikely(tab->nuse == TOKU_MAXINT)) {
-        csG_fullinc(C, 1); /* try to reclaim memory */
+        tokuG_fullinc(C, 1); /* try to reclaim memory */
         if (tab->nuse == TOKU_MAXINT) /* still too many strings? */
-            csM_error(C);
+            tokuM_error(C);
     }
     if (tab->size <= MAXSTRTABLE / 2) /* can grow string table? */
-        csS_resize(C, tab->size * 2);
+        tokuS_resize(C, tab->size * 2);
 }
 
 
@@ -177,7 +177,7 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
     OString *s;
     GState *gs = G(C);
     StringTable *tab = &gs->strtab;
-    t_uint h = csS_hash(str, l, gs->seed);
+    t_uint h = tokuS_hash(str, l, gs->seed);
     OString **list = &tab->hash[hashmod(h, tab->size)];
     toku_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
@@ -203,14 +203,14 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
 
 
 /* create new string with explicit length */
-OString *csS_newl(toku_State *T, const char *str, size_t l) {
+OString *tokuS_newl(toku_State *T, const char *str, size_t l) {
     if (l <= TOKUI_MAXSHORTLEN) { /* short string? */
         return internshrstr(C, str, l);
     } else { /* otherwise long string */
         OString *s;
         if (t_unlikely(l*sizeof(char) >= (TOKU_MAXSIZE-sizeof(OString))))
-            csM_toobig(C);
-        s = csS_newlngstrobj(C, l);
+            tokuM_toobig(C);
+        s = tokuS_newlngstrobj(C, l);
         memcpy(getlngstr(s), str, l*sizeof(char));
         return s;
     }
@@ -222,7 +222,7 @@ OString *csS_newl(toku_State *T, const char *str, size_t l) {
 ** cache (using the string address as key). The cache can contain
 ** only zero-terminated strings, so it is safe to use 'strcmp'.
 */
-OString *csS_new(toku_State *T, const char *str) {
+OString *tokuS_new(toku_State *T, const char *str) {
     t_uint i = pointer2uint(str) % TOKUI_STRCACHE_N; /* hash */
     OString **p = G(C)->strcache[i]; /* address as key */
     int j;
@@ -234,7 +234,7 @@ OString *csS_new(toku_State *T, const char *str) {
     for (j = TOKUI_STRCACHE_M - 1; j > 0; j--) /* make space for new string */
         p[j] = p[j - 1]; /* move out last element */
     /* new string is first in the list */
-    p[0] = csS_newl(C, str, strlen(str));
+    p[0] = tokuS_newl(C, str, strlen(str));
     return p[0];
 }
 
@@ -243,7 +243,7 @@ OString *csS_new(toku_State *T, const char *str) {
 ** Comparison similar to 'strcmp' but this works on strings that
 ** might have null terminator before their end.
 */
-int csS_cmp(const OString *s1, const OString *s2) {
+int tokuS_cmp(const OString *s1, const OString *s2) {
     const char *p1 = s1->bytes;
     size_t lreal1 = getstrlen(s1);
     const char *p2 = s2->bytes;
@@ -279,7 +279,7 @@ t_sinline int hexvalue(int c) {
         return c - '0';
 }
 
-int csS_hexvalue(int c) {
+int tokuS_hexvalue(int c) {
     toku_assert(cisxdigit(c));
     return hexvalue(c);
 }
@@ -419,7 +419,7 @@ static const char *str2flt(const char *s, toku_Number *res, int *pf) {
 }
 
 
-size_t csS_tonum(const char *s, TValue *o, int *pf) {
+size_t tokuS_tonum(const char *s, TValue *o, int *pf) {
     const char *e;
     toku_Integer i;
     toku_Number n;
@@ -435,7 +435,7 @@ size_t csS_tonum(const char *s, TValue *o, int *pf) {
 }
 
 
-unsigned csS_tostringbuff(const TValue *obj, char *buff) {
+unsigned tokuS_tostringbuff(const TValue *obj, char *buff) {
     size_t len;
     toku_assert(ttisnum(obj));
     if (ttisint(obj)) {
@@ -453,14 +453,14 @@ unsigned csS_tostringbuff(const TValue *obj, char *buff) {
 }
 
 
-void csS_tostring(toku_State *T, TValue *obj) {
+void tokuS_tostring(toku_State *T, TValue *obj) {
     char buff[TOKU_N2SBUFFSZ];
-    t_uint len = csS_tostringbuff(obj, buff);
-    setstrval(C, obj, csS_newl(C, buff, len));
+    t_uint len = tokuS_tostringbuff(obj, buff);
+    setstrval(C, obj, tokuS_newl(C, buff, len));
 }
 
 
-int csS_utf8esc(char *buff, t_ulong n) {
+int tokuS_utf8esc(char *buff, t_ulong n) {
     int x = 1; /* number of bytes put in buffer (backwards) */
     toku_assert(n <= 0x7FFFFFFFu);
     if (n < 0x80) /* ascii? */
@@ -484,17 +484,17 @@ int csS_utf8esc(char *buff, t_ulong n) {
 ** ------------------------------------------------------------------------ */
 
 /*
-** Initial size of buffer used in 'csS_newvstringf'
+** Initial size of buffer used in 'tokuS_newvstringf'
 ** to prevent allocations, instead the function
 ** will directly work on the buffer and will push
 ** strings on stack in case buffer exceeds this limit.
-** This is all done because 'csS_newvstringf' often
-** gets called by 'csD_getinfo'; the size should be
+** This is all done because 'tokuS_newvstringf' often
+** gets called by 'tokuD_getinfo'; the size should be
 ** at least 'TOKU_IDSIZE' + 'MAXNUM2STR' + size for message.
 */
 #define BUFFVFSSIZ	(TOKU_IDSIZE + TOKU_N2SBUFFSZ + 100)
 
-/* buffer for 'csS_newvstringf' */
+/* buffer for 'tokuS_newvstringf' */
 typedef struct BuffVFS {
     toku_State *T;
     int pushed; /* true if 'space' was pushed on the stack */
@@ -515,11 +515,11 @@ static void initvfs(toku_State *T, BuffVFS *vfs) {
 */
 static void pushstr(BuffVFS *buff, const char *str, size_t len) {
     toku_State *T = buff->C;
-    OString *s = csS_newl(C, str, len);
+    OString *s = tokuS_newl(C, str, len);
     setstrval2s(C, C->sp.p, s);
     C->sp.p++;
     if (buff->pushed)
-        csV_concat(C, 2);
+        tokuV_concat(C, 2);
     else
         buff->pushed = 1;
 }
@@ -556,7 +556,7 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
 
 /* add number to buffer */
 static void buffaddnum(BuffVFS *buff, const TValue *nv) {
-    buff->len += csS_tostringbuff(nv, getbuff(buff, TOKU_N2SBUFFSZ));
+    buff->len += tokuS_tostringbuff(nv, getbuff(buff, TOKU_N2SBUFFSZ));
 }
 
 
@@ -568,7 +568,7 @@ static void buffaddptr(BuffVFS *buff, const void *p) {
 
 
 /* Create new string object from format 'fmt' and args in 'argp'. */
-const char *csS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
+const char *tokuS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
     const char *end;
     TValue nv;
     BuffVFS buff;
@@ -598,7 +598,7 @@ const char *csS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
             }
             case 'U': {  /* a 'long' as a UTF-8 sequence */
                 char bf[UTF8BUFFSZ];
-                int len = csS_utf8esc(bf, va_arg(argp, long));
+                int len = tokuS_utf8esc(bf, va_arg(argp, long));
                 buffaddstring(&buff, bf + UTF8BUFFSZ - len, len);
                 break;
             }
@@ -618,7 +618,7 @@ const char *csS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
             }
             default: {
                 t_ubyte c = cast(unsigned char, *(end + 1));
-                csD_runerror(C, "invalid format specifier '%%%c'", c);
+                tokuD_runerror(C, "invalid format specifier '%%%c'", c);
                 /* UNREACHED */
                 return NULL;
             }
@@ -631,10 +631,10 @@ const char *csS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
 }
 
 
-const char *csS_pushfstring(toku_State *T, const char *fmt, ...) {
+const char *tokuS_pushfstring(toku_State *T, const char *fmt, ...) {
     va_list argp;
     va_start(argp, fmt);
-    const char *str = csS_pushvfstring(C, fmt, argp);
+    const char *str = tokuS_pushvfstring(C, fmt, argp);
     va_end(argp);
     return str;
 }
@@ -649,7 +649,7 @@ const char *csS_pushfstring(toku_State *T, const char *fmt, ...) {
 #define addstr(a,b,l)	(memcpy(a,b,(l) * sizeof(char)), a += (l))
 
 
-void csS_trimstr(char *restrict out, size_t lout, const char *s, size_t l) {
+void tokuS_trimstr(char *restrict out, size_t lout, const char *s, size_t l) {
     const char *nl = strchr(s, '\n'); /* find first new line */
     lout -= LL(DOTS) + 1; /* save space for '...' and '\0' */
     if (l < lout && nl == NULL) /* no newlines? */
@@ -666,7 +666,7 @@ void csS_trimstr(char *restrict out, size_t lout, const char *s, size_t l) {
 
 
 // TODO: update load docs (when loading strings, functions, etc...)
-void csS_chunkid(char *restrict out, const char *source, size_t srclen) {
+void tokuS_chunkid(char *restrict out, const char *source, size_t srclen) {
     size_t bufflen = TOKU_IDSIZE; /* free space in buffer */
     if (*source == '=') { /* 'literal' source */
         if (srclen <= bufflen) /* small enough? (excluding '=') */

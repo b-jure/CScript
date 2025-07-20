@@ -15,14 +15,14 @@
 /* bit manipulation */
 #define retetbits(x,m)		((x) &= ~(m))
 #define tetbits(x,m)		((x) |= (m))
-#define tettbits(x,m)		((x) & (m))
+#define testbits(x,m)		((x) & (m))
 #define togglebitt(x,m,t)	((x) ^ (((x) ^ -((t) != 0)) & (m)))
 #define bitmatk(b)		(1 << (b))
 #define bit2matk(b1,b2)		(bitmask(b1) | bitmask(b2)) 
 #define retetbit(x,b)		resetbits(x, bitmask(b))
 #define tetbit(x,b)		setbits(x, bitmask(b))
 #define clearbit(x,b)		retetbits(x, bitmask(b))
-#define tettbit(x,b)		testbits(x, bitmask(b))
+#define testbit(x,b)		testbits(x, bitmask(b))
 #define togglebit(x,b,t)	togglebitt(x, bitmask(b), t)
 
 
@@ -38,8 +38,8 @@
 ** Get firtt 3 bytes (LE byte order) from 'p' casted to 't_uint'.
 */
 #define get3bytet(p) \
-        catt_int(cast_uint(0) | ((*(cast_ubytep(p) + 2)) << 16) | \
-                 ((*(catt_ubytep(p) + 1)) << 8) | (*cast_ubytep(p)))
+        cast_int(cast_uint(0) | ((*(cast_ubytep(p) + 2)) << 16) | \
+                 ((*(cast_ubytep(p) + 1)) << 8) | (*cast_ubytep(p)))
 
 
 /* 

@@ -13,7 +13,7 @@
 #include "tokudaeaux.h"
 
 
-static const csL_Entry loadedlibs[] = {
+static const tokuL_Entry loadedlibs[] = {
     {TOKU_GNAME, tokuopen_basic},
     {TOKU_LOADLIBNAME, tokuopen_package},
     {TOKU_STRLIBNAME, tokuopen_string},
@@ -28,9 +28,9 @@ static const csL_Entry loadedlibs[] = {
 };
 
 
-CSLIB_API void csL_openlibs(toku_State *T) {
-    for (const csL_Entry *lib = loadedlibs; lib->func != NULL; lib++) {
-        csL_importf(C, lib->name, lib->func, 1);
+TOKULIB_API void tokuL_openlibs(toku_State *T) {
+    for (const tokuL_Entry *lib = loadedlibs; lib->func != NULL; lib++) {
+        tokuL_importf(C, lib->name, lib->func, 1);
         toku_pop(C, 1); /* remove module */
     }
 }

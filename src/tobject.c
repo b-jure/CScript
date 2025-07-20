@@ -14,7 +14,7 @@
 #include "tvm.h"
 
 
-int csO_ceillog2 (t_uint x) {
+int tokuO_ceillog2 (t_uint x) {
     static const t_ubyte log_2[256] = {  /* log_2[i] = ceil(log2(i - 1)) */
         0,1,2,2,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,
         6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
@@ -37,7 +37,7 @@ int csO_ceillog2 (t_uint x) {
 
 
 /* shift 'x', 'y' times, to the left; in case of overflow return 0 */
-toku_Integer csO_shiftl(toku_Integer x, toku_Integer y) {
+toku_Integer tokuO_shiftl(toku_Integer x, toku_Integer y) {
     if (y < 0) { /* shift right? */
         if (y <= -INTBITS) return 0; /* overflow */
         return t_castU2S(t_castS2U(x) >> t_castS2U(-y));
@@ -55,7 +55,7 @@ static toku_Number numarithm(toku_State *T, toku_Number x, toku_Number y, int op
         case TOKU_OP_MUL: return t_nummul(C, x, y);
         case TOKU_OP_DIV: return t_numdiv(C, x, y);
         case TOKU_OP_IDIV: return t_numidiv(C, x, y);
-        case TOKU_OP_MOD: return csV_modf(C, x, y);
+        case TOKU_OP_MOD: return tokuV_modf(C, x, y);
         case TOKU_OP_POW: return t_numpow(C, x, y);
         case TOKU_OP_UNM: return t_numunm(C, x);
         default: toku_assert(0); return 0.0;
@@ -68,11 +68,11 @@ static toku_Integer intarithm(toku_State *T, toku_Integer x, toku_Integer y, int
         case TOKU_OP_ADD: return intop(+, x, y);
         case TOKU_OP_SUB: return intop(-, x, y);
         case TOKU_OP_MUL: return intop(*, x, y);
-        case TOKU_OP_IDIV: return csV_divi(C, x, y);
-        case TOKU_OP_MOD: return csV_modi(C, x, y);
+        case TOKU_OP_IDIV: return tokuV_divi(C, x, y);
+        case TOKU_OP_MOD: return tokuV_modi(C, x, y);
         case TOKU_OP_UNM: return intop(-, 0, x);
-        case TOKU_OP_BSHL: return csO_shiftl(x, y);
-        case TOKU_OP_BSHR: return csO_shiftr(x, y);
+        case TOKU_OP_BSHL: return tokuO_shiftl(x, y);
+        case TOKU_OP_BSHR: return tokuO_shiftr(x, y);
         case TOKU_OP_BNOT: return intop(^, ~t_castS2U(0), x);
         case TOKU_OP_BAND: return intop(&, x, y);
         case TOKU_OP_BOR: return intop(|, x, y);
@@ -83,7 +83,7 @@ static toku_Integer intarithm(toku_State *T, toku_Integer x, toku_Integer y, int
 
 
 /* convert number 'n' to integer according to 'mode' */
-int csO_n2i(toku_Number n, toku_Integer *i, N2IMode mode) {
+int tokuO_n2i(toku_Number n, toku_Integer *i, N2IMode mode) {
     toku_Number floored = t_floor(n);
     if (floored != n) {
         if (mode == N2IEQ) return 0;
@@ -94,9 +94,9 @@ int csO_n2i(toku_Number n, toku_Integer *i, N2IMode mode) {
 
 
 /* try to convert value to 'toku_Integer' */
-int csO_tointeger(const TValue *o, toku_Integer *i, int mode) {
+int tokuO_tointeger(const TValue *o, toku_Integer *i, int mode) {
     if (ttisflt(o))
-        return csO_n2i(fval(o), i, mode);
+        return tokuO_n2i(fval(o), i, mode);
     else if (ttisint(o)) {
         *i = ival(o);
         return 1;
@@ -111,7 +111,7 @@ int csO_tointeger(const TValue *o, toku_Integer *i, int mode) {
 ** itself can't invoke runtime error, if the operation can't be
 ** done then return 0.
 */
-int csO_arithmraw(toku_State *T, const TValue *a, const TValue *b,
+int tokuO_arithmraw(toku_State *T, const TValue *a, const TValue *b,
                   TValue *res, int op) {
     switch (op) {
         case TOKU_OP_BNOT: case TOKU_OP_BXOR: case TOKU_OP_BSHL:

@@ -55,14 +55,14 @@ static void *firsttry(GState *gs, void *block, size_t os, size_t ns) {
 t_sinline void *tryagain(toku_State *T, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G(C);
     if (cantryagain(gs)) {
-        csG_fullinc(C, 1); /* try to reclaim some memory... */
+        tokuG_fullinc(C, 1); /* try to reclaim some memory... */
         return callfalloc(gs, ptr, osz, nsz); /* ...and try again */
     }
     return NULL; /* cannot run an emergency collection */
 }
 
 
-void *csM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
+void *tokuM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G(C);
     void *block;
     toku_assert((osz == 0) == (ptr == NULL));
@@ -78,15 +78,15 @@ void *csM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *csM_saferealloc(toku_State *T, void *ptr, size_t osz, size_t nsz) {
-    void *block = csM_reallot_(C, ptr, osz, nsz);
+void *tokuM_saferealloc(toku_State *T, void *ptr, size_t osz, size_t nsz) {
+    void *block = tokuM_reallot_(C, ptr, osz, nsz);
     if (t_unlikely(block == NULL && nsz != 0))
-        csM_error(C);
+        tokuM_error(C);
     return block;
 }
 
 
-void *csM_mallot_(toku_State *T, size_t size, int tag) {
+void *tokuM_mallot_(toku_State *T, size_t size, int tag) {
     if (size == 0) {
         return NULL;
     } else {
@@ -95,7 +95,7 @@ void *csM_mallot_(toku_State *T, size_t size, int tag) {
         if (t_unlikely(block == NULL)) {
             block = tryagain(C, NULL, tag, size);
             if (t_unlikely(block == NULL))
-                csM_error(C);
+                tokuM_error(C);
         }
         gs->gcdebt += size;
         return block;
@@ -106,7 +106,7 @@ void *csM_mallot_(toku_State *T, size_t size, int tag) {
 /* minimum size of array memory block */
 #define MINSIZEARRAY    4
 
-void *csM_growarr_(toku_State *T, void *block, int *sizep, int len,
+void *tokuM_growarr_(toku_State *T, void *block, int *sizep, int len,
                    int elemsize, int nelems, int limit, const char *what) {
     int size = *sizep;
     toku_assert(0 <= nelems && 0 < elemsize && what);
@@ -117,14 +117,14 @@ checkspace:
     } else { /* otherwise grow */
         if (t_unlikely(size >= limit / 2)) { /* cannot double it? */
             if (t_unlikely(size >= limit)) /* limit reached? */
-                csD_runerror(C, "too many %s (limit is %d)", what, limit);
+                tokuD_runerror(C, "too many %s (limit is %d)", what, limit);
             size = limit;
         } else {
             size *= 2;
             if (size < MINSIZEARRAY)
                 size = MINSIZEARRAY;
         }
-        block = csM_saferealloc(C, block, cast_sizet(*sizep) * elemsize,
+        block = tokuM_saferealloc(C, block, cast_sizet(*sizep) * elemsize,
                                           cast_sizet(size) * elemsize);
         *sizep = size;
         goto checkspace;
@@ -132,23 +132,23 @@ checkspace:
 }
 
 
-void *csM_shrinkarr_(toku_State *T, void *ptr, int *sizep, int nfinal,
+void *tokuM_shrinkarr_(toku_State *T, void *ptr, int *sizep, int nfinal,
                      int elemsize) {
     size_t osz = cast_sizet((*sizep) * elemsize);
     size_t nsz = cast_sizet(nfinal * elemsize);
     toku_assert(nsz <= osz);
-    ptr = csM_saferealloc(C, ptr, osz, nsz);
+    ptr = tokuM_saferealloc(C, ptr, osz, nsz);
     *sizep = nfinal;
     return ptr;
 }
 
 
-t_noret csM_toobig(toku_State *T) {
-    csD_runerror(C, "memory allocation error: block too big");
+t_noret tokuM_toobig(toku_State *T) {
+    tokuD_runerror(C, "memory allocation error: block too big");
 }
 
 
-void csM_free_(toku_State *T, void *ptr, size_t osz) {
+void tokuM_free_(toku_State *T, void *ptr, size_t osz) {
     GState *gs = G(C);
     toku_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);

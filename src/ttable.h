@@ -36,19 +36,19 @@ TOKUI_FUNC int ctH_next(toku_State *T, Table *tab, SPtr key);
 TOKUI_FUNC void ctH_copykeys(toku_State *T, Table *stab, Table *dtab);
 TOKUI_FUNC void ctH_resize(toku_State *T, Table *t, t_uint newsize);
 TOKUI_FUNC void ctH_newkey(toku_State *T, Table *t, const TValue *key,
-                         contt TValue *val);
-TOKUI_FUNC contt TValue *csH_getshortstr(Table *t, OString *key);
-TOKUI_FUNC contt TValue *csH_getstr(Table *t, OString *key);
-TOKUI_FUNC contt TValue *csH_getint(Table *t, toku_Integer key);
-TOKUI_FUNC contt TValue *csH_get(Table *tab, const TValue *key);
+                         const TValue *val);
+TOKUI_FUNC const TValue *tokuH_getshortstr(Table *t, OString *key);
+TOKUI_FUNC const TValue *tokuH_getstr(Table *t, OString *key);
+TOKUI_FUNC const TValue *tokuH_getint(Table *t, toku_Integer key);
+TOKUI_FUNC const TValue *tokuH_get(Table *tab, const TValue *key);
 TOKUI_FUNC void ctH_finishset(toku_State *T, Table *t, const TValue *slot,
-                            contt TValue *key, const TValue *val);
+                            const TValue *key, const TValue *val);
 TOKUI_FUNC void ctH_set(toku_State *T, Table *tab, const TValue *key,
-                      contt TValue *val);
+                      const TValue *val);
 TOKUI_FUNC void ctH_setstr(toku_State *T, Table *tab, OString *key,
-                                                  contt TValue *val);
+                                                  const TValue *val);
 TOKUI_FUNC void ctH_setint(toku_State *T, Table *t, toku_Integer key,
-                                                contt TValue *val);
+                                                const TValue *val);
 TOKUI_FUNC void ctH_free(toku_State *T, Table *t);
 TOKUI_FUNC int ctH_len(const Table *t);
 

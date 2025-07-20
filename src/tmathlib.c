@@ -36,26 +36,26 @@ static int m_abs(toku_State *T) {
         if (n < 0) n = t_castU2S(0u - t_castS2U(n));
         toku_push_integer(C, n);
     } else
-        toku_push_number(C, t_mathop(fabs)(csL_check_number(C, 0)));
+        toku_push_number(C, t_mathop(fabs)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 static int m_acos(toku_State *T) {
-    toku_push_number(C, t_mathop(acos)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(acos)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 static int m_asin(toku_State *T) {
-    toku_push_number(C, t_mathop(asin)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(asin)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 static int m_atan(toku_State *T) {
-    toku_Number y = csL_check_number(C, 0);
-    toku_Number x = csL_opt_number(C, 1, 1);
+    toku_Number y = tokuL_check_number(C, 0);
+    toku_Number x = tokuL_opt_number(C, 1, 1);
     toku_push_number(C, t_mathop(atan2)(y, x));
     return 1;
 }
@@ -75,7 +75,7 @@ static int m_ceil (toku_State *T) {
     if (toku_is_integer(C, 0))
         toku_setntop(C, 1); /* integer is its own ceiling */
     else {
-        toku_Number d = t_mathop(ceil)(csL_check_number(C, 0));
+        toku_Number d = t_mathop(ceil)(tokuL_check_number(C, 0));
         push_num_or_int(C, d);
     }
     return 1;
@@ -83,21 +83,21 @@ static int m_ceil (toku_State *T) {
 
 
 static int m_cos(toku_State *T) {
-    toku_push_number(C, t_mathop(cos)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(cos)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 /* angle from radians to degrees */
 static int m_deg(toku_State *T) {
-    toku_push_number(C, csL_check_number(C, 0) * (t_mathop(180.0) / PI));
+    toku_push_number(C, tokuL_check_number(C, 0) * (t_mathop(180.0) / PI));
     return 1;
 }
 
 
 /* base-e exponentiation */
 static int m_exp(toku_State *T) {
-    toku_push_number(C, t_mathop(exp)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(exp)(tokuL_check_number(C, 0)));
     return 1;
 }
 
@@ -107,7 +107,7 @@ static int m_floor(toku_State *T) {
     if (toku_is_integer(C, 0))
         toku_setntop(C, 1); /* integer is its own floor */
     else {
-        toku_Number d = t_mathop(floor)(csL_check_number(C, 0));
+        toku_Number d = t_mathop(floor)(tokuL_check_number(C, 0));
         push_num_or_int(C, d);
     }
     return 1;
@@ -118,25 +118,25 @@ static int m_fmod(toku_State *T) {
     if (toku_is_integer(C, 0) && toku_is_integer(C, 1)) {
         toku_Integer d = toku_to_integer(C, 1); /* denominator */
         if ((toku_Unsigned)d + 1u <= 1u) { /* special cases: -1 or 0 */
-            csL_check_arg(C, d != 0, 1, "zero");
+            tokuL_check_arg(C, d != 0, 1, "zero");
             toku_push_integer(C, 0); /* avoid overflow with 0x80000... / -1 */
         } else
             toku_push_integer(C, toku_to_integer(C, 0) % d);
     } else
-        toku_push_number(C, t_mathop(fmod)(csL_check_number(C, 0),
-                                         csL_check_number(C, 1)));
+        toku_push_number(C, t_mathop(fmod)(tokuL_check_number(C, 0),
+                                         tokuL_check_number(C, 1)));
     return 1; /* return remainder */
 }
 
 
 static int m_sin(toku_State *T) {
-    toku_push_number(C, t_mathop(sin)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(sin)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 static int m_tan(toku_State *T) {
-    toku_push_number(C, t_mathop(tan)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(tan)(tokuL_check_number(C, 0)));
     return 1;
 }
 
@@ -148,35 +148,35 @@ static int m_toint(toku_State *T) {
     if (t_likely(valid))
         toku_push_integer(C, n);
     else {
-        csL_check_any(C, 0);
-        csL_push_fail(C); /* value is not convertible to integer */
+        tokuL_check_any(C, 0);
+        tokuL_push_fail(C); /* value is not convertible to integer */
     }
     return 1;
 }
 
 
 static int m_sqrt(toku_State *T) {
-    toku_push_number(C, t_mathop(sqrt)(csL_check_number(C, 0)));
+    toku_push_number(C, t_mathop(sqrt)(tokuL_check_number(C, 0)));
     return 1;
 }
 
 
 /* unsigned "less than" */
 static int m_ult(toku_State *T) {
-    toku_Integer a = csL_check_integer(C, 0);
-    toku_Integer b = csL_check_integer(C, 1);
+    toku_Integer a = tokuL_check_integer(C, 0);
+    toku_Integer b = tokuL_check_integer(C, 1);
     toku_push_bool(C, t_castS2U(a) < t_castS2U(b));
     return 1;
 }
 
 
 static int m_log(toku_State *T) {
-    toku_Number x = csL_check_number(C, 0);
+    toku_Number x = tokuL_check_number(C, 0);
     toku_Number res;
     if (toku_is_noneornil(C, 1))
         res = t_mathop(log)(x); /* natural log */
     else {
-        toku_Number base = csL_check_number(C, 1);
+        toku_Number base = tokuL_check_number(C, 1);
         if (base == t_mathop(2.0))
             res = t_mathop(log2)(x); /* base-2 log */
         else {
@@ -194,7 +194,7 @@ static int m_log(toku_State *T) {
 static int m_max(toku_State *T) {
     int n = toku_getntop(C); /* number of arguments */
     int imax = 0; /* index of current maximum value */
-    csL_check_arg(C, n > 0, 0, "value expected");
+    tokuL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
         if (toku_compare(C, imax, i, toku_ORD_LT))
             imax = i;
@@ -207,7 +207,7 @@ static int m_max(toku_State *T) {
 static int m_min(toku_State *T) {
     int n = toku_getntop(C); /* number of arguments */
     int imin = 0; /* index of current minimum value */
-    csL_check_arg(C, n > 0, 0, "value expected");
+    tokuL_check_arg(C, n > 0, 0, "value expected");
     for (int i = 1; i < n; i++) {
         if (toku_compare(C, i, imin, toku_ORD_LT))
             imin = i;
@@ -227,7 +227,7 @@ static int m_modf(toku_State *T) {
         toku_setntop(C, 1); /* number is its own integer part */
         toku_push_number(C, 0); /* no fractional part */
     } else {
-        toku_Number n = csL_check_number(C, 0);
+        toku_Number n = tokuL_check_number(C, 0);
         /* integer part (rounds toward zero) */
         toku_Number ip = (n < 0) ? t_mathop(ceil)(n) : t_mathop(floor)(n);
         push_num_or_int(C, ip);
@@ -240,7 +240,7 @@ static int m_modf(toku_State *T) {
 
 /* angle from degrees to radians */
 static int m_rad (toku_State *T) {
-    toku_push_number(C, csL_check_number(C, 0) * (PI / t_mathop(180.0)));
+    toku_push_number(C, tokuL_check_number(C, 0) * (PI / t_mathop(180.0)));
     return 1;
 }
 
@@ -249,8 +249,8 @@ static int m_type(toku_State *T) {
     if (toku_type(C, 0) == toku_T_NUMBER)
         toku_push_string(C, (toku_is_integer(C, 0)) ? "integer" : "float");
     else {
-        csL_check_any(C, 0);
-        csL_push_fail(C);
+        tokuL_check_any(C, 0);
+        tokuL_push_fail(C);
     }
     return 1;
 }
@@ -408,7 +408,7 @@ static void init_ctx_array(MT19937 *ctx, Rand64 key[], Rand64 klen) {
 
 /* default initialization */
 static void init_ctx_default(toku_State *T, MT19937 *ctx) {
-    init_ctx_seed(ctx, csL_makeseed(C));
+    init_ctx_seed(ctx, tokuL_makeseed(C));
 }
 
 
@@ -461,8 +461,8 @@ typedef struct SeedArray {
 static void add_seed_elem(toku_State *T, SeedArray *sa) {
     toku_Unsigned seed = pointer2uint(toku_to_pointer(C, -1));
     if (seed == 0) { /* no pointer? */
-        toku_Unsigned ub = csL_makeseed(C);
-        toku_Unsigned lb = csL_makeseed(C);
+        toku_Unsigned ub = tokuL_makeseed(C);
+        toku_Unsigned lb = tokuL_makeseed(C);
         seed = (ub << 31)|lb;
     }
     if (sa->i >= sizeof(sa->seed)/sizeof(sa->seed[0]))
@@ -480,7 +480,7 @@ static int m_srand(toku_State *T) {
     int t = toku_type(C, 0);
     if (t != TOKU_T_NONE) { /* have at least one argument? */
         if (t == TOKU_T_NUMBER) { /* seed with integer? */
-            toku_Integer n = csL_check_integer(C, 0);
+            toku_Integer n = tokuL_check_integer(C, 0);
             sa.seed[0] = U2R(t_castS2U(n));
             sa.n = 1;
         } else if (t == TOKU_T_LIST) { /* seed with array values? */
@@ -496,7 +496,7 @@ static int m_srand(toku_State *T) {
             while (toku_nextfield(C, 0))
                 add_seed_elem(C, &sa);
         } else /* invalid argument type */
-            csL_error_type(C, 0, "number, list or a table");
+            tokuL_error_type(C, 0, "number, list or a table");
     }
     if (sa.n == 0) /* no seed values? */
         init_ctx_default(C, ctx); /* default initialization */
@@ -548,19 +548,19 @@ static int m_rand(toku_State *T) {
         }
         case 1: { /* upper limit */
             low = 1;
-            up = csL_check_integer(C, 0);
+            up = tokuL_check_integer(C, 0);
             break;
         }
         case 2: { /* lower and upper limit */
-            low = csL_check_integer(C, 0);
-            up = csL_check_integer(C, 1);
+            low = tokuL_check_integer(C, 0);
+            up = tokuL_check_integer(C, 1);
             break;
         }
         default: {
-            return csL_error(C, "invalid number of arguments");
+            return tokuL_error(C, "invalid number of arguments");
         }
     }
-    csL_check_arg(C, low <= up, 0, "interval is empty");
+    tokuL_check_arg(C, low <= up, 0, "interval is empty");
     /* project random integer into the interval [low, up] */
     p = project(C, ctx, ran, t_castS2U(up - low));
     toku_push_integer(C, t_castU2S(p) + low);
@@ -575,7 +575,7 @@ static int m_randf(toku_State *T) {
 }
 
 
-static const csL_Entry randfuncs[] = {
+static const tokuL_Entry randfuncs[] = {
     {"srand", m_srand},
     {"rand", m_rand},
     {"randf", m_randf},
@@ -589,13 +589,13 @@ static const csL_Entry randfuncs[] = {
 static void set_rand_funcs(toku_State *T) {
     MT19937 *ctx = toku_push_userdata(C, sizeof(*ctx), 0);
     init_ctx_default(C, ctx);
-    csL_set_funcs(C, randfuncs, 1);
+    tokuL_set_funcs(C, randfuncs, 1);
 }
 
 /* }================================================================== */
 
 
-const csL_Entry mathlib[] = {
+const tokuL_Entry mathlib[] = {
     {"abs", m_abs},
     {"acos", m_acos},
     {"asin", m_asin},
@@ -630,7 +630,7 @@ const csL_Entry mathlib[] = {
 
 
 CSMOD_API int tokuopen_math(toku_State *T) {
-    csL_push_lib(C, mathlib);
+    tokuL_push_lib(C, mathlib);
     toku_push_number(C, PI);
     toku_set_fieldstr(C, -2, "pi");
     toku_push_number(C, toku_HUGE_VAL);

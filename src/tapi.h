@@ -8,7 +8,7 @@
 #define tapi_h
 
 #include "tokudaelimitt.h"
-#include "tttate.h"
+#include "tstate.h"
 
 /*
 ** If a call returnt too many multiple returns, the callee may not have

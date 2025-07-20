@@ -199,7 +199,7 @@
 
 /*
 ** @TOKU_API - is a mark for all core API functions.
-** @CSLIB_API - is a mark for all auxiliary library functions.
+** @TOKULIB_API - is a mark for all auxiliary library functions.
 ** @CSMOD_API - is a mark for all standard library opening functions.
 ** CHANGE them if you need to define those functions in some special way.
 ** For instance, if you want to create one Windows DLL with the core and
@@ -217,7 +217,7 @@
 #endif                          /* } */
 
 
-#define CSLIB_API       TOKU_API
+#define TOKULIB_API       TOKU_API
 #define CSMOD_API       TOKU_API
 
 
@@ -230,13 +230,13 @@
 */
 #if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 302) \
     && defined(__ELF__)             /* { */
-#define TOKUI_FUNC        __attribute__((visibility("internal"))) extern
+#define TOKUI_FUNC          __attribute__((visibility("internal"))) extern
 #else                               /* }{ */
-#define TOKUI_FUNC        extern
+#define TOKUI_FUNC          extern
 #endif                              /* } */
 
-#define TOKUI_DEC(dec)    TOKUI_FUNC dec
-#define TOKUI_DEF         /* empty */
+#define TOKUI_DEC(dec)      TOKUI_FUNC dec
+#define TOKUI_DEF           /* empty */
 
 /* }===================================================================== */
 

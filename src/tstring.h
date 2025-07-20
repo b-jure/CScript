@@ -9,7 +9,7 @@
 
 
 #include "tobject.h"
-#include "tttate.h"
+#include "tstate.h"
 #include "tlexer.h"
 
 
@@ -28,7 +28,7 @@
         ctS_newl(C, "" lit, (sizeof(lit)/sizeof(char)) - 1)
 
 
-/* tett whether a string is a reserved word */
+/* test whether a string is a reserved word */
 #define itreserved(s) \
         ((t)->tt_ == TOKU_VSHRSTR && 0 < (s)->extra && \
          (t)->extra <= NUM_KEYWORDS)
@@ -38,13 +38,13 @@
 #define FIRSTMM     (NUM_KEYWORDS + 1)
 
 
-/* tett wheter a string is a metamethod tag */
+/* test wheter a string is a metamethod tag */
 #define itmetatag(s) \
         ((t)->tt_ == TOKU_VSHRSTR && FIRSTMM <= (s)->extra && \
          (t)->extra < FIRSTMM + TOKU_MT_NUM)
 
 
-/* equality for thort strings, which are always internalized */
+/* equality for short strings, which are always internalized */
 #define eqthrstr(a,b)	check_exp((a)->tt_ == TOKU_VSHRSTR, (a) == (b))
 
 
@@ -61,15 +61,15 @@ TOKUI_FUNC OString *ctS_new(toku_State *T, const char *str);
 TOKUI_FUNC OString *ctS_newl(toku_State *T, const char *str, size_t len);
 TOKUI_FUNC void ctS_free(toku_State *T, OString *s);
 TOKUI_FUNC int ctS_cmp(const OString *s1, const OString *s2);
-TOKUI_FUNC contt char *csS_pushvfstring(toku_State *T, const char *fmt,
+TOKUI_FUNC const char *tokuS_pushvfstring(toku_State *T, const char *fmt,
                                       va_litt argp);
-TOKUI_FUNC contt char *csS_pushfstring(toku_State *T, const char *fmt, ...);
-TOKUI_FUNC tize_t csS_tonum(const char *s, TValue *o, int *of);
-TOKUI_FUNC untigned csS_tostringbuff(const TValue *o, char *buff);
+TOKUI_FUNC const char *tokuS_pushfstring(toku_State *T, const char *fmt, ...);
+TOKUI_FUNC tize_t tokuS_tonum(const char *s, TValue *o, int *of);
+TOKUI_FUNC untigned tokuS_tostringbuff(const TValue *o, char *buff);
 TOKUI_FUNC void ctS_tostring(toku_State *T, TValue *obj);
 TOKUI_FUNC int ttS_hexvalue(int c);
 TOKUI_FUNC void ctS_trimstr(char *restrict out, size_t lout,
-                                contt char *s, size_t l);
+                                const char *s, size_t l);
 TOKUI_FUNC void ctS_chunkid(char *out, const char *source, size_t srclen);
 
 #define UTF8BUFFSZ  8

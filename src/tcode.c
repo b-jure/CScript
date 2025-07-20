@@ -72,7 +72,7 @@
 ** OpCode properties table.
 ** ORDER OP
 */
-TOKUI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
+TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
     /* FORMAT PSH POP CHGTOP */
     { FormatI, 1, 0, 0 }, /* OP_TRUE */
     { FormatI, 1, 0, 0 }, /* OP_FALSE */
@@ -181,7 +181,7 @@ TOKUI_DEF const OpProperties csC_opproperties[NUM_OPCODES] = {
 /* 
 ** OpFormat size table (in bytes).
 */
-TOKUI_DEF const t_ubyte csC_opsize[FormatN] = { /* ORDER OPFMT */
+TOKUI_DEF const t_ubyte tokuC_opsize[FormatN] = { /* ORDER OPFMT */
     SIZE_INSTR,                             /* FormatI */
     SIZE_INSTR+SIZE_ARG_S,                  /* FormatIS */
     SIZE_INSTR+SIZE_ARG_S*2,                /* FormatISS */
@@ -196,7 +196,7 @@ TOKUI_DEF const t_ubyte csC_opsize[FormatN] = { /* ORDER OPFMT */
 /* 
 ** Names of all instructions.
 */
-TOKUI_DEF const char *csC_opname[NUM_OPCODES] = { /* ORDER OP */
+TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* ORDER OP */
 "TRUE", "FALSE", "SUPER", "NIL", "POP", "LOAD", "CONST", "CONSTL",
 "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
 "CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMT", "MBIN", "ADDK",
@@ -250,14 +250,14 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     int opsize = getopSize(p->code[pc]); /* size of last coded instruction */
     toku_assert(pc < currPC); /* must of emitted instruction */
     if (t_abs(linedif) >= LIMLINEDIFF || fs->iwthabs++ >= MAXIWTHABS) {
-        csM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
+        tokuM_growarray(fs->lx->C, p->abslineinfo, p->sizeabslineinfo,
                       fs->nabslineinfo, TOKU_MAXINT, "lines", AbsLineInfo);
         p->abslineinfo[fs->nabslineinfo].pc = pc;
         p->abslineinfo[fs->nabslineinfo++].line = line;
         linedif = ABSLINEINFO; /* signal the absolute line info entry */
         fs->iwthabs = 1; /* reset counter */
     }
-    csM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
+    tokuM_ensurearray(fs->lx->C, p->lineinfo, p->sizelineinfo, pc, opsize,
                     TOKU_MAXINT, "opcodes", t_byte);
     p->lineinfo[pc] = linedif;
     while (--opsize) /* fill func args (if any) */
@@ -313,7 +313,7 @@ static void removelastinstruction(FunctionState *fs) {
 /*
 ** Remove last instruction which must be a jump.
 */
-void csC_removelastjump(FunctionState *fs) {
+void tokuC_removelastjump(FunctionState *fs) {
     toku_assert(*prevOP(fs) == OP_JMP || *prevOP(fs) == OP_JMPS);
     removelastinstruction(fs);
 }
@@ -323,7 +323,7 @@ void csC_removelastjump(FunctionState *fs) {
 ** Change line information associated with current position, by removing
 ** previous info and adding it again with new line.
 */
-void csC_fixline(FunctionState *fs, int line) {
+void tokuC_fixline(FunctionState *fs, int line) {
     removelastlineinfo(fs);
     savelineinfo(fs, fs->p, line);
 }
@@ -331,7 +331,7 @@ void csC_fixline(FunctionState *fs, int line) {
 
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->C, p->code, p->sizecode, currPC, TOKU_MAXINT,
+    tokuM_growarray(fs->lx->C, p->code, p->sizecode, currPC, TOKU_MAXINT,
                   "instructions", Instruction);
     p->code[currPC++] = cast_ubyte(code);
 }
@@ -339,7 +339,7 @@ static void emitbyte(FunctionState *fs, int code) {
 
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
-    csM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
+    tokuM_ensurearray(fs->lx->C, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
                     "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZE_ARG_L;
@@ -348,14 +348,14 @@ static void emit3bytes(FunctionState *fs, int code) {
 
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
-    csM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, TOKU_MAXINT,
+    tokuM_growarray(fs->lx->C, p->instpc, p->sizeinstpc, fs->ninstpc, TOKU_MAXINT,
                   "instructions", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }
 
 
 /* emit instruction */
-int csC_emitI(FunctionState *fs, Instruction i) {
+int tokuC_emitI(FunctionState *fs, Instruction i) {
     toku_assert(fs->prevpc <= currPC);
     addinstpc(fs);
     emitbyte(fs, i);
@@ -381,24 +381,24 @@ static int emitL(FunctionState *fs, int arg) {
 
 
 /* code instruction with short arg */
-int csC_emitIS(FunctionState *fs, Instruction i, int a) {
-    int offset = csC_emitI(fs, i);
+int tokuC_emitIS(FunctionState *fs, Instruction i, int a) {
+    int offset = tokuC_emitI(fs, i);
     emitS(fs, a);
     return offset;
 }
 
 
 /* code instruction 'i' with long arg 'a' */
-int csC_emitIL(FunctionState *fs, Instruction i, int a) {
-    int offset = csC_emitI(fs, i);
+int tokuC_emitIL(FunctionState *fs, Instruction i, int a) {
+    int offset = tokuC_emitI(fs, i);
     emitL(fs, a);
     return offset;
 }
 
 
 /* code instruction with 2 long args */
-int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
-    int offset = csC_emitI(fs, i);
+int tokuC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
+    int offset = tokuC_emitI(fs, i);
     emitL(fs, a);
     emitL(fs, b);
     return offset;
@@ -406,8 +406,8 @@ int csC_emitILL(FunctionState *fs, Instruction i, int a, int b) {
 
 
 /* code instruction with 3 long args */
-int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
-    int offset = csC_emitI(fs, i);
+int tokuC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
+    int offset = tokuC_emitI(fs, i);
     emitL(fs, a);
     emitL(fs, b);
     emitL(fs, c);
@@ -415,15 +415,15 @@ int csC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
 }
 
 
-int csC_call(FunctionState *fs, int base, int nreturns) {
+int tokuC_call(FunctionState *fs, int base, int nreturns) {
     toku_assert(nreturns >= TOKU_MULTRET);
-    return csC_emitILL(fs, OP_CALL, base, nreturns + 1);
+    return tokuC_emitILL(fs, OP_CALL, base, nreturns + 1);
 }
 
 
-int csC_vararg(FunctionState *fs, int nreturns) {
+int tokuC_vararg(FunctionState *fs, int nreturns) {
     toku_assert(nreturns >= TOKU_MULTRET);
-    return csC_emitIL(fs, OP_VARARG, nreturns + 1);
+    return tokuC_emitIL(fs, OP_VARARG, nreturns + 1);
 }
 
 
@@ -432,25 +432,25 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
     TValue val;
     toku_State *T = fs->lx->C;
     Proto *p = fs->p;
-    const TValue *index = csH_get(fs->lx->tab, key); /* from scanner table */
+    const TValue *index = tokuH_get(fs->lx->tab, key); /* from scanner table */
     int k, oldsz;
     if (ttisint(index)) { /* value is integer? */
         k = cast_int(ival(index)); /* get the index... */
         /* ...and check if the value is correct */
         if (k < fs->nk && ttypetag(&p->k[k]) == ttypetag(v) &&
-                          csV_raweq(&p->k[k], v))
+                          tokuV_raweq(&p->k[k], v))
             return k; /* reuse index */
     } /* otherwise constant not found; create a new entry */
     oldsz = p->sizek;
     k = fs->nk;
     setival(&val, k);
-    csH_finishset(C, fs->lx->tab, index, key, &val);
-    csM_growarray(C, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
+    tokuH_finishset(C, fs->lx->tab, index, key, &val);
+    tokuM_growarray(C, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
     while (oldsz < p->sizek) /* nil out the new part */
         setnilval(&p->k[oldsz++]);
     setobj(C, &p->k[k], v);
     fs->nk++;
-    csG_barrier(C, p, v);
+    tokuG_barrier(C, p, v);
     return k; /* new index */
 }
 
@@ -511,7 +511,7 @@ static int fltK(FunctionState *fs, toku_Number n) {
     TValue vn;
     toku_Integer ik;
     setfval(&vn, n);
-    if (!csO_n2i(n, &ik, N2IEQ)) { /* not an integral value? */
+    if (!tokuO_n2i(n, &ik, N2IEQ)) { /* not an integral value? */
         return addK(fs, &vn, &vn); /* use number itself as key */
     } else { /* otherwise must build an alternative key */
         /* number of mantissa bits including the leading bit (1) */
@@ -522,7 +522,7 @@ static int fltK(FunctionState *fs, toku_Number n) {
         TValue kv;
         setfval(&kv, k);
         /* result is not an integral value, unless value is too large */
-        toku_assert(!csO_n2i(k, &ik, N2IEQ) ||
+        toku_assert(!tokuO_n2i(k, &ik, N2IEQ) ||
                    t_mathop(fabs)(n) >= t_mathop(1e6));
         return addK(fs, &kv, &vn);
     }
@@ -530,20 +530,20 @@ static int fltK(FunctionState *fs, toku_Number n) {
 
 
 /* adjust 'maxstack' */
-void csC_checkstack(FunctionState *fs, int n) {
+void tokuC_checkstack(FunctionState *fs, int n) {
     int newstack = fs->sp + n;
     toku_assert(newstack >= 0);
     if (fs->p->maxstack < newstack) {
-        csP_checklimit(fs, newstack, MAX_CODE, "stack slots");
+        tokuP_checklimit(fs, newstack, MAX_CODE, "stack slots");
         fs->p->maxstack = newstack;
     }
 }
 
 
 /* reserve 'n' stack slots */
-void csC_reserveslots(FunctionState *fs, int n) {
+void tokuC_reserveslots(FunctionState *fs, int n) {
     toku_assert(n >= 0);
-    csC_checkstack(fs, n);
+    tokuC_checkstack(fs, n);
     fs->sp += n;
     toku_assert(fs->sp >= 0);
 }
@@ -574,14 +574,14 @@ static void setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
 }
 
 
-void csC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
-    toku_assert(nreturns >= 0); /* for TOKU_MULTRET use 'csC_setmulret' */
+void tokuC_setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
+    toku_assert(nreturns >= 0); /* for TOKU_MULTRET use 'tokuC_setmulret' */
     setreturns(fs, e, nreturns);
-    csC_reserveslots(fs, nreturns);
+    tokuC_reserveslots(fs, nreturns);
 }
 
 
-void csC_setmulret(FunctionState *fs, ExpInfo *e) {
+void tokuC_setmulret(FunctionState *fs, ExpInfo *e) {
     setreturns(fs, e, TOKU_MULTRET);
 }
 
@@ -607,7 +607,7 @@ static int adjuststack(FunctionState *fs, OpCode op, int n) {
         SET_ARG_L(pi, 0, newn);
         return fs->prevpc; /* done; do not code new instruction */
     } else /* otherwise code new instruction */
-        return csC_emitIL(fs, op, n);
+        return tokuC_emitIL(fs, op, n);
 }
 
 
@@ -616,16 +616,16 @@ static int codenil(FunctionState *fs, int n) {
 }
 
 
-int csC_nil(FunctionState *fs, int n) {
+int tokuC_nil(FunctionState *fs, int n) {
     toku_assert(n > 0);
-    csC_reserveslots(fs, n);
+    tokuC_reserveslots(fs, n);
     return codenil(fs, n);
 }
 
 
-void csC_load(FunctionState *fs, int stk) {
-    csC_emitIL(fs, OP_LOAD, stk);
-    csC_reserveslots(fs, 1);
+void tokuC_load(FunctionState *fs, int stk) {
+    tokuC_emitIL(fs, OP_LOAD, stk);
+    tokuC_reserveslots(fs, 1);
 }
 
 
@@ -636,45 +636,45 @@ t_sinline void freeslots(FunctionState *fs, int n) {
 
 
 /* pop values from stack */
-int csC_remove(FunctionState *fs, int n) {
+int tokuC_remove(FunctionState *fs, int n) {
     if (n > 0) return adjuststack(fs, OP_POP, n);
     return -1; /* nothing to remove */
 }
 
 
 /* pop values from stack and free compiler stack slots */
-int csC_pop(FunctionState *fs, int n) {
+int tokuC_pop(FunctionState *fs, int n) {
     freeslots(fs, n);
-    return csC_remove(fs, n);
+    return tokuC_remove(fs, n);
 }
 
 
-void csC_adjuststack(FunctionState *fs, int left) {
+void tokuC_adjuststack(FunctionState *fs, int left) {
     if (left > 0)
-        csC_pop(fs, left);
+        tokuC_pop(fs, left);
     else if (left < 0)
-        csC_nil(fs, -left);
+        tokuC_nil(fs, -left);
     /* else stack is already adjusted */
 }
 
 
-int csC_ret(FunctionState *fs, int first, int nreturns) {
-    int offset = csC_emitILL(fs, OP_RET, first, nreturns + 1);
+int tokuC_ret(FunctionState *fs, int first, int nreturns) {
+    int offset = tokuC_emitILL(fs, OP_RET, first, nreturns + 1);
     emitS(fs, 0); /* close flag */
     return offset;
 }
 
 
-void csC_methodset(FunctionState *fs, ExpInfo *e) {
-    e->u.info = csC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
+void tokuC_methodset(FunctionState *fs, ExpInfo *e) {
+    e->u.info = tokuC_emitIL(fs, OP_METHOD, stringK(fs, e->u.str));
     e->et = EXP_FINEXPR;
     freeslots(fs, 1);
 }
 
 
-void csC_mtset(FunctionState *fs, int mt) {
+void tokuC_mtset(FunctionState *fs, int mt) {
     toku_assert(0 <= mt && mt < TOKU_MT_NUM);
-    csC_emitIS(fs, OP_SETMT, mt);
+    tokuC_emitIS(fs, OP_SETMT, mt);
     freeslots(fs, 1);
 }
 
@@ -709,8 +709,8 @@ static int isintKL(ExpInfo *e) {
 static int codeK(FunctionState *fs, int idx) {
     toku_assert(0 <= idx && idx <= MAX_ARG_L);
     return (idx <= MAX_ARG_S) 
-            ? csC_emitIS(fs, OP_CONST, idx) 
-            : csC_emitIL(fs, OP_CONSTL, idx);
+            ? tokuC_emitIS(fs, OP_CONST, idx) 
+            : tokuC_emitIL(fs, OP_CONSTL, idx);
 }
 
 
@@ -759,7 +759,7 @@ static int isnumIK(ExpInfo *e, int *imm) {
     toku_Integer i;
     if (e->et == EXP_INT)
         i = e->u.i;
-    else if (!(e->et == EXP_FLT && csO_n2i(e->u.n, &i, N2IEQ)))
+    else if (!(e->et == EXP_FLT && tokuO_n2i(e->u.n, &i, N2IEQ)))
         return 0;
     if (!hasjumps(e) && isIMML(i)) {
         *imm = (i < 0) ? imml(i) : i;
@@ -772,9 +772,9 @@ static int isnumIK(ExpInfo *e, int *imm) {
 static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
     t_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
     if (isIMM(v->u.info))
-        return csC_emitILS(fs, OP_SETINDEXINT, left, imm);
+        return tokuC_emitILS(fs, OP_SETINDEXINT, left, imm);
     else
-        return csC_emitILL(fs, OP_SETINDEXINTL, left, imm);
+        return tokuC_emitILL(fs, OP_SETINDEXINTL, left, imm);
 }
 
 
@@ -784,24 +784,24 @@ static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
 ** assignment statement, this is needed to properly locate variable
 ** we are storing.
 */
-int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
+int tokuC_storevar(FunctionState *fs, ExpInfo *var, int left) {
     int extra = 0; /* extra leftover values */
     switch (var->et) {
         case EXP_UVAL: {
-            var->u.info = csC_emitIL(fs, OP_SETUVAL, var->u.info);
+            var->u.info = tokuC_emitIL(fs, OP_SETUVAL, var->u.info);
             break;
         }
         case EXP_LOCAL: {
-            var->u.info = csC_emitIL(fs, OP_SETLOCAL, var->u.var.sidx);
+            var->u.info = tokuC_emitIL(fs, OP_SETLOCAL, var->u.var.sidx);
             break;
         }
         case EXP_INDEXED: {
-            var->u.info = csC_emitIL(fs, OP_SETINDEX, left+2);
+            var->u.info = tokuC_emitIL(fs, OP_SETINDEX, left+2);
             extra = 2;
             break;
         }
         case EXP_INDEXSTR: {
-            var->u.info = csC_emitILL(fs, OP_SETINDEXSTR, left+1, var->u.info);
+            var->u.info = tokuC_emitILL(fs, OP_SETINDEXSTR, left+1, var->u.info);
             extra = 1;
             break;
         }
@@ -811,14 +811,14 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
             break;
         }
         case EXP_DOT: {
-            var->u.info = csC_emitILL(fs, OP_SETPROPERTY, left+1, var->u.info);
+            var->u.info = tokuC_emitILL(fs, OP_SETPROPERTY, left+1, var->u.info);
             extra = 1;
             break;
         }
         case EXP_INDEXSUPER:
         case EXP_INDEXSUPERSTR:
         case EXP_DOTSUPER: {
-            csP_semerror(fs->lx, "can't assign to 'super' property");
+            tokuP_semerror(fs->lx, "can't assign to 'super' property");
             break;
         }
         default: toku_assert(0); break; /* invalid store */
@@ -832,9 +832,9 @@ int csC_storevar(FunctionState *fs, ExpInfo *var, int left) {
 static int getindexint(FunctionState *fs, ExpInfo *v) {
     t_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
     if (isIMM(v->u.info))
-        return csC_emitIS(fs, OP_GETINDEXINT, imm);
+        return tokuC_emitIS(fs, OP_GETINDEXINT, imm);
     else
-        return csC_emitIL(fs, OP_GETINDEXINTL, imm);
+        return tokuC_emitIL(fs, OP_GETINDEXINTL, imm);
 }
 
 
@@ -870,7 +870,7 @@ static void fixjump(FunctionState *fs, int pc, int target) {
     int offset = t_abs(target - (pc + getopSize(*jmp)));
     toku_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
     if (t_unlikely(offset > MAXJMP)) /* jump is too large? */
-        csP_semerror(fs->lx, "control structure too long");
+        tokuP_semerror(fs->lx, "control structure too long");
     SET_ARG_L(jmp, 0, offset); /* fix the jump */
     if (fs->lasttarget < target) /* target 'pc' is bigger than previous? */
         fs->lasttarget = target; /* update it */
@@ -878,7 +878,7 @@ static void fixjump(FunctionState *fs, int pc, int target) {
 
 
 /* concatenate jump list 'l2' into jump list 'l1' */
-void csC_concatjl(FunctionState *fs, int *l1, int l2) {
+void tokuC_concatjl(FunctionState *fs, int *l1, int l2) {
     if (l2 == NOJMP) return;
     if (*l1 == NOJMP) *l1 = l2;
     else {
@@ -892,7 +892,7 @@ void csC_concatjl(FunctionState *fs, int *l1, int l2) {
 
 
 /* backpatch jump list at 'pc' */
-void csC_patch(FunctionState *fs, int pc, int target) {
+void tokuC_patch(FunctionState *fs, int pc, int target) {
     while (pc != NOJMP) {
         int next = getjump(fs, pc);
         fixjump(fs, pc, target);
@@ -902,8 +902,8 @@ void csC_patch(FunctionState *fs, int pc, int target) {
 
 
 /* backpatch jump instruction to current pc */
-void csC_patchtohere(FunctionState *fs, int pc) {
-    csC_patch(fs, pc, currPC);
+void tokuC_patchtohere(FunctionState *fs, int pc) {
+    tokuC_patch(fs, pc, currPC);
 }
 
 
@@ -916,7 +916,7 @@ static void patchlistaux(FunctionState *fs, int list, int target) {
 }
 
 
-TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
+TValue *tokuC_getconstant(FunctionState *fs, ExpInfo *v) {
     toku_assert(eisconstant(v) ||         /* expression is a constant... */
               v->et == EXP_INDEXSTR ||  /* ...or indexed by one */
               v->et == EXP_INDEXINT ||
@@ -930,7 +930,7 @@ TValue *csC_getconstant(FunctionState *fs, ExpInfo *v) {
 /*
 ** Convert constant expression to value 'v'.
 */
-void csC_const2v(FunctionState *fs, ExpInfo *e, TValue *v) {
+void tokuC_const2v(FunctionState *fs, ExpInfo *e, TValue *v) {
     switch (e->et) {
         case EXP_NIL: setnilval(v); break;
         case EXP_FALSE: setbfval(v); break;
@@ -942,7 +942,7 @@ void csC_const2v(FunctionState *fs, ExpInfo *e, TValue *v) {
             break;
         }
         case EXP_K: {
-            setobj(cast(toku_State *, NULL), v, csC_getconstant(fs, e));
+            setobj(cast(toku_State *, NULL), v, tokuC_getconstant(fs, e));
             break;
         }
         default: toku_assert(0); /* 'e' is not a constant */
@@ -955,24 +955,24 @@ void csC_const2v(FunctionState *fs, ExpInfo *e, TValue *v) {
 ** This additionally reserves stack slot (if one is needed).
 ** (Expressions may still have jump lists.)
 */
-int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
+int tokuC_dischargevars(FunctionState *fs, ExpInfo *v) {
     switch (v->et) {
         case EXP_UVAL: {
-            v->u.info = csC_emitIL(fs, OP_GETUVAL, v->u.info);
+            v->u.info = tokuC_emitIL(fs, OP_GETUVAL, v->u.info);
             break;
         }
         case EXP_LOCAL: {
-            v->u.info = csC_emitIL(fs, OP_GETLOCAL, v->u.var.sidx);
+            v->u.info = tokuC_emitIL(fs, OP_GETLOCAL, v->u.var.sidx);
             break;
         }
         case EXP_INDEXED: {
             freeslots(fs, 2);
-            v->u.info = csC_emitI(fs, OP_GETINDEX);
+            v->u.info = tokuC_emitI(fs, OP_GETINDEX);
             break;
         }
         case EXP_INDEXSTR: {
             freeslots(fs, 1);
-            v->u.info = csC_emitIL(fs, OP_GETINDEXSTR, v->u.info);
+            v->u.info = tokuC_emitIL(fs, OP_GETINDEXSTR, v->u.info);
             break;
         }
         case EXP_INDEXINT: {
@@ -982,39 +982,39 @@ int csC_dischargevars(FunctionState *fs, ExpInfo *v) {
         }
         case EXP_INDEXSUPER: {
             freeslots(fs, 2);
-            v->u.info = csC_emitI(fs, OP_GETSUPIDX);
+            v->u.info = tokuC_emitI(fs, OP_GETSUPIDX);
             break;
         }
         case EXP_INDEXSUPERSTR: {
             freeslots(fs, 1);
-            v->u.info = csC_emitIL(fs, OP_GETSUPIDXSTR, v->u.info);
+            v->u.info = tokuC_emitIL(fs, OP_GETSUPIDXSTR, v->u.info);
             break;
         }
         case EXP_DOT: {
             freeslots(fs, 1);
-            v->u.info = csC_emitIL(fs, OP_GETPROPERTY, v->u.info);
+            v->u.info = tokuC_emitIL(fs, OP_GETPROPERTY, v->u.info);
             break;
         }
         case EXP_DOTSUPER: {
             freeslots(fs, 1);
-            v->u.info = csC_emitIL(fs, OP_GETSUP, v->u.info);
+            v->u.info = tokuC_emitIL(fs, OP_GETSUP, v->u.info);
             break;
         }
         case EXP_CALL: case EXP_VARARG: {
-            csC_setreturns(fs, v, 1); /* default is one value returned */
+            tokuC_setreturns(fs, v, 1); /* default is one value returned */
             return 1; /* done */
         }
         default: return 0; /* expression is not a variable */
     }
-    csC_reserveslots(fs, 1);
+    tokuC_reserveslots(fs, 1);
     v->et = EXP_FINEXPR;
     return 1;
 }
 
 
 /* code op with long and short args */
-int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
-    int offset = csC_emitIL(fs, op, a);
+int tokuC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
+    int offset = tokuC_emitIL(fs, op, a);
     emitS(fs, b);
     return offset;
 }
@@ -1023,9 +1023,9 @@ int csC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
 /* code integer as constant or immediate operand */
 static int codeintIK(FunctionState *fs, toku_Integer i) {
     if (isIMM(i))
-        return csC_emitIS(fs, OP_CONSTI, encodeimm(i));
+        return tokuC_emitIS(fs, OP_CONSTI, encodeimm(i));
     else if (isIMML(i))
-        return csC_emitIL(fs, OP_CONSTIL, encodeimm(i));
+        return tokuC_emitIL(fs, OP_CONSTIL, encodeimm(i));
     else
         return codeK(fs, intK(fs, i));
 }
@@ -1034,32 +1034,32 @@ static int codeintIK(FunctionState *fs, toku_Integer i) {
 /* code float as constant or immediate operand */
 static int codefltIK(FunctionState *fs, toku_Number n) {
     toku_Integer i;
-    if (csO_n2i(n, &i, N2IEQ)) { /* try code as immediate? */
+    if (tokuO_n2i(n, &i, N2IEQ)) { /* try code as immediate? */
         if (isIMM(i))
-            return csC_emitIS(fs, OP_CONSTF, encodeimm(i));
+            return tokuC_emitIS(fs, OP_CONSTF, encodeimm(i));
         else if (isIMML(i))
-            return csC_emitIL(fs, OP_CONSTFL, encodeimm(i));
+            return tokuC_emitIL(fs, OP_CONSTFL, encodeimm(i));
     } /* else make a constant */
     return codeK(fs, fltK(fs, n));
 }
 
 
-void csC_setlistsize(FunctionState *fs, int pc, int lsz) {
+void tokuC_setlistsize(FunctionState *fs, int pc, int lsz) {
     Instruction *inst = &fs->p->code[pc];
-    lsz = (lsz != 0 ? csO_ceillog2(lsz) + 1 : 0);
+    lsz = (lsz != 0 ? tokuO_ceillog2(lsz) + 1 : 0);
     toku_assert(lsz <= MAX_ARG_S);
     SET_ARG_S(inst, 0, lsz); /* set size (log2 - 1) */
 }
 
 
 static int emitILLS(FunctionState *fs, Instruction i, int a, int b, int c) {
-    int offset = csC_emitILL(fs, i, a, b);
+    int offset = tokuC_emitILL(fs, i, a, b);
     emitS(fs, c);
     return offset;
 }
 
 
-void csC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
+void tokuC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
     toku_assert(LISTFIELDS_PER_FLUSH <= MAX_ARG_S);
     toku_assert(tostore != 0 && tostore <= LISTFIELDS_PER_FLUSH);
     if (tostore == TOKU_MULTRET) tostore = 0; /* return up to stack top */
@@ -1068,9 +1068,9 @@ void csC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
 }
 
 
-void csC_settablesize(FunctionState *fs, int pc, int hsize) {
+void tokuC_settablesize(FunctionState *fs, int pc, int hsize) {
     Instruction *inst = &fs->p->code[pc];
-    hsize = (hsize != 0 ? csO_ceillog2(hsize) + 1 : 0);
+    hsize = (hsize != 0 ? tokuO_ceillog2(hsize) + 1 : 0);
     toku_assert(hsize <= MAX_ARG_S);
     SET_ARG_S(inst, 0, hsize);
 }
@@ -1083,18 +1083,18 @@ void csC_settablesize(FunctionState *fs, int pc, int hsize) {
 ** (Expressions may still have jump lists.)
 */
 static void discharge2stack(FunctionState *fs, ExpInfo *e) {
-    if (!csC_dischargevars(fs, e)) {
+    if (!tokuC_dischargevars(fs, e)) {
         switch (e->et) {
             case EXP_NIL: {
                 e->u.info = codenil(fs, 1);
                 break;
             }
             case EXP_FALSE: {
-                e->u.info = csC_emitI(fs, OP_FALSE);
+                e->u.info = tokuC_emitI(fs, OP_FALSE);
                 break;
             }
             case EXP_TRUE: {
-                e->u.info = csC_emitI(fs, OP_TRUE);
+                e->u.info = tokuC_emitI(fs, OP_TRUE);
                 break;
             }
             case EXP_INT: {
@@ -1114,7 +1114,7 @@ static void discharge2stack(FunctionState *fs, ExpInfo *e) {
             }
             default: return;
         }
-        csC_reserveslots(fs, 1);
+        tokuC_reserveslots(fs, 1);
         e->et = EXP_FINEXPR;
     }
 }
@@ -1125,7 +1125,7 @@ static void discharge2stack(FunctionState *fs, ExpInfo *e) {
 ** If expression has jumps, need to patch these jumps to its
 ** final position.
 */
-void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
+void tokuC_exp2stack(FunctionState *fs, ExpInfo *e) {
     discharge2stack(fs, e);
     if (hasjumps(e)) {
         int final = currPC; /* position after the expression */
@@ -1142,11 +1142,11 @@ void csC_exp2stack(FunctionState *fs, ExpInfo *e) {
 ** Ensures final expression result is either on stack
 ** or it is a constant.
 */
-void csC_exp2val(FunctionState *fs, ExpInfo *e) {
+void tokuC_exp2val(FunctionState *fs, ExpInfo *e) {
     if (hasjumps(e))
-        csC_exp2stack(fs, e);
+        tokuC_exp2stack(fs, e);
     else
-        csC_dischargevars(fs, e);
+        tokuC_dischargevars(fs, e);
 }
 
 
@@ -1155,7 +1155,7 @@ void csC_exp2val(FunctionState *fs, ExpInfo *e) {
 ** If 'super' is true, then this indexing is considered as
 ** indexing 'super' (superclass).
 */
-void csC_getdotted(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
+void tokuC_getdotted(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
     toku_assert(onstack(v)); /* 'v' must be on stack */
     v->u.info = stringK(fs, key->u.str);
     v->et = (super ? EXP_DOTSUPER : EXP_DOT);
@@ -1167,10 +1167,10 @@ void csC_getdotted(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
 ** If 'super' is true, then this indexing is considered as
 ** indexing 'super' (superclass).
 */
-void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
+void tokuC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     int strK = 0;
     toku_assert(onstack(var)); /* 'var' must be finalized (on stack) */
-    csC_exp2val(fs, key);
+    tokuC_exp2val(fs, key);
     if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */
         strK = 1;
@@ -1180,7 +1180,7 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
             var->u.info = key->u.info;
             var->et = EXP_INDEXSUPERSTR;
         } else {
-            csC_exp2stack(fs, key);
+            tokuC_exp2stack(fs, key);
             var->u.info = key->u.info;
             var->et = EXP_INDEXSUPER;
         }
@@ -1191,7 +1191,7 @@ void csC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
         var->u.info = key->u.info;
         var->et = EXP_INDEXSTR;
     } else {
-        csC_exp2stack(fs, key);
+        tokuC_exp2stack(fs, key);
         var->u.info = key->u.info;
         var->et = EXP_INDEXED;
     }
@@ -1208,8 +1208,8 @@ static int validop(TValue *v1, TValue *v2, int op) {
         case TOKU_OP_BSHR: case TOKU_OP_BSHL: case TOKU_OP_BAND:
         case TOKU_OP_BOR: case TOKU_OP_BXOR: case TOKU_OP_BNOT: { /* conversion */
             toku_Integer i;
-            return (csO_tointeger(v1, &i, N2IEQ) &&
-                    csO_tointeger(v2, &i, N2IEQ));
+            return (tokuO_tointeger(v1, &i, N2IEQ) &&
+                    tokuO_tointeger(v2, &i, N2IEQ));
         }
         case TOKU_OP_DIV: case TOKU_OP_IDIV: case TOKU_OP_MOD: /* division by 0 */
             return (nval(v2) != 0);
@@ -1240,7 +1240,7 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
     TValue v1, v2, res;
     if (!tonumeral(e1, &v1) || !tonumeral(e2, &v2) || !validop(&v1, &v2, op))
         return 0;
-    csO_arithmraw(fs->lx->C, &v1, &v2, &res, op);
+    tokuO_arithmraw(fs->lx->C, &v1, &v2, &res, op);
     if (ttisint(&res)) {
         e1->et = EXP_INT;
         e1->u.i = ival(&res);
@@ -1260,10 +1260,10 @@ static int constfold(FunctionState *fs, ExpInfo *e1, const ExpInfo *e2,
 ** (everything but '!').
 */
 static void codeunary(FunctionState *fs, ExpInfo *e, OpCode op, int line) {
-    csC_exp2stack(fs, e);
-    e->u.info = csC_emitI(fs, op);
+    tokuC_exp2stack(fs, e);
+    e->u.info = tokuC_emitI(fs, op);
     e->et = EXP_FINEXPR;
-    csC_fixline(fs, line);
+    tokuC_fixline(fs, line);
 }
 
 
@@ -1282,8 +1282,8 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
             break;
         }
         case EXP_FINEXPR: {
-            csC_exp2stack(fs, e);
-            e->u.info = csC_emitI(fs, OP_NOT);
+            tokuC_exp2stack(fs, e);
+            e->u.info = tokuC_emitI(fs, OP_NOT);
             break;
         }
         default: toku_assert(0); /* vars should already be discharged */
@@ -1296,10 +1296,10 @@ static void codenot(FunctionState *fs, ExpInfo *e) {
 /*
 ** Apply prefix operation 'uopr' to expression 'e'.
 */
-void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
+void tokuC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
     static const ExpInfo dummy = {EXP_INT, {0}, NOJMP, NOJMP};
     toku_assert(0 <= uopr && uopr < OPR_NOUNOPR);
-    csC_dischargevars(fs, e);
+    tokuC_dischargevars(fs, e);
     switch (uopr) {
         case OPR_UNM: case OPR_BNOT: {
             if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + TOKU_OP_UNM))
@@ -1317,21 +1317,21 @@ void csC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
 
 
 /* code test/jump instruction */
-int csC_jmp(FunctionState *fs, OpCode opjump) {
+int tokuC_jmp(FunctionState *fs, OpCode opjump) {
     toku_assert(opjump == OP_JMP || opjump == OP_JMPS);
-    return csC_emitIL(fs, opjump, 0);
+    return tokuC_emitIL(fs, opjump, 0);
 }
 
 
-int csC_test(FunctionState *fs, OpCode optest, int cond, int line) {
+int tokuC_test(FunctionState *fs, OpCode optest, int cond, int line) {
     int pcjump;
     toku_assert(optest == OP_TEST || optest == OP_TESTPOP);
     if (optest == OP_TESTPOP)
         freeslots(fs, 1); /* this test pops one value */
-    csC_emitIS(fs, optest, cond); /* emit condition test... */
-    csC_fixline(fs, line);
-    pcjump = csC_jmp(fs, OP_JMP); /* ...followed by a jump */
-    csC_fixline(fs, line);
+    tokuC_emitIS(fs, optest, cond); /* emit condition test... */
+    tokuC_fixline(fs, line);
+    pcjump = tokuC_jmp(fs, OP_JMP); /* ...followed by a jump */
+    tokuC_fixline(fs, line);
     return pcjump;
 }
 
@@ -1340,8 +1340,8 @@ int csC_test(FunctionState *fs, OpCode optest, int cond, int line) {
 static int codeAndOr(FunctionState *fs, ExpInfo *e, int cond, int line) {
     int test;
     discharge2stack(fs, e); /* ensure test operand is on the stack */
-    test = csC_test(fs, OP_TEST, cond, line); /* emit test */
-    csC_pop(fs, 1); /* if it goes through, pop the previous value */
+    test = tokuC_test(fs, OP_TEST, cond, line); /* emit test */
+    tokuC_pop(fs, 1); /* if it goes through, pop the previous value */
     return test;
 }
 
@@ -1350,7 +1350,7 @@ static void patchjumplist(FunctionState *fs, int *l, int target) {
     if (*l != NOJMP) {
         if (fs->lasttarget < target)
             fs->lasttarget = target;
-        csC_patch(fs, *l, target);
+        tokuC_patch(fs, *l, target);
         *l = NOJMP; /* mark 'e->t' or 'e->f' as empty */
     }
 }
@@ -1376,7 +1376,7 @@ static void codeand(FunctionState *fs, ExpInfo *e, int line) {
             toku_assert(*prevOP(fs) == OP_POP);
         }
     }
-    csC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
+    tokuC_concatjl(fs, &e->f, pc); /* insert new jump in false list */
     patchjumplist(fs, &e->t, target); /* patch true list */
 }
 
@@ -1400,12 +1400,12 @@ void codeor(FunctionState *fs, ExpInfo *e, int line) {
             toku_assert(*prevOP(fs) == OP_POP);
         }
     }
-    csC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
+    tokuC_concatjl(fs, &e->t, pc); /* insert new jump in true list */
     patchjumplist(fs, &e->f, target);
 }
 
 
-void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line) {
+void tokuC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line) {
     switch (op) {
         case OPR_ADD: case OPR_SUB: case OPR_MUL:
         case OPR_DIV: case OPR_IDIV: case OPR_MOD:
@@ -1413,7 +1413,7 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line) {
         case OPR_BAND: case OPR_BOR: case OPR_BXOR:
         case OPR_NE: case OPR_EQ: {
             if (!tonumeral(e, NULL))
-                csC_exp2stack(fs, e);
+                tokuC_exp2stack(fs, e);
             /* otherwise keep numeral, which may be folded or used as an
                immediate operand or for a different variant of instruction */
             break;
@@ -1422,13 +1422,13 @@ void csC_prebinary(FunctionState *fs, ExpInfo *e, Binopr op, int line) {
         case OPR_LT: case OPR_LE: {
             int dummy;
             if (!isnumIK(e, &dummy))
-                csC_exp2stack(fs, e);
+                tokuC_exp2stack(fs, e);
             /* otherwise keep numeral, which may be used as an immediate
                operand or for a different variant of instruction */
             break;
         }
         case OPR_CONCAT: {
-            csC_exp2stack(fs, e); /* operand must be on stack */
+            tokuC_exp2stack(fs, e); /* operand must be on stack */
             break;
         }
         case OPR_AND: {
@@ -1483,14 +1483,14 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                     int commutative, int line) {
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
     int swap = !commutative && !onstack(e1) && onstack(e2);
-    csC_exp2stack(fs, e1);
-    csC_exp2stack(fs, e2);
+    tokuC_exp2stack(fs, e1);
+    tokuC_exp2stack(fs, e2);
     freeslots(fs, 1); /* e2 */
-    e1->u.info = csC_emitIS(fs, op, swap);
+    e1->u.info = tokuC_emitIS(fs, op, swap);
     e1->et = EXP_FINEXPR;
-    csC_fixline(fs, line);
-    csC_emitIS(fs, OP_MBIN, binop2mm(op));
-    csC_fixline(fs, line);
+    tokuC_fixline(fs, line);
+    tokuC_emitIS(fs, OP_MBIN, binop2mm(op));
+    tokuC_fixline(fs, line);
 }
 
 
@@ -1501,10 +1501,10 @@ static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     int ik = e2->u.info; /* index into 'constants' */
     toku_assert(OP_ADDK <= op && op <= OP_BXORK);
     toku_assert(e2->et == EXP_K);
-    csC_exp2stack(fs, e1);
-    e1->u.info = csC_emitIL(fs, op, ik);
+    tokuC_exp2stack(fs, e1);
+    e1->u.info = tokuC_emitIL(fs, op, ik);
     e1->et = EXP_FINEXPR;
-    csC_fixline(fs, line);
+    tokuC_fixline(fs, line);
 }
 
 
@@ -1527,14 +1527,14 @@ static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     int imm = e2->u.i;
     OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
     toku_assert(e2->et == EXP_INT);
-    csC_exp2stack(fs, e1);
-    e1->u.info = csC_emitIL(fs, op, (imm < 0 ? imml(imm) : imm));
+    tokuC_exp2stack(fs, e1);
+    e1->u.info = tokuC_emitIL(fs, op, (imm < 0 ? imml(imm) : imm));
     e1->et = EXP_FINEXPR;
-    csC_fixline(fs, line);
+    tokuC_fixline(fs, line);
 }
 
 
-void csC_binimmediate(FunctionState *fs, ExpInfo *e1, int imm, Binopr opr,
+void tokuC_binimmediate(FunctionState *fs, ExpInfo *e1, int imm, Binopr opr,
                       int line) {
     ExpInfo e2;
     e2.et = EXP_INT;
@@ -1578,14 +1578,14 @@ static void codeEq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
         toku_assert(e1->et == EXP_K || e1->et == EXP_INT || e1->et == EXP_FLT);
         swapexp(e1, e2);
     }
-    csC_exp2stack(fs, e1); /* ensure 1st expression is on stack */
+    tokuC_exp2stack(fs, e1); /* ensure 1st expression is on stack */
     if (isnumIK(e2, &imm)) /* 2nd expression is immediate operand? */
-        e1->u.info = csC_emitILS(fs, OP_EQI, imm, iseq);
+        e1->u.info = tokuC_emitILS(fs, OP_EQI, imm, iseq);
     else if (exp2K(fs, e2)) /* 2nd expression is a constant? */
-        e1->u.info = csC_emitILS(fs, OP_EQK, e2->u.info, iseq);
+        e1->u.info = tokuC_emitILS(fs, OP_EQK, e2->u.info, iseq);
     else { /* otherwise 2nd expression must be on stack */
-        csC_exp2stack(fs, e2); /* ensure 2nd expression is on stack */
-        e1->u.info = csC_emitIS(fs, OP_EQ, iseq);
+        tokuC_exp2stack(fs, e2); /* ensure 2nd expression is on stack */
+        e1->u.info = tokuC_emitIS(fs, OP_EQ, iseq);
         freeslots(fs, 1); /* e2 */
     }
     e1->et = EXP_FINEXPR;
@@ -1595,7 +1595,7 @@ static void codeEq(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr) {
 /*
 ** Emit code for order comparisons.
 ** 'swapped' tells whether ordering transform was performed
-** (see 'csC_binary'), in order to swap the stack values at runtime
+** (see 'tokuC_binary'), in order to swap the stack values at runtime
 ** to perform the ordering correctly (this is a limitation of stack-based VM).
 */
 static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
@@ -1605,11 +1605,11 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
     toku_assert(OPR_LT == opr || OPR_LE == opr); /* already swapped */
     if (isnumIK(e2, &imm)) {
         /* use immediate operand */
-        csC_exp2stack(fs, e1);
+        tokuC_exp2stack(fs, e1);
         op = binopr2op(opr, OPR_LT, OP_LTI);
     } else if (isnumIK(e1, &imm)) {
         /* transform (A < B) to (B > A) and (A <= B) to (B >= A) */
-        csC_exp2stack(fs, e2);
+        tokuC_exp2stack(fs, e2);
         op = binopr2op(opr, OPR_LT, OP_GTI);
     } else { /* regular case, compare two stack values */
         int swap = 0;
@@ -1619,14 +1619,14 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
             swap = 1;
         else if (onstack(e1) && !onstack(e2))
             swap = 0;
-        csC_exp2stack(fs, e1);
-        csC_exp2stack(fs, e2);
+        tokuC_exp2stack(fs, e1);
+        tokuC_exp2stack(fs, e2);
         op = binopr2op(opr, OPR_LT, OP_LT);
-        e1->u.info = csC_emitIS(fs, op, swap);
+        e1->u.info = tokuC_emitIS(fs, op, swap);
         freeslots(fs, 1); /* one stack value is removed */
         goto l_fin;
     }
-    e1->u.info = csC_emitIL(fs, op, imm);
+    e1->u.info = tokuC_emitIL(fs, op, imm);
 l_fin:
     e1->et = EXP_FINEXPR;
 }
@@ -1644,9 +1644,9 @@ static void codeconcat(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, int line) {
         int n = GET_ARG_L(inst, 0);
         SET_ARG_L(inst, 0, n + 1); /* will concatenate one more element */
     } else { /* 'e2' is not a concatenation */
-        e1->u.info = csC_emitIL(fs, OP_CONCAT, 2);
+        e1->u.info = tokuC_emitIL(fs, OP_CONCAT, 2);
         e1->et = EXP_FINEXPR;
-        csC_fixline(fs, line);
+        tokuC_fixline(fs, line);
     }
     freeslots(fs, 1);
 }
@@ -1672,7 +1672,7 @@ static int codeaddnegI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /*
 ** Finalize code for binary operations, after reading 2nd operand.
 */
-void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
+void tokuC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                                                              int line) {
     int swapped = 0;
     if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + TOKU_OP_ADD))
@@ -1689,12 +1689,12 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         } /* fall through */
         case OPR_SHL: case OPR_SHR: case OPR_IDIV:
         case OPR_DIV: case OPR_MOD: case OPR_POW: {
-            csC_dischargevars(fs, e2);
+            tokuC_dischargevars(fs, e2);
             codebinIK(fs, e1, e2, opr, 0, 0, line);
             break;
         }
         case OPR_CONCAT: {
-            csC_exp2stack(fs, e2); /* second operand must be on stack */
+            tokuC_exp2stack(fs, e2); /* second operand must be on stack */
             codeconcat(fs, e1, e2, line);
             break;
         }
@@ -1704,8 +1704,8 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
         }
         case OPR_GT: case OPR_GE: {
             /* 'a > b' <==> 'a < b', 'a >= b' <==> 'a <= b' */
-            csC_dischargevars(fs, e1);
-            csC_dischargevars(fs, e2);
+            tokuC_dischargevars(fs, e1);
+            tokuC_dischargevars(fs, e2);
             swapexp(e1, e2);
             opr = (opr - OPR_GT) + OPR_LT;
             swapped = 1;
@@ -1715,16 +1715,16 @@ void csC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
             break;
         }
         case OPR_AND: {
-            toku_assert(e1->t == NOJMP); /* list closed by 'csC_prebinary' */
-            csC_dischargevars(fs, e2);
-            csC_concatjl(fs, &e2->f, e1->f);
+            toku_assert(e1->t == NOJMP); /* list closed by 'tokuC_prebinary' */
+            tokuC_dischargevars(fs, e2);
+            tokuC_concatjl(fs, &e2->f, e1->f);
             *e1 = *e2;
             break;
         }
         case OPR_OR: {
-            toku_assert(e1->f == NOJMP); /* list closed by 'csC_prebinary' */
-            csC_dischargevars(fs, e2);
-            csC_concatjl(fs, &e2->t, e1->t);
+            toku_assert(e1->f == NOJMP); /* list closed by 'tokuC_prebinary' */
+            tokuC_dischargevars(fs, e2);
+            tokuC_concatjl(fs, &e2->t, e1->t);
             *e1 = *e2;
             break;
         }
@@ -1751,7 +1751,7 @@ static int finaltarget(Instruction *code, int i) {
 ** Perform a final pass performing small adjustments and
 ** optimizations.
 */
-void csC_finish(FunctionState *fs) {
+void tokuC_finish(FunctionState *fs) {
     Proto *p = fs->p;
     Instruction *pc;
     for (int i = 0; i < currPC; i += getopSize(*pc)) {

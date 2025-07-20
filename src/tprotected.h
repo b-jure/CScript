@@ -45,12 +45,12 @@ typedef void (*ProtectedFn)(toku_State *T, void *uterdata);
 /* check GC then check ttack, preserving 'p' */
 #define checkttackGCp(C,n,p) \
         ctPR_checkstackaux(C,n, \
-            ptrdiff_t p_ = tavestack(C,p); csG_checkGC(C), \
+            ptrdiff_t p_ = tavestack(C,p); tokuG_checkGC(C), \
             p = rettorestack(C, p_))
 
 
 /* check GC then check ttack */
-#define checkttackGC(C,n)   csPR_checkstackaux(C,n,csG_checkGC(C),(void)0)
+#define checkttackGC(C,n)   csPR_checkstackaux(C,n,tokuG_checkGC(C),(void)0)
 
 
 TOKUI_FUNC void ctPR_seterrorobj(toku_State *T, int errcode, SPtr oldtop);

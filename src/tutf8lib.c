@@ -95,18 +95,18 @@ static const char *utf8decode(const char *s, t_uint32 *val, int strict) {
 static int utf8_len(toku_State *T) {
     toku_Integer n = 0; /* counter for the number of characters */
     size_t len; /* string length in bytes */
-    const char *s = csL_check_lstring(C, 0, &len);
-    toku_Integer posi = posrel(csL_opt_integer(C, 1, 0), len);
-    toku_Integer posj = posrel(csL_opt_integer(C, 2, -1), len);
+    const char *s = tokuL_check_lstring(C, 0, &len);
+    toku_Integer posi = posrel(tokuL_opt_integer(C, 1, 0), len);
+    toku_Integer posj = posrel(tokuL_opt_integer(C, 2, -1), len);
     int lax = toku_to_bool(C, 3);
-    csL_check_arg(C, 0 <= posi && posi <= (toku_Integer)len, 1,
+    tokuL_check_arg(C, 0 <= posi && posi <= (toku_Integer)len, 1,
             "initial position out of bounds");
-    csL_check_arg(C, posj < (toku_Integer)len, 2,
+    tokuL_check_arg(C, posj < (toku_Integer)len, 2,
             "final position out of bounds");
     while (posi <= posj) {
         const char *s1 = utf8decode(s + posi, NULL, !lax);
         if (s1 == NULL) { /* conversion error? */
-            csL_push_fail(C); /* return fail ... */
+            tokuL_push_fail(C); /* return fail ... */
             toku_push_integer(C, posi); /* ... and current position */
             return 2;
         }
@@ -124,27 +124,27 @@ static int utf8_len(toku_State *T) {
 */
 static int utf8_codepoint(toku_State *T) {
     size_t len;
-    const char *s = csL_check_lstring(C, 0, &len);
-    toku_Integer posi = posrel(csL_opt_integer(C, 1, 0), len);
-    toku_Integer posj = posrel(csL_opt_integer(C, 2, posi), len);
+    const char *s = tokuL_check_lstring(C, 0, &len);
+    toku_Integer posi = posrel(tokuL_opt_integer(C, 1, 0), len);
+    toku_Integer posj = posrel(tokuL_opt_integer(C, 2, posi), len);
     int lax = toku_to_bool(C, 3);
     int n;
     const char *se;
-    csL_check_arg(C, 0 <= posi && posi < (toku_Integer)len+!len, 1, stroob);
-    csL_check_arg(C, posj < (toku_Integer)len+!len, 2, stroob);
+    tokuL_check_arg(C, 0 <= posi && posi < (toku_Integer)len+!len, 1, stroob);
+    tokuL_check_arg(C, posj < (toku_Integer)len+!len, 2, stroob);
     if (posj < posi || len == 0) return 0; /* empty interval or empty string */
     if (t_unlikely(cast_sizet(posj-posi) + 1u <= cast_sizet(posj-posi) ||
                    TOKU_MAXINT <= cast_sizet(posj-posi) + 1u)) /* overflow? */
-        return csL_error(C, strtoolong);
+        return tokuL_error(C, strtoolong);
     n = cast_int(posj-posi) + 1; /* upper bound for number of returns */
-    csL_check_stack(C, n, strtoolong);
+    tokuL_check_stack(C, n, strtoolong);
     n = 0; /* count the number of returns */
     se = s + posj + 1; /* string end */
     for (s += posi; s < se;) {
         t_uint32 code;
         s = utf8decode(s, &code, !lax);
         if (s == NULL)
-            return csL_error(C, strinvalid);
+            return tokuL_error(C, strinvalid);
         toku_push_integer(C, t_castU2S(code));
         n++;
     }
@@ -153,8 +153,8 @@ static int utf8_codepoint(toku_State *T) {
 
 
 static void push_utf8char(toku_State *T, int arg) {
-    toku_Unsigned code = (toku_Unsigned)csL_check_integer(C, arg);
-    csL_check_arg(C, code <= MAXUTF, arg, "value out of range");
+    toku_Unsigned code = (toku_Unsigned)tokuL_check_integer(C, arg);
+    tokuL_check_arg(C, code <= MAXUTF, arg, "value out of range");
     toku_push_fstring(C, "%U", (long)code);
 }
 
@@ -167,13 +167,13 @@ static int utf8_char(toku_State *T) {
     if (n == 1) /* optimize common case of single char */
         push_utf8char(C, 0);
     else {
-        csL_Buffer b;
-        csL_buff_init(C, &b);
+        tokuL_Buffer b;
+        tokuL_buff_init(C, &b);
         for (int i = 0; i < n; i++) {
             push_utf8char(C, i);
-            csL_buff_push_stack(&b);
+            tokuL_buff_push_stack(&b);
         }
-        csL_buff_end(&b);
+        tokuL_buff_end(&b);
     }
     return 1;
 }
@@ -185,18 +185,18 @@ static int utf8_char(toku_State *T) {
 */
 static int utf8_byteoffset(toku_State *T) {
     size_t len;
-    const char *s = csL_check_lstring(C, 0, &len);
-    toku_Integer n  = csL_check_integer(C, 1);
+    const char *s = tokuL_check_lstring(C, 0, &len);
+    toku_Integer n  = tokuL_check_integer(C, 1);
     toku_Integer posi = (n >= 0) ? 0 : (toku_Integer)len;
-    posi = posrel(csL_opt_integer(C, 2, posi), len);
-    csL_check_arg(C, 0 <= posi && posi <= (toku_Integer)len, 2,
+    posi = posrel(tokuL_opt_integer(C, 2, posi), len);
+    tokuL_check_arg(C, 0 <= posi && posi <= (toku_Integer)len, 2,
                      "position out of bounds");
     if (n == 0) { /* special case? */
         /* find beginning of current byte sequence */
         while (posi > 0 && iscontp(s + posi)) posi--;
     } else {
         if (iscontp(s + posi))
-            return csL_error(C, "initial position is a continuation byte");
+            return tokuL_error(C, "initial position is a continuation byte");
         if (n < 0) { /* find back from 'posi'? */
             while (n < 0 && 0 < posi) { /* move back */
                 do {
@@ -215,7 +215,7 @@ static int utf8_byteoffset(toku_State *T) {
         }
     }
     if (n != 0) { /* did not find given character */
-        csL_push_fail(C);
+        tokuL_push_fail(C);
         return 1;
     } else { /* otherwise push start and final position of utf8 char */
         toku_push_integer(C, posi); /* initial position */
@@ -232,7 +232,7 @@ static int utf8_byteoffset(toku_State *T) {
 
 static int iter_aux(toku_State *T, int strict) {
     size_t len;
-    const char *s = csL_check_lstring(C, 0, &len);
+    const char *s = tokuL_check_lstring(C, 0, &len);
     toku_Unsigned n = t_castS2U(toku_to_integer(C, 1) + 1);
     if (n < len) {
         while (iscontp(s + n)) n++; /* go to next character */
@@ -243,7 +243,7 @@ static int iter_aux(toku_State *T, int strict) {
         t_uint32 code;
         const char *next = utf8decode(s + n, &code, strict);
         if (next == NULL || iscontp(next))
-            return csL_error(C, strinvalid);
+            return tokuL_error(C, strinvalid);
         toku_push_integer(C, t_castU2S(n));
         toku_push_integer(C, t_castU2S(code));
         return 2;
@@ -262,8 +262,8 @@ static int iter_auxlax(toku_State *T) {
 
 static int utf8_itercodes(toku_State *T) {
     int lax = toku_to_bool(C, 1);
-    const char *s = csL_check_string(C, 0);
-    csL_check_arg(C, !iscontp(s), 0, strinvalid);
+    const char *s = tokuL_check_string(C, 0);
+    tokuL_check_arg(C, !iscontp(s), 0, strinvalid);
     toku_push_cfunction(C, lax ? iter_auxlax : iter_auxstrict);
     toku_push(C, 0);
     toku_push_integer(C, -1);
@@ -275,7 +275,7 @@ static int utf8_itercodes(toku_State *T) {
 #define UTF8PATT	"[\0-\x7F\xC2-\xFD][\x80-\xBF]*"
 
 
-static const csL_Entry funcs[] = {
+static const tokuL_Entry funcs[] = {
     {"offset", utf8_byteoffset},
     {"codepoint", utf8_codepoint},
     {"char", utf8_char},
@@ -288,7 +288,7 @@ static const csL_Entry funcs[] = {
 
 
 CSMOD_API int tokuopen_utf8(toku_State *T) {
-    csL_push_lib(C, funcs);
+    tokuL_push_lib(C, funcs);
     toku_push_lstring(C, UTF8PATT, sizeof(UTF8PATT)/sizeof(char) - 1);
     toku_set_fieldstr(C, -2, "charpattern");
     return 1;

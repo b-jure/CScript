@@ -51,7 +51,7 @@ CSMOD_API int tokuopen_utf8(toku_State *T);
 
 
 /* open all previous libraries */
-CSLIB_API void csL_openlibs(toku_State *T);
+TOKULIB_API void tokuL_openlibs(toku_State *T);
 
 
 #endif

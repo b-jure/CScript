@@ -39,7 +39,7 @@
 #define BOXED(fmt)          "[" fmt "]"
 #define PFMT(what)          BOXED(what " %4d")
 
-#define printLine(p,relpc)  printf(PFMT("LN"), csD_getfuncline(p, relpc))
+#define printLine(p,relpc)  printf(PFMT("LN"), tokuD_getfuncline(p, relpc))
 
 #define printPC(relpc)      printf(PFMT("PC"), relpc)
 
@@ -185,14 +185,14 @@ void csTR_tracepc(toku_State *T, SPtr sp, const Proto *p,
 
 static void traceString(OString *s) {
     char buff[MAXSTR];
-    csS_trimstr(buff, MAXSTR, getstr(s), getstrlen(s));
+    tokuS_trimstr(buff, MAXSTR, getstr(s), getstrlen(s));
     printf("\"%s\"", buff);
 }
 
 
 static void traceNumber(const TValue *o) {
     char buff[TOKU_N2SBUFFSZ];
-    csS_tostringbuff(o, buff);
+    tokuS_tostringbuff(o, buff);
     printf("%s", buff);
 }
 
@@ -372,7 +372,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 
 static void traceMetaName(toku_State *T, int mm) {
-    posfix_spaces(printf("%s", getstr(G(C)->mmnames[mm])));
+    posfix_spaces(printf("%s", getstr(G(C)->mtnames[mm])));
 }
 
 
@@ -592,7 +592,7 @@ static void unasmBinOp(const Proto *p, Instruction *pc) {
 
 static void printFunc(const Proto *p) {
     char id[TOKU_IDSIZE];
-    csS_chunkid(id, getstr(p->source), getstrlen(p->source));
+    tokuS_chunkid(id, getstr(p->source), getstrlen(p->source));
     if (p->defline == 0) /* main chunk? */
         printf("MAIN %s {\n", id);
     else /* otherwise subroutine */
@@ -772,7 +772,7 @@ static const char *objtxt(const TValue *obj) {
         case TOKU_VSHRSTR: case TOKU_VLNGSTR: {
             size_t len;
             OString *os = strval(obj);
-            csS_trimstr(buff, MAXSTR, getstr(os), getstrlen(os));
+            tokuS_trimstr(buff, MAXSTR, getstr(os), getstrlen(os));
             len = strlen(buff);
             toku_assert(len <= MAXSTR);
             memmove(buff+1, buff, len * sizeof(char));

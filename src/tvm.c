@@ -98,15 +98,15 @@ static int booleans[2] = { TOKU_VFALSE, TOKU_VTRUE };
 static void pushclosure(toku_State *T, Proto *p, UpVal **encup, SPtr base) {
     int nup = p->sizeupvals;
     UpValInfo *uv = p->upvals;
-    CSClosure *cl = csF_newCSClosure(C, nup);
+    CSClosure *cl = tokuF_newCSClosure(C, nup);
     cl->p = p;
     setclCSval2s(C, C->sp.p++, cl); /* anchor to stack */
     for (int i = 0; i < nup; i++) { /* fill its upvalues */
         if (uv[i].onstack) /* upvalue refers to local variable? */
-            cl->upvals[i] = csF_findupval(C, base + uv[i].idx);
+            cl->upvals[i] = tokuF_findupval(C, base + uv[i].idx);
         else /* get upvalue from enclosing function */
             cl->upvals[i] = encup[uv[i].idx];
-        csG_objbarrier(C, cl, cl->upvals[i]);
+        tokuG_objbarrier(C, cl, cl->upvals[i]);
     }
 }
 
@@ -115,10 +115,10 @@ static void pushclosure(toku_State *T, Proto *p, UpVal **encup, SPtr base) {
 ** Integer division; handles division by 0 and possible
 ** overflow if 'y' == '-1' and 'x' == TOKU_INTEGER_MIN.
 */
-toku_Integer csV_divi(toku_State *T, toku_Integer x, toku_Integer y) {
+toku_Integer tokuV_divi(toku_State *T, toku_Integer x, toku_Integer y) {
     if (t_unlikely(t_castS2U(y) + 1 <= 1)) { /* 'y' == '0' or '-1' */
         if (y == 0)
-            csD_runerror(C, "divide by zero");
+            tokuD_runerror(C, "divide by zero");
         return intop(-, 0, x);
     } else {
         toku_Integer q = x / y; /* perform C division */
@@ -131,12 +131,12 @@ toku_Integer csV_divi(toku_State *T, toku_Integer x, toku_Integer y) {
 
 /*
 ** Integer modulus; handles modulo by 0 and overflow
-** as explained in 'csV_divi()'.
+** as explained in 'tokuV_divi()'.
 */
-toku_Integer csV_modi(toku_State *T, toku_Integer x, toku_Integer y) {
+toku_Integer tokuV_modi(toku_State *T, toku_Integer x, toku_Integer y) {
     if (t_unlikely(t_castS2U(y) + 1 <= 1)) {
         if (y == 0)
-            csD_runerror(C, "attempt to 'n%%0'");
+            tokuD_runerror(C, "attempt to 'n%%0'");
         return 0;
     } else {
         toku_Integer r = x % y;
@@ -148,7 +148,7 @@ toku_Integer csV_modi(toku_State *T, toku_Integer x, toku_Integer y) {
 
 
 /* floating point modulus */
-toku_Number csV_modf(toku_State *T, toku_Number x, toku_Number y) {
+toku_Number tokuV_modf(toku_State *T, toku_Number x, toku_Number y) {
     toku_Number r;
     t_nummod(C, x, y, r);
     return r;
@@ -159,10 +159,10 @@ toku_Number csV_modf(toku_State *T, toku_Number x, toku_Number y) {
 ** Perform binary arithmetic operations on objects, this function is free
 ** to call metamethods in cases where raw arithmetics are not possible.
 */
-void csV_binarithm(toku_State *T, const TValue *v1,
+void tokuV_binarithm(toku_State *T, const TValue *v1,
                                 const TValue *v2, SPtr res, int op) {
-    if (!csO_arithmraw(C, v1, v2, s2v(res), op))
-        csMM_trybin(C, v1, v2, res, (op - TOKU_OP_ADD) + TOKU_MT_ADD);
+    if (!tokuO_arithmraw(C, v1, v2, s2v(res), op))
+        tokuMM_trybin(C, v1, v2, res, (op - TOKU_OP_ADD) + TOKU_MT_ADD);
 }
 
 
@@ -170,11 +170,11 @@ void csV_binarithm(toku_State *T, const TValue *v1,
 ** Perform unary arithmetic operations on objects, this function is free
 ** to call metamethods in cases where raw arithmetics are not possible.
 */
-void csV_unarithm(toku_State *T, const TValue *v, SPtr res, int op) {
+void tokuV_unarithm(toku_State *T, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
-    if (!csO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
-        csMM_tryunary(C, v, res, (op - TOKU_OP_UNM) + TOKU_MT_UNM);
+    if (!tokuO_arithmraw(C, v, &aux, s2v(C->sp.p - 1), op))
+        tokuMM_tryunary(C, v, res, (op - TOKU_OP_UNM) + TOKU_MT_UNM);
 }
 
 
@@ -183,7 +183,7 @@ t_sinline int intLEfloat(toku_Integer i, toku_Number f) {
         return t_numle(cast_num(i), f); /* compare them as floats */
     else {  /* i <= f <=> i <= floor(f) */
         toku_Integer fi;
-        if (csO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
+        if (tokuO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
             return i <= fi; /* compare them as integers */
         else /* 'f' is either greater or less than all integers */
             return f > 0; /* greater? */
@@ -196,7 +196,7 @@ t_sinline int floatLEint(toku_Number f, toku_Integer i) {
         return t_numle(f, cast_num(i)); /* compare them as floats */
     else {  /* f <= i <=> ceil(f) <= i */
         toku_Integer fi;
-        if (csO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
+        if (tokuO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
             return fi <= i; /* compare them as integers */
         else /* 'f' is either greater or less than all integers */
             return f < 0; /* less? */
@@ -226,14 +226,14 @@ t_sinline int LEnum(const TValue *v1, const TValue *v2) {
 /* less equal ordering on non-number values */
 t_sinline int LEother(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
-        return (csS_cmp(strval(v1), strval(v2)) <= 0);
+        return (tokuS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return csMM_order(C, v1, v2, TOKU_MT_LE);
+        return tokuMM_order(C, v1, v2, TOKU_MT_LE);
 }
 
 
 /* 'less or equal' ordering '<=' */
-int csV_orderle(toku_State *T, const TValue *v1, const TValue *v2) {
+int tokuV_orderle(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return LEnum(v1, v2);
     return LEother(C, v1, v2);
@@ -245,7 +245,7 @@ t_sinline int intLTfloat(toku_Integer i, toku_Number f) {
         return t_numlt(cast_num(i), f);
     else { /* i < f <=> i < ceil(f) */
         toku_Integer fi;
-        if (csO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
+        if (tokuO_n2i(f, &fi, N2ICEIL)) /* fi = ceil(f) */
             return i < fi; /* compare them as integers */
         else /* 'f' is either greater or less than all integers */
             return f > 0; /* greater? */
@@ -258,7 +258,7 @@ t_sinline int floatLTint(toku_Number f, toku_Integer i) {
         return t_numlt(f, cast_num(i)); /* compare them as floats */
     else { /* f < i <=> floor(f) < i */
         toku_Integer fi;
-        if (csO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
+        if (tokuO_n2i(f, &fi, N2IFLOOR)) /* fi = floor(f) */
             return fi < i; /* compare them as integers */
         else /* 'f' is either greater or less than all integers */
             return f < 0; /* less? */
@@ -288,14 +288,14 @@ t_sinline int LTnum(const TValue *v1, const TValue *v2) {
 /* 'less than' ordering '<' on non-number values */
 t_sinline int LTother(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
-        return csS_cmp(strval(v1), strval(v2)) < 0;
+        return tokuS_cmp(strval(v1), strval(v2)) < 0;
     else
-        return csMM_order(C, v1, v2, TOKU_MT_LT);
+        return tokuMM_order(C, v1, v2, TOKU_MT_LT);
 }
 
 
 /* 'less than' ordering '<' */
-int csV_orderlt(toku_State *T, const TValue *v1, const TValue *v2) {
+int tokuV_orderlt(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisnum(v1) && ttisnum(v2))
         return LTnum(v1, v2);
     return LTother(C, v1, v2);
@@ -306,15 +306,15 @@ int csV_orderlt(toku_State *T, const TValue *v1, const TValue *v2) {
 ** Equality ordering '=='.
 ** In case 'C' is NULL perform raw equality (without invoking '__eq').
 */
-int csV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
+int tokuV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
     toku_Integer i1, i2;
     const TValue *fmm;
     int swap = 0;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != TOKU_T_NUMBER)
             return 0;
-        return (csO_tointeger(v1, &i1, N2IEQ) &&
-                csO_tointeger(v2, &i2, N2IEQ) && i1 == i2);
+        return (tokuO_tointeger(v1, &i1, N2IEQ) &&
+                tokuO_tointeger(v2, &i2, N2IEQ) && i1 == i2);
     }
     switch (ttypetag(v1)) {
         case TOKU_VNIL: case TOKU_VFALSE: case TOKU_VTRUE: return 1;
@@ -323,19 +323,19 @@ int csV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
         case TOKU_VLCF: return lcfval(v1) == lcfval(v2);
         case TOKU_VLIGHTUSERDATA: return pval(v1) == pval(v2);
         case TOKU_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
-        case TOKU_VLNGSTR: return csS_eqlngstr(strval(v1), strval(v2));
-        case TOKU_VIMETHOD: return csMM_eqim(imval(v1), imval(v2));
-        case TOKU_VUMETHOD: return csMM_equm(umval(v1), umval(v2));
+        case TOKU_VLNGSTR: return tokuS_eqlngstr(strval(v1), strval(v2));
+        case TOKU_VIMETHOD: return tokuMM_eqim(imval(v1), imval(v2));
+        case TOKU_VUMETHOD: return tokuMM_equm(umval(v1), umval(v2));
         case TOKU_VUSERDATA: {
-            if  (C == NULL || (ttisnil(fmm = csMM_get(C, v1, TOKU_MT_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, TOKU_MT_EQ))))
+            if  (C == NULL || (ttisnil(fmm = tokuMM_get(C, v1, TOKU_MT_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = tokuMM_get(C, v2, TOKU_MT_EQ))))
                 return udval(v1) == udval(v2);
             break;
         }
         case TOKU_VINSTANCE: {
             if (C == NULL || (insval(v1)->oclass != insval(v2)->oclass) ||
-                    (ttisnil(fmm = csMM_get(C, v1, TOKU_MT_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = csMM_get(C, v2, TOKU_MT_EQ))))
+                    (ttisnil(fmm = tokuMM_get(C, v1, TOKU_MT_EQ)) &&
+                    (swap = 1) && ttisnil(fmm = tokuMM_get(C, v2, TOKU_MT_EQ))))
                 return insval(v1) == insval(v2);
             break;
         }
@@ -343,25 +343,25 @@ int csV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
     }
     toku_assert(!ttisnil(fmm));
     if (swap) t_cswap(v1, v2);
-    csMM_callbinres(C, fmm, v1, v2, C->sp.p);
+    tokuMM_callbinres(C, fmm, v1, v2, C->sp.p);
     return !t_isfalse(s2v(C->sp.p));
 }
 
 
 /* generic set */
-#define csV_setgen(C,o,k,v,f) \
-    { const TValue *fmm = csMM_get(C, o, TOKU_MT_SETIDX); \
+#define tokuV_setgen(C,o,k,v,f) \
+    { const TValue *fmm = tokuMM_get(C, o, TOKU_MT_SETIDX); \
       if (ttisnil(fmm)) { f(C, o, k, v); } \
-      else { csMM_callset(C, fmm, o, k, v); }}
+      else { tokuMM_callset(C, fmm, o, k, v); }}
 
 
-void csV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
+void tokuV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
                                                  const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
             List *l = listval(o);
-            csV_setlist(C, l, k, v, csA_setstr);
+            tokuV_setlist(C, l, k, v, tokuA_setstr);
             break;
         }
         case TOKU_VTABLE: {
@@ -371,31 +371,31 @@ void csV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
         case TOKU_VINSTANCE: {
             t = insval(o)->fields;
         set_table:
-            csV_settable(C, t, strval(k), v, csH_setstr);
+            tokuV_settable(C, t, strval(k), v, tokuH_setstr);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break; /* unreachable */
         }
     }
 }
 
 
-void csV_setstr(toku_State *T, const TValue *o, const TValue *k,
+void tokuV_setstr(toku_State *T, const TValue *o, const TValue *k,
                                               const TValue *v) {
-    csV_setgen(C, o, k, v, csV_rawsetstr);
+    tokuV_setgen(C, o, k, v, tokuV_rawsetstr);
 }
 
 
-void csV_rawsetint(toku_State *T, const TValue *o, const TValue *k,
+void tokuV_rawsetint(toku_State *T, const TValue *o, const TValue *k,
                                                  const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
             List *l = listval(o);
             FatValue fv = { .v=k, .i=ival(k) };
-            csV_setlist(C, l, &fv, v, csA_setint);
+            tokuV_setlist(C, l, &fv, v, tokuA_setint);
             break;
         }
         case TOKU_VTABLE: {
@@ -405,30 +405,30 @@ void csV_rawsetint(toku_State *T, const TValue *o, const TValue *k,
         case TOKU_VINSTANCE: {
             t = insval(o)->fields;
         set_table:
-            csV_settable(C, t, ival(k), v, csH_setint);
+            tokuV_settable(C, t, ival(k), v, tokuH_setint);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break; /* unreachable */
         }
     }
 }
 
 
-void csV_setint(toku_State *T, const TValue *o, const TValue *k,
+void tokuV_setint(toku_State *T, const TValue *o, const TValue *k,
                                               const TValue *v) {
-    csV_setgen(C, o, k, v, csV_rawsetint);
+    tokuV_setgen(C, o, k, v, tokuV_rawsetint);
 }
 
 
-void csV_rawset(toku_State *T, const TValue *o, const TValue *k,
+void tokuV_rawset(toku_State *T, const TValue *o, const TValue *k,
                                               const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
             List *l = listval(o);
-            csV_setlist(C, l, k, v, csA_set);
+            tokuV_setlist(C, l, k, v, tokuA_set);
             break;
         }
         case TOKU_VTABLE: {
@@ -438,32 +438,32 @@ void csV_rawset(toku_State *T, const TValue *o, const TValue *k,
         case TOKU_VINSTANCE: {
             t = insval(o)->fields;
         set_table:
-            csV_settable(C, t, k, v, csH_set);
+            tokuV_settable(C, t, k, v, tokuH_set);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break; /* unreachable */
         }
     }
 }
 
 
-void csV_set(toku_State *T, const TValue *o, const TValue *k, const TValue *v) {
-    csV_setgen(C, o, k, v, csV_rawset);
+void tokuV_set(toku_State *T, const TValue *o, const TValue *k, const TValue *v) {
+    tokuV_setgen(C, o, k, v, tokuV_rawset);
 }
 
 
 /* bind method to instance and set it at 'res' */
 #define bindmethod(C,in,fn,res) \
-        setimval2s(C, res, csMM_newinsmethod(C, in, fn))
+        setimval2s(C, res, tokuMM_newinsmethod(C, in, fn))
 
 
 /* generic get */
-#define csV_getgen(C,o,k,res,f) \
-    { const TValue *fmm = csMM_get(C, o, TOKU_MT_GETIDX); \
+#define tokuV_getgen(C,o,k,res,f) \
+    { const TValue *fmm = tokuMM_get(C, o, TOKU_MT_GETIDX); \
       if (ttisnil(fmm)) { f(C, o, k, res); } \
-      else { csMM_callgetres(C, fmm, o, k, res); }}
+      else { tokuMM_callgetres(C, fmm, o, k, res); }}
 
 
 t_sinline void finishTget(toku_State *T, const TValue *slot, SPtr res) {
@@ -484,112 +484,112 @@ t_sinline void trybindmethod(toku_State *T, const TValue *slot, Instance *in,
 }
 
 
-void csV_rawgetstr(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+void tokuV_rawgetstr(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
-            csA_getstr(C, listval(o), k, s2v(res));
+            tokuA_getstr(C, listval(o), k, s2v(res));
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(C, csH_getstr(tval(o), strval(k)), res);
+            finishTget(C, tokuH_getstr(tval(o), strval(k)), res);
             break;
         }
         case TOKU_VINSTANCE: {
             Instance *in = insval(o);
-            const TValue *slot = csH_getstr(in->fields, strval(k));
+            const TValue *slot = tokuH_getstr(in->fields, strval(k));
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
-                slot = csH_getstr(in->oclass->methods, strval(k));
+                slot = tokuH_getstr(in->oclass->methods, strval(k));
                 trybindmethod(C, slot, in, res);
             } else
                 setobj2s(C, res, slot);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break;
         }
     }
 }
 
 
-void csV_getstr(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
-    csV_getgen(C, o, k, res, csV_rawgetstr);
+void tokuV_getstr(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+    tokuV_getgen(C, o, k, res, tokuV_rawgetstr);
 }
 
 
-void csV_rawgetint(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+void tokuV_rawgetint(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
             FatValue fv = { .v=k, .i=ival(k) };
-            csA_getint(C, listval(o), &fv, s2v(res));
+            tokuA_getint(C, listval(o), &fv, s2v(res));
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(C, csH_getint(tval(o), ival(k)), res);
+            finishTget(C, tokuH_getint(tval(o), ival(k)), res);
             break;
         }
         case TOKU_VINSTANCE: {
             Instance *in = insval(o);
-            const TValue *slot = csH_getint(in->fields, ival(k));
+            const TValue *slot = tokuH_getint(in->fields, ival(k));
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
-                slot = csH_getint(in->oclass->methods, ival(k));
+                slot = tokuH_getint(in->oclass->methods, ival(k));
                 trybindmethod(C, slot, in, res);
             } else
                 setobj2s(C, res, slot);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break;
         }
     }
 }
 
 
-void csV_getint(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
-    csV_getgen(C, o, k, res, csV_rawgetint);
+void tokuV_getint(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+    tokuV_getgen(C, o, k, res, tokuV_rawgetint);
 }
 
 
-void csV_rawget(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+void tokuV_rawget(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
-            csA_get(C, listval(o), k, s2v(res));
+            tokuA_get(C, listval(o), k, s2v(res));
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(C, csH_get(tval(o), k), res);
+            finishTget(C, tokuH_get(tval(o), k), res);
             break;
         }
         case TOKU_VINSTANCE: {
             Instance *in = insval(o);
-            const TValue *slot = csH_get(in->fields, k);
+            const TValue *slot = tokuH_get(in->fields, k);
             if (isempty(slot) && in->oclass->methods) {
                 /* try methods table */
-                slot = csH_get(in->oclass->methods, k);
+                slot = tokuH_get(in->oclass->methods, k);
                 trybindmethod(C, slot, in, res);
             } else
                 setobj2s(C, res, slot);
             break;
         }
         default: {
-            csD_typeerror(C, o, "index");
+            tokuD_typeerror(C, o, "index");
             break;
         }
     }
 }
 
 
-void csV_get(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
-    csV_getgen(C, o, k, res, csV_rawget);
+void tokuV_get(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
+    tokuV_getgen(C, o, k, res, tokuV_rawget);
 }
 
 
 #define getsuper(C,in,scl,k,res,fget) { \
     if (t_unlikely(scl == NULL)) \
-        csD_runerror(C, "class instance has no superclass"); \
+        tokuD_runerror(C, "class instance has no superclass"); \
     if ((scl)->methods) { \
         const TValue *f = fget((scl)->methods, k); \
         if (!isempty(f)) { bindmethod(C, in, f, res); } \
@@ -615,7 +615,7 @@ static void rethook(toku_State *T, CallFrame *cf, int nres) {
         cf->func.p += delta; /* if vararg, back to virtual 'func' */
         ftransfer = cast(t_ushort, firstres - cf->func.p) - 1;
         toku_assert(ftransfer >= 0);
-        csD_hook(C, TOKU_HOOK_RET, -1, ftransfer, nres); /* call it */
+        tokuD_hook(C, TOKU_HOOK_RET, -1, ftransfer, nres); /* call it */
         cf->func.p -= delta;
     }
     if (isTokudae(cf = cf->prev))
@@ -646,7 +646,7 @@ t_sinline void moveresults(toku_State *T, SPtr res, int nres, int wanted) {
         }
         default: { /* two/more results and/or to-be-closed variables */
             if (hastocloseCfunc(wanted)) { /* to-be-closed variables? */
-                res = csF_close(C, res, CLOSEKTOP); /* do the closing */
+                res = tokuF_close(C, res, CLOSEKTOP); /* do the closing */
                 if (C->hookmask) { /* if needed, call hook after '__close's */
                     ptrdiff_t savedres = savestack(C, res);
                     rethook(C, C->cf, nres);
@@ -671,7 +671,7 @@ t_sinline void moveresults(toku_State *T, SPtr res, int nres, int wanted) {
 }
 
 
-#define next_cf(C)   ((C)->cf->next ? (C)->cf->next : csT_newcf(C))
+#define next_cf(C)   ((C)->cf->next ? (C)->cf->next : tokuT_newcf(C))
 
 t_sinline CallFrame *prepCallframe(toku_State *T, SPtr func, int nres,
                                    int mask, SPtr top) {
@@ -706,7 +706,7 @@ t_sinline int precallC(toku_State *T, SPtr func, int nres, toku_CFunction f) {
     toku_assert(cf->top.p <= C->stackend.p);
     if (t_unlikely(C->hookmask & TOKU_MASK_CALL)) {
         int narg = cast_int(C->sp.p - func) - 1;
-        csD_hook(C, TOKU_HOOK_CALL, -1, 0, narg);
+        tokuD_hook(C, TOKU_HOOK_CALL, -1, 0, narg);
     }
     toku_unlock(C);
     n = (*f)(C);
@@ -733,9 +733,9 @@ t_sinline void auxinsertf(toku_State *T, SPtr func, const TValue *f) {
 t_sinline SPtr trymetacall(toku_State *T, SPtr func) {
     const TValue *f;
     checkstackGCp(C, 1, func); /* space for func */
-    f = csMM_get(C, s2v(func), TOKU_MT_CALL); /* (after previous GC) */
+    f = tokuMM_get(C, s2v(func), TOKU_MT_CALL); /* (after previous GC) */
     if (t_unlikely(ttisnil(f))) /* missing __call? (after GC) */
-        csD_callerror(C, s2v(func));
+        tokuD_callerror(C, s2v(func));
     auxinsertf(C, func, f);
     return func;
 }
@@ -770,13 +770,13 @@ retry:
         }
         case TOKU_VCLASS: { /* Class object */
             const TValue *fmm;
-            Instance *ins = csMM_newinstance(C, classval(s2v(func)));
-            csG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
+            Instance *ins = tokuMM_newinstance(C, classval(s2v(func)));
+            tokuG_checkfin(C, obj2gco(ins), ins->oclass->metalist);
             setinsval2s(C, func, ins); /* replace class with its instance */
-            fmm = csMM_get(C, s2v(func), TOKU_MT_INIT);
+            fmm = tokuMM_get(C, s2v(func), TOKU_MT_INIT);
             if (!ttisnil(fmm)) { /* have __init ? */
                 checkstackGCp(C, 1, func); /* space for fmm */
-                fmm = csMM_get(C, s2v(func), TOKU_MT_INIT); /* (after GC) */
+                fmm = tokuMM_get(C, s2v(func), TOKU_MT_INIT); /* (after GC) */
                 if (t_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
                     auxinsertf(C, func, fmm); /* insert it into stack... */
                     goto retry; /* ...and try calling it */
@@ -816,18 +816,18 @@ t_sinline void ccall(toku_State *T, SPtr func, int nresults, t_uint32 inc) {
     C->nCcalls += inc;
     if (t_unlikely(getCcalls(C) >= TOKUI_MAXCCALLS)) {
         checkstackp(C, 0, func); /* free any use of EXTRA_STACK */
-        csT_checkCstack(C);
+        tokuT_checkCstack(C);
     }
     if ((cf = precall(C, func, nresults)) != NULL) { /* Tokudae function? */
         cf->status = CFST_FRESH; /* mark it as a "fresh" execute */
-        csV_execute(C, cf); /* call it */
+        tokuV_execute(C, cf); /* call it */
     }
     C->nCcalls -= inc;
 }
 
 
 /* external interface for 'ccall' */
-void csV_call(toku_State *T, SPtr func, int nresults) {
+void tokuV_call(toku_State *T, SPtr func, int nresults) {
     ccall(C, func, nresults, nyci);
 }
 
@@ -846,14 +846,14 @@ static void copy2buff(SPtr top, int n, char *buff) {
 }
 
 
-void csV_concat(toku_State *T, int total) {
+void tokuV_concat(toku_State *T, int total) {
     if (total == 1)
         return; /* done */
     do {
         SPtr top = C->sp.p;
         int n = 2; /* number of elements (minimum 2) */
         if (!(ttisstring(s2v(top - 2)) && ttisstring(s2v(top - 1))))
-            csMM_tryconcat(C);
+            tokuMM_tryconcat(C);
         else if (isemptystr(s2v(top - 1))) /* second operand is empty string? */
             ; /* result already in the first operand */
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
@@ -865,7 +865,7 @@ void csV_concat(toku_State *T, int total) {
                 size_t len = getstrlen(strval(s2v(top - n - 1)));
                 if (t_unlikely(len >= TOKU_MAXSIZE - sizeof(OString) - ltotal)) {
                     C->sp.p = top - total; /* pop strings */
-                    csD_runerror(C, "string length overflow");
+                    tokuD_runerror(C, "string length overflow");
                 }
                 ltotal += len;
             }
@@ -873,9 +873,9 @@ void csV_concat(toku_State *T, int total) {
             if (ltotal <= TOKUI_MAXSHORTLEN) { /* fits in a short string? */
                 char buff[TOKUI_MAXSHORTLEN];
                 copy2buff(top, n, buff);
-                s = csS_newl(C, buff, ltotal);
+                s = tokuS_newl(C, buff, ltotal);
             } else { /* otherwise long string */
-                s = csS_newlngstrobj(C, ltotal);
+                s = tokuS_newlngstrobj(C, ltotal);
                 copy2buff(top, n, getstr(s));
             }
             setstrval2s(C, top - n, s);
@@ -888,21 +888,21 @@ void csV_concat(toku_State *T, int total) {
 
 t_sinline OClass *checksuper(toku_State *T, const TValue *scl) {
     if (t_unlikely(!ttisclass(scl)))
-        csD_runerror(C, "inherit from %s value", typename(ttype(scl)));
+        tokuD_runerror(C, "inherit from %s value", typename(ttype(scl)));
     return classval(scl);
 }
 
 
-void csV_inherit(toku_State *T, OClass *cls, OClass *scl) {
+void tokuV_inherit(toku_State *T, OClass *cls, OClass *scl) {
     if (scl->methods) { /* superclass has methods? */
         if (!cls->methods) /* class needs a method table? */
-            cls->methods = csH_new(C);
-        csH_copykeys(C, cls->methods, scl->methods);
+            cls->methods = tokuH_new(C);
+        tokuH_copykeys(C, cls->methods, scl->methods);
     }
     if (scl->metalist) { /* superclass has metalist entries? */
         if (!cls->metalist) /* class needs a metalist? */
-            cls->metalist = csA_new(C);
-        csA_ensure(C, cls->metalist, scl->metalist->len);
+            cls->metalist = tokuA_new(C);
+        tokuA_ensure(C, cls->metalist, scl->metalist->len);
         for (int i = 0; i < scl->metalist->len; i++)
             setobj(C, &cls->metalist->arr[i], &scl->metalist->arr[i]);
     }
@@ -914,31 +914,31 @@ void csV_inherit(toku_State *T, OClass *cls, OClass *scl) {
 
 
 t_sinline void pushclass(toku_State *T, int b) {
-    OClass *cls = csMM_newclass(C);
+    OClass *cls = tokuMM_newclass(C);
     setclsval2s(C, C->sp.p++, cls);
     if (b & 0x80) { /* have metamethod entries? */
         toku_assert(cls->metalist == NULL);
-        cls->metalist = csA_new(C);
+        cls->metalist = tokuA_new(C);
         b &= 0x7F; /* remove flag */
     }
     if (b > 0) /* have methods? */
-        cls->methods = csH_newsz(C, log2size1(b));
+        cls->methods = tokuH_newsz(C, log2size1(b));
 }
 
 
 t_sinline void pushlist(toku_State *T, int b) {
-    List *l = csA_new(C);
+    List *l = tokuA_new(C);
     setlistval2s(C, C->sp.p++, l);
     if (b > 0) /* list is not empty? */
-        csA_ensure(C, l, log2size1(b));
+        tokuA_ensure(C, l, log2size1(b));
 }
 
 
 t_sinline void pushtable(toku_State *T, int b) {
-    Table *t = csH_new(C);
+    Table *t = tokuH_new(C);
     settval2s(C, C->sp.p++, t);
     if (b > 0) /* table is not empty? */
-        csH_resize(C, t, log2size1(b));
+        tokuH_resize(C, t, log2size1(b));
 }
 
 
@@ -971,7 +971,7 @@ t_sinline void pushtable(toku_State *T, int b) {
     toku_Number n1, n2; \
     if (tonumber(v1, n1) && tonumber(v2, n2)) { \
         setfval(v1, fop(C, n1, n2)); \
-    } else csD_aritherror(C, v1, v2); }
+    } else tokuD_aritherror(C, v1, v2); }
 
 
 /* arithmetic operations with constant operand for floats */
@@ -1000,7 +1000,7 @@ t_sinline void pushtable(toku_State *T, int b) {
 
 /* arithmetic operation error with immediate operand */
 #define op_arithI_error(C,v,imm) \
-    { TValue v2; setival(&v2, imm); csD_aritherror(C, v, &v2); }
+    { TValue v2; setival(&v2, imm); tokuD_aritherror(C, v, &v2); }
 
 
 /* arithmetic operations with immediate operand for floats */
@@ -1086,7 +1086,7 @@ t_sinline void pushtable(toku_State *T, int b) {
     lk = K(fetch_l()); \
     if (t_likely(tointeger(v, &i1) && tointeger(lk, &i2))) { \
         setival(v, op(i1, i2)); \
-    } else csD_binoperror(C, v, lk, TOKU_MT_BAND); }
+    } else tokuD_binoperror(C, v, lk, TOKU_MT_BAND); }
 
 
 /* bitwise operations with immediate operand */
@@ -1101,7 +1101,7 @@ t_sinline void pushtable(toku_State *T, int b) {
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \
-        csD_binoperror(C, v, &vimm, TOKU_MT_BAND); \
+        tokuD_binoperror(C, v, &vimm, TOKU_MT_BAND); \
     }}
 
 
@@ -1153,7 +1153,7 @@ t_sinline void pushtable(toku_State *T, int b) {
 
 /* order operation error with immediate operand */
 #define op_orderI_error(C,v,imm) \
-    { TValue v2; setival(&v2, imm); csD_ordererror(C, v, &v2); }
+    { TValue v2; setival(&v2, imm); tokuD_ordererror(C, v, &v2); }
 
 
 /* order operations with immediate operand */
@@ -1229,14 +1229,14 @@ t_sinline void pushtable(toku_State *T, int b) {
 
 
 /* collector might of reallocated stack, so update global 'trap' */
-#define checkGC(C)      csG_condGC(C, (void)0, updatetrap(cf))
+#define checkGC(C)      tokuG_condGC(C, (void)0, updatetrap(cf))
 
 
 /* fetch instruction */
 #define fetch() { \
     if (t_unlikely(trap)) { /* stack reallocation or hooks? */ \
         ptrdiff_t sizestack = sp - base; \
-        trap = csD_traceexec(C, pc, sizestack); /* handle hooks */ \
+        trap = tokuD_traceexec(C, pc, sizestack); /* handle hooks */ \
         updatebase(cf); /* correct stack */ \
         sp = base + sizestack; /* correct stack pointer */ \
     } \
@@ -1269,7 +1269,7 @@ t_sinline void pushtable(toku_State *T, int b) {
       vm_break; }
 
 
-void csV_execute(toku_State *T, CallFrame *cf) {
+void tokuV_execute(toku_State *T, CallFrame *cf) {
     CSClosure *cl;              /* active Tokudae function (closure) */
     TValue *k;                  /* constants */
     SPtr base;                  /* frame stack base */
@@ -1288,7 +1288,7 @@ returning: /* trap already set */
     sp = C->sp.p;
     pc = cf->cs.pcret;
     if (t_unlikely(trap)) /* hooks? */
-        trap = csD_tracecall(C, hookdelta());
+        trap = tokuD_tracecall(C, hookdelta());
     base = cf->func.p + 1;
     /* main loop of interpreter */
     for (;;) {
@@ -1360,11 +1360,11 @@ returning: /* trap already set */
             }
             vm_case(OP_VARARGPREP) {
                 savestate(C);
-                /* 'csF_adjustvarargs' handles 'sp' */
-                Protect(csF_adjustvarargs(C, fetch_l(), cf, &sp, cl->p));
+                /* 'tokuF_adjustvarargs' handles 'sp' */
+                Protect(tokuF_adjustvarargs(C, fetch_l(), cf, &sp, cl->p));
                 if (t_unlikely(trap)) {
                     storepc(C);
-                    csD_hookcall(C, cf, hookdelta());
+                    tokuD_hookcall(C, cf, hookdelta());
                     /* next opcode will be seen as a "new" line */
                     C->oldpc = getopSize(OP_VARARGPREP); 
                     sp = C->sp.p; /* to properly calculate stack size */
@@ -1374,8 +1374,8 @@ returning: /* trap already set */
             }
             vm_case(OP_VARARG) {
                 savestate(C);
-                /* 'csF_getvarargs' handles 'sp' */
-                Protect(csF_getvarargs(C, cf, &sp, fetch_l() - 1));
+                /* 'tokuF_getvarargs' handles 'sp' */
+                Protect(tokuF_getvarargs(C, cf, &sp, fetch_l() - 1));
                 updatebase(cf); /* make sure 'base' is up-to-date */
                 vm_break;
             }
@@ -1414,7 +1414,7 @@ returning: /* trap already set */
                 savestate(C);
                 key = K(fetch_l());
                 toku_assert(t && ttisstring(key));
-                csV_settable(C, t, strval(key), f, csH_setstr);
+                tokuV_settable(C, t, strval(key), f, tokuH_setstr);
                 sp--;
                 vm_break;
             }
@@ -1427,8 +1427,8 @@ returning: /* trap already set */
                 toku_assert(ml != NULL);
                 mt = fetch_s();
                 toku_assert(cast_uint(mt) < toku_MT_NUM);
-                csA_ensureindex(C, ml, mt);
-                csA_fastset(C, ml, mt, f); /* set the entry */
+                tokuA_ensureindex(C, ml, mt);
+                tokuA_fastset(C, ml, mt, f); /* set the entry */
                 sp--;
                 vm_break;
             }
@@ -1441,7 +1441,7 @@ returning: /* trap already set */
                 TValue *v2 = peek(0);
                 savestate(C);
                 /* operands are already swapped */
-                Protect(csMM_trybin(C, v1, v2, sp-2, fetch_s()));
+                Protect(tokuMM_trybin(C, v1, v2, sp-2, fetch_s()));
                 sp--;
                 vm_break;
             }
@@ -1462,11 +1462,11 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_IDIVK) {
-                op_arithK(C, csV_divi, t_numidiv);
+                op_arithK(C, tokuV_divi, t_numidiv);
                 vm_break;
             }
             vm_case(OP_MODK) {
-                op_arithK(C, csV_modi, csV_modf);
+                op_arithK(C, tokuV_modi, tokuV_modf);
                 vm_break;
             }
             vm_case(OP_POWK) {
@@ -1474,11 +1474,11 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_BSHLK) {
-                op_bitwiseK(C, csO_shiftl);
+                op_bitwiseK(C, tokuO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRK) {
-                op_bitwiseK(C, csO_shiftr);
+                op_bitwiseK(C, tokuO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDK) {
@@ -1510,11 +1510,11 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_IDIVI) {
-                op_arithI(C, csV_divi, t_numidiv);
+                op_arithI(C, tokuV_divi, t_numidiv);
                 vm_break;
             }
             vm_case(OP_MODI) {
-                op_arithI(C, csV_modi, csV_modf);
+                op_arithI(C, tokuV_modi, tokuV_modf);
                 vm_break;
             }
             vm_case(OP_POWI) {
@@ -1522,11 +1522,11 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_BSHLI) {
-                op_bitwiseI(C, csO_shiftl);
+                op_bitwiseI(C, tokuO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHRI) {
-                op_bitwiseI(C, csO_shiftr);
+                op_bitwiseI(C, tokuO_shiftr);
                 vm_break;
             }
             vm_case(OP_BANDI) {
@@ -1559,12 +1559,12 @@ returning: /* trap already set */
             }
             vm_case(OP_IDIV) {
                 savestate(C);
-                op_arith(C, csV_divi, t_numidiv);
+                op_arith(C, tokuV_divi, t_numidiv);
                 vm_break;
             }
             vm_case(OP_MOD) {
                 savestate(C);
-                op_arith(C, csV_modi, csV_modf);
+                op_arith(C, tokuV_modi, tokuV_modf);
                 vm_break;
             }
             vm_case(OP_POW) {
@@ -1572,11 +1572,11 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_BSHL) {
-                op_bitwise(C, csO_shiftl);
+                op_bitwise(C, tokuO_shiftl);
                 vm_break;
             }
             vm_case(OP_BSHR) {
-                op_bitwise(C, csO_shiftr);
+                op_bitwise(C, tokuO_shiftr);
                 vm_break;
             }
             vm_case(OP_BAND) {
@@ -1596,7 +1596,7 @@ returning: /* trap already set */
                 int total;
                 savestate(C);
                 total = fetch_l();
-                Protect(csV_concat(C, total));
+                Protect(tokuV_concat(C, total));
                 checkGC(C);
                 sp -= total - 1;
                 vm_break;
@@ -1606,7 +1606,7 @@ returning: /* trap already set */
                 TValue *v1 = peek(0);
                 const TValue *vk = K(fetch_l());
                 int eq = fetch_s();
-                int cond = csV_raweq(v1, vk);
+                int cond = tokuV_raweq(v1, vk);
                 setorderres(v1, cond, eq);
                 vm_break;
             }
@@ -1646,7 +1646,7 @@ returning: /* trap already set */
                 int condexp, cond;
                 savestate(C);
                 condexp = fetch_s();
-                Protect(cond = csV_ordereq(C, v1, v2));
+                Protect(cond = tokuV_ordereq(C, v1, v2));
                 setorderres(v1, cond, condexp);
                 sp--;
                 vm_break;
@@ -1664,7 +1664,7 @@ returning: /* trap already set */
                 TValue *v2 = peek(0);
                 int cond;
                 savestate(C);
-                Protect(cond = csV_ordereq(C, v1, v2));
+                Protect(cond = tokuV_ordereq(C, v1, v2));
                 setorderres(v2, cond, 1);
                 vm_break;
             }
@@ -1686,7 +1686,7 @@ returning: /* trap already set */
                     setfval(v, t_numunm(C, n));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, sp-1, TOKU_MT_UNM));
+                    Protect(tokuMM_tryunary(C, v, sp-1, TOKU_MT_UNM));
                 }
                 vm_break;
             }
@@ -1697,7 +1697,7 @@ returning: /* trap already set */
                     setival(v, intop(^, ~t_castS2U(0), i));
                 } else {
                     savestate(C);
-                    Protect(csMM_tryunary(C, v, sp-1, TOKU_MT_BNOT));
+                    Protect(tokuMM_tryunary(C, v, sp-1, TOKU_MT_BNOT));
                 }
                 vm_break;
             }
@@ -1739,12 +1739,12 @@ returning: /* trap already set */
             }
             vm_case(OP_CLOSE) {
                 savestate(C);
-                Protect(csF_close(C, STK(fetch_l()), TOKU_STATUS_OK));
+                Protect(tokuF_close(C, STK(fetch_l()), TOKU_STATUS_OK));
                 vm_break;
             }
             vm_case(OP_TBC) {
                 savestate(C);
-                csF_newtbcvar(C, STK(fetch_l()));
+                tokuF_newtbcvar(C, STK(fetch_l()));
                 vm_break;
             }
             vm_case(OP_GETLOCAL) {
@@ -1765,7 +1765,7 @@ returning: /* trap already set */
             vm_case(OP_SETUVAL) {
                 UpVal *uv = cl->upvals[fetch_l()];
                 setobj(C, uv->v.p, s2v(sp - 1));
-                csG_barrier(C, uv, s2v(sp - 1));
+                tokuG_barrier(C, uv, s2v(sp - 1));
                 sp--;
                 vm_break;
             }
@@ -1782,11 +1782,11 @@ returning: /* trap already set */
                     n = (sp - sl) - 1; /* get up to the top */
                 toku_assert(n >= 0);
                 last += n - 1; /* make 'last' be the last index */
-                csA_ensureindex(C, l, check_exp(last >= -1, last));
+                tokuA_ensureindex(C, l, check_exp(last >= -1, last));
                 for (; n > 0; n--) { /* set the values from the stack... */
                     /* ...into the list (in reverse order) */
                     TValue *v = s2v(sl + n);
-                    csA_fastset(C, l, last, v); 
+                    tokuA_fastset(C, l, last, v); 
                     last--;
                 }
                 sp = sl + 1; /* pop off elements (if any) */
@@ -1800,7 +1800,7 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 prop = K(fetch_l());
                 toku_assert(ttisstring(prop));
-                Protect(csV_setstr(C, o, prop, v));
+                Protect(tokuV_setstr(C, o, prop, v));
                 sp--;
                 vm_break;
             }
@@ -1810,14 +1810,14 @@ returning: /* trap already set */
                 savestate(C);
                 prop = K(fetch_l());
                 toku_assert(ttisstring(prop));
-                Protect(csV_getstr(C, v, prop, sp - 1));
+                Protect(tokuV_getstr(C, v, prop, sp - 1));
                 vm_break;
             }
             vm_case(OP_GETINDEX) {
                 TValue *o = peek(1);
                 TValue *key = peek(0);
                 savestate(C);
-                Protect(csV_get(C, o, key, sp - 2));
+                Protect(tokuV_get(C, o, key, sp - 2));
                 sp--;
                 vm_break;
             }
@@ -1830,7 +1830,7 @@ returning: /* trap already set */
                 os = stkpeek(fetch_l());
                 o = s2v(os);
                 idx = s2v(os+1);
-                Protect(csV_set(C, o, idx, v));
+                Protect(tokuV_set(C, o, idx, v));
                 sp--;
                 vm_break;
             }
@@ -1840,7 +1840,7 @@ returning: /* trap already set */
                 savestate(C);
                 i = K(fetch_l());
                 toku_assert(ttisstring(i));
-                Protect(csV_getstr(C, v, i, sp - 1));
+                Protect(tokuV_getstr(C, v, i, sp - 1));
                 vm_break;
             }
             vm_case(OP_SETINDEXSTR) {
@@ -1851,7 +1851,7 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 idx = K(fetch_l());
                 toku_assert(ttisstring(idx));
-                Protect(csV_setstr(C, o, idx, v));
+                Protect(tokuV_setstr(C, o, idx, v));
                 sp--;
                 vm_break;
             }
@@ -1862,7 +1862,7 @@ returning: /* trap already set */
                 savestate(C);
                 imm = fetch_s();
                 setival(&i, IMM(imm));
-                Protect(csV_getint(C, v, &i, sp - 1));
+                Protect(tokuV_getint(C, v, &i, sp - 1));
                 vm_break;
             }
             vm_case(OP_GETINDEXINTL) {
@@ -1872,7 +1872,7 @@ returning: /* trap already set */
                 savestate(C);
                 imm = fetch_l();
                 setival(&i, IMML(imm));
-                Protect(csV_getint(C, v, &i, sp - 1));
+                Protect(tokuV_getint(C, v, &i, sp - 1));
                 vm_break;
             }
             vm_case(OP_SETINDEXINT) {
@@ -1884,7 +1884,7 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 imm = fetch_s();
                 setival(&index, IMM(imm));
-                Protect(csV_setint(C, o, &index, v));
+                Protect(tokuV_setint(C, o, &index, v));
                 sp--;
                 vm_break;
             }
@@ -1897,7 +1897,7 @@ returning: /* trap already set */
                 o = peek(fetch_l());
                 imm = fetch_l();
                 setival(&index, IMML(imm));
-                Protect(csV_setint(C, o, &index, v));
+                Protect(tokuV_setint(C, o, &index, v));
                 sp--;
                 vm_break;
             }
@@ -1907,7 +1907,7 @@ returning: /* trap already set */
                 TValue *sk;
                 savestate(C);
                 sk = K(fetch_l());
-                getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
+                getsuper(C, in, scl, strval(sk), sp - 1, tokuH_getstr);
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
@@ -1915,7 +1915,7 @@ returning: /* trap already set */
                 OClass *scl = in->oclass->sclass;
                 TValue *idx = peek(0);
                 savestate(C);
-                getsuper(C, in, scl, idx, sp - 2, csH_get);
+                getsuper(C, in, scl, idx, sp - 2, tokuH_get);
                 sp--;
                 vm_break;
             }
@@ -1925,7 +1925,7 @@ returning: /* trap already set */
                 TValue *sk;
                 savestate(C);
                 sk = K(fetch_l());
-                getsuper(C, in, scl, strval(sk), sp - 1, csH_getstr);
+                getsuper(C, in, scl, strval(sk), sp - 1, tokuH_getstr);
                 vm_break;
             }
             vm_case(OP_INHERIT) {
@@ -1934,9 +1934,9 @@ returning: /* trap already set */
                 OClass *cls = classval(o2);
                 OClass *scl;
                 savestate(C);
-                toku_assert(!csV_raweq(o1, o2));
+                toku_assert(!tokuV_raweq(o1, o2));
                 scl = checksuper(C, o1);
-                csV_inherit(C, cls, scl);
+                tokuV_inherit(C, cls, scl);
                 checkGC(C);
                 vm_break;
             }
@@ -1944,7 +1944,7 @@ returning: /* trap already set */
                 int offset;
                 savestate(C);
                 /* create to-be-closed upvalue (if any) */
-                csF_newtbcvar(C, STK(fetch_l()) + VAR_TBC);
+                tokuF_newtbcvar(C, STK(fetch_l()) + VAR_TBC);
                 offset = fetch_l();
                 pc += offset;
                 /* go to the next instruction */
@@ -1964,7 +1964,7 @@ returning: /* trap already set */
                 /* push function, state and control variable */
                 memcpy(stk+VAR_N, stk, VAR_TBC * sizeof(*stk));
                 C->sp.p = stk + VAR_N + VAR_TBC; /* adjust stack pointer */
-                Protect(csV_call(C, stk+VAR_N, fetch_l())); /* call iterator */
+                Protect(tokuV_call(C, stk+VAR_N, fetch_l())); /* call iterator */
                 updatestack(cf);
                 sp = C->sp.p;
                 /* go to the next instruction */
@@ -1994,7 +1994,7 @@ returning: /* trap already set */
                 if (nres < 0) /* not fixed ? */
                     nres = sp - stk;
                 if (fetch_s()) { /* have open upvalues? */
-                    csF_close(C, base, CLOSEKTOP);
+                    tokuF_close(C, base, CLOSEKTOP);
                     updatetrap(cf);
                     updatestack(cf);
                 }
