@@ -54,7 +54,7 @@ local make_threads = !__port and 12 or 1;
 local dev_null = __POSIX and "/dev/null" or "nul";
 local dev_null1 = " > " .. dev_null;
 local dev_null2 = " 2> " .. dev_null;
-local dev_null12 = dev_null1 .. "2>&1";
+local dev_null12 = dev_null1 .. " 2>&1";
 
 local cp = __POSIX and "cp" or "copy";
 
@@ -427,14 +427,19 @@ local fn showmem() {
 };
 
 
+/* formatted logging */
+local fn loginfo(msg) { printf("[%]: %", YELLOW("INFO"), msg); }
+local fn logcmd(msg) { printf("[%]: %", RED("CMD"), msg); }
+
+
 /* temporary output file */
 local tempfile = (class {
-        __gc = || {
-            if self.file {
-                printf("Removing temporary output file '%'...", self.file);
-                rm(self.file);
-            }
-        };
+    __gc = || {
+        if self.file {
+            loginfo(fmt("removing temporary output file '%s'...", self.file));
+            rm(self.file);
+        }
+    };
 })();
 
 
@@ -586,7 +591,7 @@ local fn run_all_testsuites(tests_script) {
 ** Usage string.
 */
 local usage = [=[
-usage: ./test.toku [-h] [-cCwWoOmMrRzZfFaAiIdD[t|e|s arg] ...] [arg_testsuite ...]
+usage: ./test.toku [-h] [-cCwWoOmMrRzZfFaAiIdDbB[t|e|s arg] ...] [arg_testsuite ...]
                    [-ttest_file | -t test_file]
                    [-etestsuite_name | -e testsuite_name]
                    [-stests_script | -s tests_script]
@@ -630,8 +635,14 @@ Available options are:
     -d      After each test is finished, enter interactive mode.
             In order to leave this mode, enter a line containing only "cont".
 
+    -b      Rebuild standalone interpreter before executing new tests.
+            The test script is executed in a new process with the newly built
+            interpreter executable. All of the original arguments are also passed
+            and additionally the '-B' is appended to prevent recursive rebuilds.
+            This option is not portable.
+
     All of the options above have the uppercase version which does the opposite
-    (-C, -W, -O, -M, -R, -Z, -F, -A, -I and -D).
+    (-C, -W, -O, -M, -R, -Z, -F, -A, -I, -D and -B).
 
     -t test_file        Add a test file {test_file} into the 'cli_tests' testsuite.
                         This testsuite will be the first to run.
@@ -646,10 +657,10 @@ Available options are:
                         should be absolute or relative to the script file.
                         This is ignored if '--gen-dir-tests'.
 
-    --minimal-flags     Equivalent to '-CWoMRZfaID'.
-    --port-flags        Equivalent to '-CwOmrZfaId'.
-    --verbose-flags     Equivalent to '-cWOmrzfAID'.
-    --standard-flags    Equivalent to '-cWoMRzfAiD'.
+    --minimal-flags     Equivalent to '-CWoMRZfaIDB'.
+    --port-flags        Equivalent to '-CwOmrZfaIdB'.
+    --verbose-flags     Equivalent to '-cWOmrzfAIDb'.
+    --standard-flags    Equivalent to '-cWoMRzfAiDB'.
 
     --out-tests         Outputs tests table to 'stdout', it first checks for the
                         already present tests table (if it was generated), if
@@ -757,6 +768,7 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = true;
             __opts.run_isolated = false;
             __opts.enter_debug = false;
+            __opts.rebuild = false;
             break;
         }
         case "port-flags": {
@@ -770,6 +782,7 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = true;
             __opts.run_isolated = false;
             __opts.enter_debug = true;
+            __opts.rebuild = false;
             break;
         }
         case "verbose-flags": {
@@ -783,6 +796,7 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = false;
             __opts.run_isolated = false;
             __opts.enter_debug = false;
+            __opts.rebuild = true;
             break;
         }
         case "standard-flags": {
@@ -796,6 +810,7 @@ local fn handle_multi_option(opt) {
             __opts.abort_on_fail = false;
             __opts.run_isolated = true;
             __opts.enter_debug = false;
+            __opts.rebuild = false;
             break;
         }
         case "out-tests": out_tests = true; break;
@@ -938,8 +953,8 @@ local fn handle_cli_args() {
 local fn display_skipped() {
     if __skipmsg and (0 < skip_msgs.len or __opts.run_isolated) {
         if __opts.run_isolated {
-            print("\nNo information on (parts of) skipped tests (if any), " ..
-                  "as tests were ran in isolation ('-i').");
+            loginfo("no information on (parts of) skipped tests (if any), " ..
+                    "as tests were ran in isolation ('-i')");
         } else {
             print("\nSkip messages:");
             foreach _,msg in ipairs(skip_msgs)
@@ -1088,7 +1103,7 @@ local fn set_output_options() {
 
 local fn report(exit, msg, st, what, code) {
     if !st {
-        print(fmt("Fail, %s (%s -> %d)", msg, what, code));
+        loginfo(fmt("fail, %s (%s -> %d)", msg, what, code));
         if exit /* exit on failure? */
             exit(1, true);
     }
@@ -1103,11 +1118,11 @@ local have_oldprog = false;
 local fn rmoldprog(restore) {
     if have_oldprog {
         if restore {
-            printf("Restoring saved executable...");
+            loginfo("restoring saved executable...");
             report(true, "can't restore executable",
                    execute(fmt("%s %s %s", cp, oldprog, prog)));
         } else {
-            printf("Removing backup executable '%'...", oldprog);
+            loginfo(fmt("removing backup executable '%s'...", oldprog));
             rm(oldprog);
         }
         have_oldprog = false;
@@ -1119,7 +1134,7 @@ local fn rmoldprog(restore) {
 handle_cli_args();
 
 if __opts.rebuild { /* rebuild standalone interpreter? */
-    print("Rebuilding Takudae standalone interpreter...");
+    loginfo("rebuilding Takudae standalone interpreter...");
     report(true, "can't create executable backup",
            execute(fmt("%s %s %s %s", cp, prog, oldprog, dev_null1)));
     have_oldprog = true;
@@ -1127,9 +1142,9 @@ if __opts.rebuild { /* rebuild standalone interpreter? */
     cmd = fmt("cd .. && %s clean %s && %s %s",
                cmd, dev_null1, cmd, make_target);
     cmd ..= dev_null1; /* redirect 'stdout' to null */
-    printf("+ %", cmd);
+    logcmd(cmd);
     if !report(false, msg, execute(cmd)) { /* rebuild failed? */
-        printf("Rebuild failed, exiting...");
+        loginfo("rebuild failed, exiting...");
         rmoldprog(true);
         exit(1, true);
     }
@@ -1139,10 +1154,10 @@ if __opts.rebuild { /* rebuild standalone interpreter? */
     foreach _,arg in ipairs(__args)
         cmd ..= arg .. " ";
     cmd ..= "-B"; /* do not rebuild the second time */
-    printf("Rebuild successful, executing: '%'", cmd);
+    loginfo("rebuild successful, executing...");
     assert(startswith(cmd, script),
            fmt("arguments must start with '%s' ('%s')", script, cmd));
-    printf("+ %", cmd);
+    logcmd(cmd);
     exit(execute(cmd), true);
 } else { /* otherwise execute arguments */
     set_output_options();

@@ -214,17 +214,17 @@
 */
 #if defined(TOKU_BUILD_AS_DLL)  /* { */
 #if defined(TOKU_CORE) || defined(TOKU_LIB)     /* { */
-#define TOKU_API    __declspec(dllexport)
+#define TOKU_API        __declspec(dllexport)
 #else                                           /* }{ */
-#define TOKU_API    __declspec(dllimport)
+#define TOKU_API        __declspec(dllimport)
 #endif                                          /* } */
 #else                           /* }{ */
-#define TOKU_API    extern
+#define TOKU_API        extern
 #endif                          /* } */
 
 
 #define TOKULIB_API     TOKU_API
-#define TOKUMOD_API       TOKU_API
+#define TOKUMOD_API     TOKU_API
 
 
 /*

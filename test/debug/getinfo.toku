@@ -13,7 +13,7 @@ local getinfo = db.getinfo;
     }
 
     local t = getinfo(f); /// default
-    assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
+    assert(string.find(t.source, "getinfo.toku") and string.find(t.shortsrc, "getinfo.toku"));
     assert(t.defline == 7 and t.lastdefline == 13 and t.what == "Tokudae");
     assert(t.currline == -1);
     assert(t.nupvals == 2 and t.nparams == 3 and t.isvararg == false);
@@ -23,7 +23,7 @@ local getinfo = db.getinfo;
     assert(t.func == f);
 
     t = getinfo(f, "s"); /// get source information
-    assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
+    assert(string.find(t.source, "getinfo.toku") and string.find(t.shortsrc, "getinfo.toku"));
     assert(t.defline == 7 and t.lastdefline == 13 and t.what == "Tokudae");
     t = getinfo(f, "l"); /// get line
     assert(t.currline == -1);
@@ -64,12 +64,12 @@ local getinfo = db.getinfo;
 }
 
 local extra = 0;
-if reg.find(db.traceback(nil, 0), "test%.cscript")
-    extra = 7; /* @bugprone if 'cscript.test' is changed */
+if reg.find(db.traceback(nil, 0), "test%.toku")
+    extra = 7; /* @bugprone if 'test.toku' is changed */
 
 { /// active Tokudae functions
     local t = getinfo(1);
-    assert(string.find(t.source, "getinfo.cscript") and string.find(t.shortsrc, "getinfo.cscript"));
+    assert(string.find(t.source, "getinfo.toku") and string.find(t.shortsrc, "getinfo.toku"));
     assert(t.defline == 0 and t.lastdefline == 0 and t.what == "main");
     assert(t.currline == 71);
     assert(t.nupvals == 1 and t.nparams == 0 and t.isvararg == true);

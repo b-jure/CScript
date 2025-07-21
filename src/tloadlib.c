@@ -629,7 +629,7 @@ static void create_searchers_array(toku_State *T) {
 */
 static int noenv(toku_State *T) {
     int b;
-    toku_get_cfieldstr(T, "toku_NOENV");
+    toku_get_cfieldstr(T, "TOKU_NOENV");
     b = toku_to_bool(T, -1);
     toku_pop(T, 1); /* remove value */
     return b;
@@ -677,7 +677,7 @@ TOKUMOD_API int tokuopen_package(toku_State *T) {
     setpath(T, "cpath", TOKU_CPATH_VAR, TOKU_CPATH_DEFAULT); /* 'package.cpath' */
     /* set 'package.config' */
     toku_push_literal(T, TOKU_DIRSEP "\n" TOKU_PATH_SEP "\n" TOKU_PATH_MARK "\n"
-                       TOKU_EXEC_DIR "\n" TOKU_IGMARK "\n");
+                        TOKU_EXEC_DIR "\n" TOKU_IGMARK "\n");
     toku_set_fieldstr(T, -2, "config");
     /* ctable[__LOADED] = table */
     tokuL_get_subtable(T, TOKU_CTABLE_INDEX, TOKU_LOADED_TABLE);

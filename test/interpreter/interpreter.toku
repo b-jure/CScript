@@ -140,10 +140,9 @@ local defaultpath, defaultCpath;
 
     /// running with an empty environment
     RUN("env -i tokudae %s > %s", prog, out);
-    local out = getoutput();
+    output = getoutput();
     assert(defaultpath == reg.match(output, "^(.-)\t"));
     assert(defaultCpath == reg.match(output, "\t(.-)$"));
-    print(out, defaultpath, defaultCpath);
 }
 
 /// paths did not change

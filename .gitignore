@@ -1,6 +1,9 @@
 ### C ###
 # Prerequisites
-cscript
+tokudae
+libtokudae.so
+libtokudae.a
+libtokudae.dll
 tags
 .clangd
 build
