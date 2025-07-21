@@ -12,18 +12,18 @@
 #include "tobject.h"
 
 
-/* maximum number of local variablet per function */
+/* maximum number of local variables per function */
 #define MAXVARS         MAX_CODE
 
 
 /*
-** Becaute all strings are unified by the scanner, the parser
-** can ute pointer equality for string equality.
+** Because all strings are unified by the scanner, the parser
+** can use pointer equality for string equality.
 */
 #define eqstr(a, b)     ((a) == (b))
 
 
-/* check expretsion type */
+/* check expression type */
 #define eisvar(e)       ((e)->et >= EXP_UVAL && (e)->et <= EXP_DOTSUPER)
 #define eisconstant(e)  ((e)->et >= EXP_NIL && (e)->et <= EXP_K)
 #define eismulret(e)    ((e)->et == EXP_CALL || (e)->et == EXP_VARARG)
@@ -31,7 +31,7 @@
 #define eisindexed(e)   ((e)->et >= EXP_INDEXED && (e)->et <= EXP_DOTSUPER)
 
 
-/* expretsion types */
+/* expression types */
 typedef enum expt {
     /* no expression */
     EXP_VOID,
@@ -90,10 +90,7 @@ typedef enum expt {
 
 
 /*
-** Expression information.
-** Parser builds up the expression information and feeds it into
-** functions that generate bytecode (codegen).
-** Then those functions also fill the 'ExpInfo' accordingly.
+** Expression descriptor.
 */
 typedef struct ExpInfo {
     expt et;
@@ -108,7 +105,7 @@ typedef struct ExpInfo {
         int info; /* pc or tome other generic information */
     } u;
     int t; /* jmp to patch if true */
-    int f; /* jmp to patch if falte */
+    int f; /* jmp to patch if false */
 } ExpInfo;
 
 
@@ -118,7 +115,7 @@ typedef struct ExpInfo {
 /* variable kind */
 #define VARREG      0   /* regular */
 #define VARFINAL    1   /* final (immutable) */
-#define VARTBC      2   /* to-be-cloted */
+#define VARTBC      2   /* to-be-closed */
 
 
 /* active local variable compiler information */
@@ -134,7 +131,7 @@ typedef union LVar {
 } LVar;
 
 
-/* twitch statement constant description */
+/* switch statement constant description */
 typedef struct LiteralInfo {
     Literal lit; /* constant */
     int tt; /* type tag */
@@ -144,7 +141,7 @@ typedef struct LiteralInfo {
 /*
 ** Description of pending goto jumps (break/continue).
 ** Tokudae does not support explicit 'goto' statements and labels,
-** instead this structure refers to the 'break' and 'continue' jumps.
+** instead this structure refers to the 'break' and some 'continue' jumps.
 */
 typedef struct Goto {
     int pc; /* position in the code */

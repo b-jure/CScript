@@ -445,7 +445,7 @@ static int os_time(toku_State *T) {
 }
 
 
-static int os_difftime (toku_State *T) {
+static int os_difftime(toku_State *T) {
     time_t t1 = t_checktime(T, 0);
     time_t t2 = t_checktime(T, 1);
     toku_push_number(T, (toku_Number)difftime(t1, t2));

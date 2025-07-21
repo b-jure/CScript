@@ -172,7 +172,7 @@ local len,llen,remove,byte,clock = len,list.len,list.remove,string.byte,os.clock
 local tmpname,pairs,gc,rm,flatten = os.tmpname,pairs,gc,os.remove,list.flatten;
 local exit,getinfo,enumerate = os.exit,debug.getinfo,list.enumerate;
 local char,dbg,gmatch,repeat = string.char,debug.debug,reg.gmatch,string.repeat;
-local startswith = string.startswith;
+local startswith,ostime = string.startswith,os.time;
 
 
 /* tests should import debug library when needed */
@@ -236,7 +236,7 @@ if __skipmsg { /* store skipped (parts of) tests? */
 local fn testfmt(test, stat) {
     local C = stat and GREEN or RED;
     local res = stat and "PASS" or "FAIL";
-    return fmt("%s %-55s", C("[  " .. res .. "  ]"), C(test));
+    return fmt("%s %-55s", C("[  " .. res .. "  ]"), test);
 }
 
 
@@ -443,39 +443,47 @@ local tempfile = (class {
 })();
 
 
+local fn print_test_result(stat, filepath, c) {
+    local s = testfmt(filepath, stat);
+    if !__opts.run_isolated and __opts.timed
+        s ..= "  " .. gettime(c);
+    print(s);
+}
+
+
 /*
 ** Runs individual test and outputs the result to 'stdout'.
 ** @filepath - string
 */
 local fn run_test(filepath) {
     if (__opts.memory) showmem();
-    local termcodes = !__port and __opts.termcodes and execute("[ -t 1 ]");
-    local isolated = !__port and __opts.run_isolated;
+    local termcodes = __opts.termcodes and execute("[ -t 1 ]");
     if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
         stdout.write(fmt("%sCurrently running '%s'...", SAVEPOS(), YELLOW(filepath)));
         flush();
     }
-    local stat, msg, code;
-    if (isolated) /* run isolated? */
-        stat, msg, code = execute(__prog .. " " .. filepath .. dev_null12);
-    else /* otherwise run in the same global environment */
+    local stat, msg, code, c;
+    if (__opts.run_isolated)
+        stat, msg, code = execute(prog .. " " .. filepath .. dev_null12);
+    else { /* otherwise run in the same global environment */
         stat, msg = xpcall(runfile, traceback, filepath);
-    local c = clock();
+        c = clock();
+    }
     if (termcodes and __opts.noprint and !__opts.warnings) {
         output(stdout);
         stdout.write(LOADPOS() .. ERASELINE());
         flush();
     }
-    printf("%  %", testfmt(filepath, stat), __opts.timed and gettime(c) or "");
+    print_test_result(stat, filepath, c);
     if (__opts.enter_debug) {
         local c = clock();
         dbg(); /* enter interactive mode */
         time_in_dbg = clock() - c;
     }
     if (!stat) { /* test failed? */
-        if (isolated and msg and code) /* failed isolated with msg and code? */
-            msg = msg .. " (code " .. tostr(code) .. ")"; /* append it to msg */
+        if (__opts.run_isolated and msg and code)
+            msg = msg .. " (code " .. tostr(code) .. ")";
         failed_tests[failed_tests.len] = { /* add it to failed tests list */
             testname = filepath,
             errormsg = msg,
@@ -500,7 +508,7 @@ local fn testsuite_headerfmt(tsuite, isend) {
         txt = "END";
     }
     txt = cl("> " .. txt .. "(") .. mode(tsuite) .. cl(")");
-    if (isend and __opts.timed) /* output total time? */
+    if (isend and !__opts.run_isolated and __opts.timed)
         txt = txt .. BLUE(fmt(" %-8g", lastclock - initclock));
     print(txt);
 }
@@ -514,7 +522,7 @@ local fn testsuite_headerfmt(tsuite, isend) {
 local fn run_tests(tsuite, tlist) {
     if (tlist.len > 0) {
         testsuite_headerfmt(tsuite);
-        if (__opts.timed) { /* timming the execution? */
+        if !__opts.run_isolated and __opts.timed {
             initclock = clock();
             lastclock = initclock;
         }
@@ -620,7 +628,8 @@ Available options are:
 
     -r      Print the error message in case test fails.
 
-    -z      Print how long the test execution took in seconds.
+    -z      Print CPU time of the test execution (not portable). If the tests
+            are running in isolation ('-i') then this option is ignored.
 
     -f      After all tests are finished, re-print failed test names
             (and their error message if '-r').

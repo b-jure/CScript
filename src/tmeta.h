@@ -1,6 +1,6 @@
 /*
 ** tmeta.h
-** Functiont for metamethods and meta types
+** Functions for metamethods and meta types
 ** See Copyright Notice in tokudae.h
 */
 
@@ -43,30 +43,30 @@ TOKUI_FUNC void tokuMM_callgetres(toku_State *T,
                                   const TValue *fn,
                                   const TValue *o,
                                   const TValue *k,
-                                  SPtr ret);
+                                  SPtr res);
 TOKUI_FUNC void tokuMM_callbinres(toku_State *T,
                                   const TValue *fn,
                                   const TValue *v1,
                                   const TValue *v2,
-                                  SPtr ret);
+                                  SPtr res);
 TOKUI_FUNC void tokuMM_callunaryres(toku_State *T,
                                     const TValue *fn,
                                     const TValue *o,
-                                    SPtr ret);
+                                    SPtr res);
 TOKUI_FUNC int tokuMM_order(toku_State *T,
                             const TValue *v1,
                             const TValue *v2,
-		  	    int mm);
+		  	    int mt);
 TOKUI_FUNC int tokuMM_orderI(toku_State *T,
                              const TValue *v1,
                              int v2, int flip,
-                             int itflt, int mm);
+                             int itflt, int mt);
 TOKUI_FUNC void tokuMM_trybin(toku_State *T,
                               const TValue *v1,
                               const TValue *v2,
-		    	      SPtr ret, int mm);
+		    	      SPtr res, int mt);
 TOKUI_FUNC void tokuMM_tryunary(toku_State *T, const TValue *o,
-                                               SPtr res, int mm);
+                                               SPtr res, int mt);
 TOKUI_FUNC void tokuMM_tryconcat(toku_State *T);
 
 #endif

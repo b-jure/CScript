@@ -46,7 +46,7 @@ TOKUI_FUNC Proto *tokuF_newproto(toku_State *T);
 TOKUI_FUNC TClosure *tokuF_newTclosure(toku_State *T, int nup);
 TOKUI_FUNC CClosure *tokuF_newCclosure(toku_State *T, int nup);
 TOKUI_FUNC void tokuF_adjustvarargs(toku_State *T, int arity, CallFrame *cf,
-                                    SPtr *tp, const Proto *fn);
+                                    SPtr *sp, const Proto *fn);
 TOKUI_FUNC void tokuF_getvarargs(toku_State *T, CallFrame *cf, SPtr *sp,
                                  int wanted);
 TOKUI_FUNC void tokuF_initupvals(toku_State *T, TClosure *cl);

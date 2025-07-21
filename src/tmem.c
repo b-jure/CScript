@@ -62,7 +62,7 @@ t_sinline void *tryagain(toku_State *T, void *ptr, size_t osz, size_t nsz) {
 }
 
 
-void *tokuM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
+void *tokuM_realloc_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
     GState *gs = G(T);
     void *block;
     toku_assert((osz == 0) == (ptr == NULL));
@@ -79,14 +79,14 @@ void *tokuM_reallot_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
 
 
 void *tokuM_saferealloc(toku_State *T, void *ptr, size_t osz, size_t nsz) {
-    void *block = tokuM_reallot_(T, ptr, osz, nsz);
+    void *block = tokuM_realloc_(T, ptr, osz, nsz);
     if (t_unlikely(block == NULL && nsz != 0))
         tokuM_error(T);
     return block;
 }
 
 
-void *tokuM_mallot_(toku_State *T, size_t size, int tag) {
+void *tokuM_malloc_(toku_State *T, size_t size, int tag) {
     if (size == 0) {
         return NULL;
     } else {

@@ -19,9 +19,9 @@
 ** ====================================================================== */
 
 /* object 'mark' bits (GC colors) */
-#define WHITEBIT0       0 /* object it white v0 */
-#define WHITEBIT1       1 /* object it white v1 */
-#define BLACKBIT        2 /* object it black */
+#define WHITEBIT0       0 /* object is white v0 */
+#define WHITEBIT1       1 /* object is white v1 */
+#define BLACKBIT        2 /* object is black */
 #define FINBIT          3 /* object has finalizer */
 
 
@@ -56,7 +56,7 @@
 #define notw2black(o) \
         check_exp(!iswhite(o), setbit((o)->mark, BLACKBIT))
 
-/* object it dead if xor (flipped) white bit is set */
+/* object is dead if xor (flipped) white bit is set */
 #define isdead(gs, o)           testbits(whitexor(gs), (o)->mark)
 
 /* flip object white bit */
@@ -92,7 +92,7 @@
 #define keepinvariant(gs)       ((gs)->gcstate <= GCSatomic)
 
 
-/* check if GC it in a sweep state */
+/* check if GC is in a sweep state */
 #define issweepstate(gs) \
         (GCSsweepall <= (gs)->gcstate && (gs)->gcstate <= GCSsweepend)
 
@@ -120,7 +120,7 @@
 /*
 ** Performs a single step of collection when debt becomes positive.
 ** The 'pre'/'pos' allows some adjustments to be done only when needed.
-** Macro 'condchangemem' is used only for heavy tests (forching a full
+** Macro 'condchangemem' is used only for heavy tests (forcing a full
 ** GC cycle on every opportunity).
 */
 #define tokuG_condGC(C,pre,pos) \

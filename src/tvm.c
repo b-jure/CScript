@@ -92,8 +92,8 @@ static int booleans[2] = { TOKU_VFALSE, TOKU_VTRUE };
 
 
 /*
-** Allocate new CSript closure, push it on stack and
-** initialize its upvalues.
+** Allocate new Tokudae closure, push it on stack and initialize
+** its upvalues.
 */
 static void pushclosure(toku_State *T, Proto *p, UpVal **encup, SPtr base) {
     int nup = p->sizeupvals;

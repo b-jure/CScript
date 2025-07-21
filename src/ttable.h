@@ -46,9 +46,9 @@ TOKUI_FUNC void tokuH_finishset(toku_State *T, Table *t, const TValue *slot,
 TOKUI_FUNC void tokuH_set(toku_State *T, Table *tab, const TValue *key,
                           const TValue *val);
 TOKUI_FUNC void tokuH_setstr(toku_State *T, Table *tab, OString *key,
-                                                        const TValue *val);
+                             const TValue *val);
 TOKUI_FUNC void tokuH_setint(toku_State *T, Table *t, toku_Integer key,
-                                                      const TValue *val);
+                             const TValue *val);
 TOKUI_FUNC void tokuH_free(toku_State *T, Table *t);
 TOKUI_FUNC int tokuH_len(const Table *t);
 

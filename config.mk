@@ -69,7 +69,7 @@ SYSLIBS =
 
 # Testing flags
 #ASANFLAGS = -fsanitize=address -fsanitize=undefined \
-# 	     -fsanitize=pointer-subtract -fsanitize=pointer-compare
+# 	    -fsanitize=pointer-subtract -fsanitize=pointer-compare
 MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DTOKU_USE_APICHECK -DTOKUI_ASSERT
 	   #-DTOKUI_DISASSEMBLE_BYTECODE #-DTOKUI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)

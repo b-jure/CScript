@@ -6,5 +6,5 @@ If you do not see your editor on this list, then you are out of luck.
 <br>
 In case you have made some utilities or wish to include a utility for the
 text editor of your choice in the next or the current `Tokudae` distribution,
-then open the issue on the [github](https://github.com/b-jure/cscript) where
+then open the issue on the [github](https://github.com/b-jure/Tokudae) where
 the official git repository is being hosted.

@@ -39,12 +39,12 @@ enum TK {
     TK_FLT, TK_INT, TK_STRING, TK_NAME,
 };
 
-/* number of reterved keywords */
+/* number of reserved keywords */
 #define NUM_KEYWORDS	((TK_INFINITY - (FIRSTTK)) + 1)
 
 
 
-/* tcanner literals */
+/* scanner literals */
 typedef union {
     toku_Integer i;
     toku_Number n;

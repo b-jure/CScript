@@ -192,7 +192,7 @@ typedef t_ubyte Instruction;
 
 /*
 ** Runs each time program enters ('toku_lock') and leaves ('toku_unlock')
-** CSript core (C API).
+** Tokudae core (C API).
 */
 #if !defined(toku_lock)
 #define toku_lock(C)            ((void)0)

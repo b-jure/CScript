@@ -140,7 +140,7 @@ typedef struct GState {
     struct toku_State *mainthread; /* thread that also created global state */
     OString *listfields[LFNUM]; /* array with names of list fields */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mtnames[TOKU_MT_NUM]; /* array with metamethod names */
+    OString *mtnames[TOKU_MT_NUM]; /* array with metatag names */
     OString *strcache[TOKUI_STRCACHE_N][TOKUI_STRCACHE_M]; /* string cache */
     toku_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */
@@ -166,7 +166,7 @@ struct toku_State {
     SIndex stack; /* stack base */
     SIndex sp; /* first free slot in the 'stack' */
     SIndex stackend; /* end of 'stack' + 1 */
-    CallFrame basecf; /* base frame, C's entry point to Tokudae */
+    CallFrame basecf; /* base frame, C's entry to Tokudae */
     CallFrame *cf; /* active frame */
     volatile toku_Hook hook;
     UpVal *openupval; /* list of open upvalues */

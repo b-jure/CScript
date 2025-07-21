@@ -83,6 +83,6 @@ TOKUI_FUNC void tokuD_hook(toku_State *T, int event, int line,
 TOKUI_FUNC void tokuD_hookcall(toku_State *T, CallFrame *cf, int delta);
 TOKUI_FUNC int tokuD_tracecall(toku_State *T, int delta);
 TOKUI_FUNC int tokuD_traceexec(toku_State *T, const Instruction *pc,
-                                              ptrdiff_t stks);
+                                              ptrdiff_t stacksize);
 
 #endif
