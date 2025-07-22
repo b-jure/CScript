@@ -549,25 +549,11 @@ static void scopemarkclose(FunctionState *fs) {
 static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     Proto *p = fs->p;
     toku_assert(p != NULL);
-    fs->cs = NULL;
-    fs->ls = NULL;
     fs->prev = lx->fs;
     fs->lx = lx;
     lx->fs = fs;
-    fs->scope = fs->switchscope = NULL;
-    currPC = fs->prevpc = 0;
     fs->prevline = p->defline;
-    fs->sp = 0;
-    fs->nactlocals = 0;
     fs->firstlocal = lx->ps->actlocals.len;
-    fs->np = 0;
-    fs->nk = 0;
-    fs->nabslineinfo = 0;
-    fs->ninstpc = 0;
-    fs->nlocals = 0;
-    fs->nupvals = 0;
-    fs->lasttarget = 0;
-    fs->iwthabs = fs->needclose = fs->opbarrier = fs->lastisend = 0;
     p->source = lx->src;
     tokuG_objbarrier(lx->T, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
@@ -582,7 +568,7 @@ static void close_func(Lexer *lx) {
     toku_assert(fs->scope && !fs->scope->prev);
     leavescope(fs); toku_assert(!fs->scope); /* end final scope */
     if (!stmIsReturn(fs)) /* function missing final return? */
-        tokuC_ret(fs, nvarstack(fs), 0); /* add implicit return */
+        tokuC_return(fs, nvarstack(fs), 0); /* add implicit return */
     tokuC_finish(fs); /* final code adjustments */
     /* shrink unused memory */
     tokuM_shrinkarray(T, p->p, p->sizep, fs->np, Proto *);
@@ -801,7 +787,6 @@ static void getdotted(Lexer *lx, ExpInfo *v, int super) {
 }
 
 
-/* XXX: implement CALLSUP */
 static void superkw(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     if (t_unlikely(fs->cs == NULL))
@@ -848,7 +833,6 @@ static void primaryexp(Lexer *lx, ExpInfo *e) {
 }
 
 
-/* XXX: implement CALLPROPERTY */
 static void call(Lexer *lx, ExpInfo *e) {
     FunctionState *fs = lx->fs;
     int linenum = lx->line;
@@ -865,13 +849,10 @@ static void call(Lexer *lx, ExpInfo *e) {
     expectnext(lx, ')');
     initexp(e, EXP_CALL, tokuC_call(fs, base, TOKU_MULTRET));
     tokuC_fixline(fs, linenum);
-    fs->sp = base; /* call removes function and arguments */
+    linenum = lx->line;
+    if ((fs->callcheck = match(lx, '?'))) /* false check? */
+        tokuC_check(fs, base, linenum);
 }
-
-
-//static void qmark(Lexer *lx, ExpInfo *e) {
-//    toku_assert(0); /* TODO: implement */
-//}
 
 
 static void suffixedexp(Lexer *lx, ExpInfo *e) {
@@ -889,8 +870,6 @@ static void suffixedexp(Lexer *lx, ExpInfo *e) {
             case '(': {
                 tokuC_exp2stack(lx->fs, e);
                 call(lx, e);
-                //if (check(lx, '?'))
-                //    qmark(lx, e);
                 break;
             }
             default: return;
@@ -1477,9 +1456,11 @@ static int ppmm(Lexer *lx, ExpInfo *v, Binopr op) {
 static void expstm(Lexer *lx) {
     struct LHS_assign v = { .v = INIT_EXP };
     suffixedexp(lx, &v.v);
-    if (v.v.et == EXP_CALL) /* call? */
-        tokuC_setreturns(lx->fs, &v.v, 0); /* call statement returns nothing */
-    else { /* otherwise it must be assignment */
+    if (v.v.et == EXP_CALL) { /* call? */
+        if (t_unlikely(lx->fs->callcheck))
+            tokuP_semerror(lx, "can't use '?' on call with no return values");
+        tokuC_setreturns(lx->fs, &v.v, 0); /* call statement has no returns */
+    } else { /* otherwise it must be assignment */
         int left = 0;
         if (check(lx, '=') || check(lx, ',')) {
             int comp = 0;
@@ -1665,9 +1646,8 @@ static void codeclosure(Lexer *lx, ExpInfo *e, int linenum) {
 
 static void funcbody(Lexer *lx, ExpInfo *v, int ismethod, int linenum, int del) {
     Scope scope;
-    FunctionState newfs;
+    FunctionState newfs = { .p = addproto(lx) };
     int matchdel = (del == '(') ? ')' : '|';
-    newfs.p = addproto(lx);
     newfs.p->defline = linenum;
     open_func(lx, &newfs, &scope);
     expectnext(lx, del);
@@ -2385,7 +2365,7 @@ static void returnstm(Lexer *lx) {
         } else
             tokuC_exp2stack(fs, &e);
     }
-    tokuC_ret(fs, first, nret);
+    tokuC_return(fs, first, nret);
     expectnext(lx, ';');
     fs->sp = first; /* removes all temp values */
     fs->lastisend = 1; /* statement is a return */
@@ -2478,7 +2458,7 @@ static void mainfunc(FunctionState *fs, Lexer *lx) {
 TClosure *tokuP_parse(toku_State *T, BuffReader *br, Buffer *buff,
                      ParserState *ps, const char *source) {
     Lexer lx;
-    FunctionState fs;
+    FunctionState fs = {0};
     TClosure *cl = tokuF_newTclosure(T, 1);
     setclTval2s(T, T->sp.p, cl); /* anchor main function closure */
     tokuT_incsp(T);

@@ -242,7 +242,7 @@ static int symbexec(const Proto *p, int lastpc, int sp) {
         //printf("%d:%d:%-20s\t", tokuD_getfuncline(p, pc), pc, getopName(*i));
         toku_assert(-1 <= symsp && symsp <= p->maxstack);
         switch (*i) {
-            case OP_RET: {
+            case OP_RETURN: {
                 int stk = GET_ARG_L(i, 0);
                 toku_assert(stk-1 <= symsp);
                 symsp = stk - 1; /* remove results */
@@ -493,7 +493,7 @@ static const char *funcnamefromcode(toku_State *T, const Proto *p, int pc,
         }
         case OP_LT: case OP_LTI: case OP_GTI: mm = TOKU_MT_LT; break;
         case OP_LE: case OP_LEI: case OP_GEI: mm = TOKU_MT_LE; break;
-        case OP_CLOSE: case OP_RET: mm = TOKU_MT_CLOSE; break;
+        case OP_CLOSE: case OP_RETURN: mm = TOKU_MT_CLOSE; break;
         case OP_UNM: mm = TOKU_MT_UNM; break;
         case OP_BNOT: mm = TOKU_MT_BNOT; break;
         case OP_CONCAT: mm = TOKU_MT_CONCAT; break;

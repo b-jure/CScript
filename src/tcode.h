@@ -225,8 +225,10 @@ OP_TESTPOP,/*      V S     'if (!t_isfalse(V) == S) { dojump; } pop;'       */
 OP_CALL,/*  L1 L2  'V{L1},...,V{L1+L2-1} = V{L1}(V{L1+1},...,V{offtp-1})'
                     (check info)                                            */
 
-OP_CLOSE,/*        L           'clote all open upvalues >= V{L}'            */
+OP_CLOSE,/*        L           'close all open upvalues >= V{L}'            */
 OP_TBC,/*          L           'mark L{L} at to-be-closed'                  */
+
+OP_CHECK,/*        L           'push V{L}, if base+L==sp then push nil'     */
 
 OP_GETLOCAL,/*     L           'L{L}'                                       */
 OP_SETLOCAL,/*     V L         'L{L} = V'                                   */
@@ -250,7 +252,7 @@ OP_GETINDEXINTL,/* V L         'V[I(L):integer]'                            */
 OP_SETINDEXINT,/*  V L S       'V{-L}[I(S):integer] = V'                    */
 OP_SETINDEXINTL,/* V L1 L2     'V{-L1}[I(L2):integer] = V'                  */
 
-OP_GETSUP,/*       V L         'V.oclass.sclass.methods.K{L}:string'        */
+OP_GETSUP,/*       V L         'V.class.superclass.methods.K{L}:string'     */
 OP_GETSUPIDX,/*    V1 V2       'V1.class.superclass.methods[V2]'            */
 OP_GETSUPIDXSTR,/* V L         'V.class.superclass.methods[K{L}:string]'    */
 
@@ -259,7 +261,7 @@ OP_FORPREP,/*     L1 L2        'create upvalue V{L1+3}; pc += L2'           */
 OP_FORCALL,/*     L1 L2  'V{L1+4},...,V{L1+3+L2} = V{L1}(V{L1+1}, V{L1+2});'*/
 OP_FORLOOP,/*L1 L2 L3 'if V{L1+4}!=nil {V{L1}=V{L1+2}; pc-=L2} else pop(L3)'*/
 
-OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*/
+OP_RETURN,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*/
 } OpCode;
 
 
@@ -271,7 +273,7 @@ OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*/
 ** L2 is the number of expected results biased with +1.
 ** If L2 == 0, then 'sp' is set to last return_result+1.
 ** 
-** [OP_RET]
+** [OP_RETURN]
 ** L2 is biased with +1, in order to represent multiple returns when the
 ** number of results is only known during runtime. For example L2 == 0
 ** represents TOKU_MULTRET, in this case we would return all values up to the
@@ -281,7 +283,7 @@ OP_RET,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*/
 
 
 /* number of 'OpCode's */
-#define NUM_OPCODES     (OP_RET + 1)
+#define NUM_OPCODES     (OP_RETURN + 1)
 
 
 /* instruction format */
@@ -366,7 +368,8 @@ TOKUI_FUNC void tokuC_load(FunctionState *fs, int stk);
 TOKUI_FUNC int tokuC_remove(FunctionState *fs, int n);
 TOKUI_FUNC int tokuC_pop(FunctionState *fs, int n);
 TOKUI_FUNC void tokuC_adjuststack(FunctionState *fs, int left);
-TOKUI_FUNC int tokuC_ret(FunctionState *fs, int first, int nreturns);
+TOKUI_FUNC int tokuC_return(FunctionState *fs, int first, int nreturns);
+TOKUI_FUNC void tokuC_check(FunctionState *fs, int first, int linenum);
 TOKUI_FUNC void tokuC_methodset(FunctionState *fs, ExpInfo *e);
 TOKUI_FUNC void tokuC_mtset(FunctionState *fs, int mt);
 TOKUI_FUNC int tokuC_storevar(FunctionState *fs, ExpInfo *var, int left);

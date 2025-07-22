@@ -152,6 +152,7 @@ TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
     { FormatILL, VD, 0, 1 }, /* OP_CALL */
     { FormatIL, 0, 0, 0 }, /* OP_CLOSE */
     { FormatIL, 0, 0, 0 }, /* OP_TBC */
+    { FormatIL, 1, 0, 0 }, /* OP_CHECK */
     { FormatIL, 1, 0, 0 }, /* OP_GETLOCAL */
     { FormatIL, 0, 1, 0 }, /* OP_SETLOCAL */
     { FormatIL, 1, 0, 0 }, /* OP_GETUVAL */
@@ -174,7 +175,7 @@ TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
     { FormatILL, 0, 0, 0 }, /* OP_FORPREP */
     { FormatILL, VD, 0, 0 }, /* OP_FORCALL */
     { FormatILLL, VD, 0, 0 }, /* OP_FORLOOP */
-    { FormatILLS, 0, 0, 0 }, /* OP_RET */
+    { FormatILLS, 0, 0, 0 }, /* OP_RETURN */
 };
 
 
@@ -206,11 +207,11 @@ TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* ORDER OP */
 "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
 "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
 "NOT", "JMP", "JMPS", "TEST", "TESTPOP", "CALL", "CLOSE",
-"TBC", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST",
+"TBC", "CHECK", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST",
 "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
 "SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL",
 "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
-"FORLOOP", "RET",
+"FORLOOP", "RETURN",
 };
 
 
@@ -415,8 +416,16 @@ int tokuC_emitILLL(FunctionState *fs, Instruction i, int a, int b, int c) {
 }
 
 
+t_sinline void freeslots(FunctionState *fs, int n) {
+    fs->sp -= n;
+    toku_assert(fs->sp >= 0); /* negative slots are invalid */
+}
+
+
 int tokuC_call(FunctionState *fs, int base, int nreturns) {
     toku_assert(nreturns >= TOKU_MULTRET);
+    freeslots(fs, fs->sp - base); /* call removes function and arguments */
+    toku_assert(fs->sp == base);
     return tokuC_emitILL(fs, OP_CALL, base, nreturns + 1);
 }
 
@@ -554,15 +563,15 @@ void tokuC_reserveslots(FunctionState *fs, int n) {
 ** meaning the emited code is either a vararg or call instruction,
 ** and the instruction 'nretruns' argument is set as TOKU_MULTRET (+1).
 */
-#define mulretinvariant(fs) { \
-    Instruction *pi = prevOP(fs); UNUSED(pi); \
+#define mulretinvariant(fs,e) { \
+    Instruction *pi = &fs->p->code[e->u.info]; UNUSED(pi); \
     toku_assert((*pi == OP_VARARG && GET_ARG_L(pi, 0) == 0) || \
                 (*pi == OP_CALL && GET_ARG_L(pi, 1) == 0)); }
 
 
 /* finalize open call or vararg expression */
 static void setreturns(FunctionState *fs, ExpInfo *e, int nreturns) {
-    mulretinvariant(fs);
+    mulretinvariant(fs, e);
     toku_assert(nreturns >= TOKU_MULTRET);
     if (e->et == EXP_CALL) {
         SET_ARG_L(getpi(fs, e), 1, nreturns + 1);
@@ -629,12 +638,6 @@ void tokuC_load(FunctionState *fs, int stk) {
 }
 
 
-t_sinline void freeslots(FunctionState *fs, int n) {
-    fs->sp -= n;
-    toku_assert(fs->sp >= 0); /* negative slots are invalid */
-}
-
-
 /* pop values from stack */
 int tokuC_remove(FunctionState *fs, int n) {
     if (n > 0) return adjuststack(fs, OP_POP, n);
@@ -658,10 +661,20 @@ void tokuC_adjuststack(FunctionState *fs, int left) {
 }
 
 
-int tokuC_ret(FunctionState *fs, int first, int nreturns) {
-    int offset = tokuC_emitILL(fs, OP_RET, first, nreturns + 1);
+int tokuC_return(FunctionState *fs, int first, int nreturns) {
+    int offset = tokuC_emitILL(fs, OP_RETURN, first, nreturns + 1);
     emitS(fs, 0); /* close flag */
     return offset;
+}
+
+
+void tokuC_check(FunctionState *fs, int base, int linenum) {
+    int test;
+    tokuC_emitIL(fs, OP_CHECK, base);
+    tokuC_reserveslots(fs, 1); /* check pushes value at 'base' */
+    test = tokuC_test(fs, OP_TESTPOP, 0, linenum); /* jump over if true */
+    tokuC_return(fs, base, TOKU_MULTRET);
+    tokuC_patchtohere(fs, test);
 }
 
 
@@ -1757,7 +1770,7 @@ void tokuC_finish(FunctionState *fs) {
     for (int i = 0; i < currPC; i += getopSize(*pc)) {
         pc = &p->code[i];
         switch (*pc) {
-            case OP_RET: { /* check if need to close variables */
+            case OP_RETURN: { /* check if need to close variables */
                 if (fs->needclose)
                     SET_ARG_LLS(pc, 1); /* set the flag */
                 break;

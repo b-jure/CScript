@@ -1260,12 +1260,12 @@ t_sinline void pushtable(toku_State *T, int b) {
 
 
 /*
-** Do a conditional jump: skip next instruction if 'cond' is not what
+** Do a conditional jump: skip next instruction if 'cond_' is not what
 ** was expected (short arg), else do next instruction, which must be a jump.
 */
 #define docondjump(pre) \
-    { int cond = fetch_s(); TValue *v = peek(0); pre; \
-      if ((!t_isfalse(v)) != cond) check_exp(getopSize(*pc) == 4, pc += 4); \
+    { int cond_ = fetch_s(); TValue *v = peek(0); pre; \
+      if ((!t_isfalse(v)) != cond_) check_exp(getopSize(*pc) == 4, pc += 4); \
       vm_break; }
 
 
@@ -1747,6 +1747,14 @@ returning: /* trap already set */
                 tokuF_newtbcvar(T, STK(fetch_l()));
                 vm_break;
             }
+            vm_case(OP_CHECK) { /* TODO: change the name of this opcode */
+                SPtr first;
+                savestate(T);
+                first = STK(fetch_l());
+                toku_assert(first < sp); /* at least one result is ensured */
+                setobjs2s(T, sp++, first); /* push first result */
+                vm_break;
+            }
             vm_case(OP_GETLOCAL) {
                 setobjs2s(T, sp, STK(fetch_l()));
                 sp++;
@@ -1985,7 +1993,7 @@ returning: /* trap already set */
                     sp -= nvars; /* remove leftover vars from previous call */
                 vm_break;
             }}
-            vm_case(OP_RET) {
+            vm_case(OP_RETURN) {
                 SPtr stk;
                 int nres; /* number of results */
                 savestate(T);

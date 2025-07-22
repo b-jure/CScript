@@ -209,6 +209,7 @@ typedef struct FunctionState {
     t_ubyte iwthabs;    /* instructions issued since last abs. line info */
     t_ubyte needclose;  /* true if needs to close upvalues before returning */
     t_ubyte opbarrier;  /* true if op merge is prohibited 1=nil/2=pop/3=both */ 
+    t_ubyte callcheck;  /* true if last call has false check ('?') */
     t_ubyte lastisend;  /* true if last statement ends control flow
                            (1==return, 2==break, 3==continue)*/
 } FunctionState;

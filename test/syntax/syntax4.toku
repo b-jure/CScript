@@ -1,0 +1,63 @@
+local fn retfalse(x,y) {
+    local z = 15;
+    if (true)
+        return false, x, "bla", y, z, 14;
+}
+
+local fn retnil(x,y) {
+    local z = 15;
+    if (true)
+        return nil, x, "bla", y, z, 14;
+}
+
+local class X {
+    __init = |x| {
+        self.x = x;
+        return self;
+    };
+    fn first() {
+        self.x++;
+        return self;
+    }
+    fn test1() {
+        self.x++;
+        return self.first()?.retfalse(self, self.x);
+    }
+    fn test2() {
+        self.x++;
+        return self.first()?.retnil(self, self.x);
+    }
+};
+
+{ /// can't use '?' on call statements, they return no values
+    local st, err = load("X(0)?;", "");
+    assert(!st and string.find(err, "no return values"));
+}
+
+local x = X(0);
+x.first()?.test1();
+assert(x.x == 2);
+x.x = 0;
+x.first()?.test2();
+assert(x.x == 2);
+x.x = 0;
+
+local fn check1(x) {
+    local y = x.first()?.test1()?.test2()?;
+    assert(nil, "unreachable");
+}
+
+local fn check2(x) {
+    local y = x.first()?.test2()?.test1()?;
+    assert(nil, "unreachable");
+}
+
+local res1,res2,res3,res4,res5,res6 = check1(x);
+assert(x.x == 2);
+assert(res1 == false and res2 == x and res3 == "bla" and res4 == x.x and
+       res5 == 15 and res6 == 14);
+x.x = 0;
+res1,res2,res3,res4,res5,res6 = check2(x);
+assert(x.x == 2);
+assert(res1 == nil and res2 == x and res3 == "bla" and res4 == x.x and
+       res5 == 15 and res6 == 14);

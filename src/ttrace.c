@@ -558,7 +558,7 @@ static void unasmRet(const Proto *p, Instruction *pc) {
 }
 
 
-static void unasmLoad(const Proto *p, Instruction *pc) {
+static void unasmStackOp(const Proto *p, Instruction *pc) {
     prefix(p, pc);
     traceOp(*pc);
     traceStackSlot(GET_ARG_L(pc, 0));
@@ -637,8 +637,8 @@ void tokuTR_disassemble(toku_State *T, const Proto *p) {
                 unasmJmp(p, pc);
                 break;
             }
-            case OP_LOAD: case OP_CLOSE: case OP_TBC: {
-                unasmLoad(p, pc);
+            case OP_CHECK: case OP_LOAD: case OP_CLOSE: case OP_TBC: {
+                unasmStackOp(p, pc);
                 break;
             }
             case OP_GETINDEXINT: {
@@ -737,7 +737,7 @@ void tokuTR_disassemble(toku_State *T, const Proto *p) {
             case OP_EQK: unasmEQK(p, pc); break;
             case OP_EQI: unasmEQI(p, pc); break;
             case OP_CALL: unasmCall(p, pc); break;
-            case OP_RET: unasmRet(p, pc); break;
+            case OP_RETURN: unasmRet(p, pc); break;
             default: toku_assert(0 && "invalid OpCode"); break;
         }
         pc += getopSize(*pc);
