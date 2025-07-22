@@ -207,8 +207,8 @@ static toku_CFunction csys_symbolf(toku_State *T, void *lib, const char *sym) {
 
 static int searcher_preload(toku_State *T) {
     const char *name = tokuL_check_string(T, 0);
-    toku_get_cfieldstr(T, TOKU_PRELOAD_TABLE); /* get ctable[__PRELOAD] */
-    if (toku_get_fieldstr(T, -1, name) == TOKU_T_NIL) { /* 'name' not found? */
+    toku_get_cfield_str(T, TOKU_PRELOAD_TABLE); /* get ctable[__PRELOAD] */
+    if (toku_get_field_str(T, -1, name) == TOKU_T_NIL) { /* 'name' not found? */
         toku_push_fstring(T, "no field package.preload['%s']", name);
         return 1;
     } else {
@@ -223,10 +223,10 @@ static int searcher_preload(toku_State *T) {
 */
 static void *check_clib(toku_State *T, const char *path) {
     void *plib;
-    toku_get_cfieldstr(T, CLIBS); /* get clibs userdata */
+    toku_get_cfield_str(T, CLIBS); /* get clibs userdata */
     toku_get_uservalue(T, -1, 0); /* get list uservalue */
     toku_get_index(T, -1, 0); /* get list query table */
-    toku_get_fieldstr(T, -1, path); /* get qtable[path] */
+    toku_get_field_str(T, -1, path); /* get qtable[path] */
     plib = toku_to_userdata(T, -1); /* plib = qtable[path] */
     toku_pop(T, 4); /* clibs, list, query table and plib */
     return plib;
@@ -237,13 +237,13 @@ static void *check_clib(toku_State *T, const char *path) {
 ** Adds 'plib' (a library handle) to clibs userdata.
 */
 static void add_libhandle_to_clibs(toku_State *T, const char *path, void *plib) {
-    toku_get_cfieldstr(T, CLIBS); /* get clibs userdata */
+    toku_get_cfield_str(T, CLIBS); /* get clibs userdata */
     toku_get_uservalue(T, -1, 0); /* get list uservalue */
     toku_get_index(T, -1, 0); /* get list[0] (query table) */
     toku_push_lightuserdata(T, plib); /* push lib handle */
     toku_push(T, -1); /* copy of lib handle */
     toku_set_index(T, -4, toku_len(T, -4)); /* list[len(list)] = plib */
-    toku_set_fieldstr(T, -2, path); /* qtable[path] = plib */
+    toku_set_field_str(T, -2, path); /* qtable[path] = plib */
     toku_pop(T, 3); /* clibs, list and query table */
 }
 
@@ -386,7 +386,7 @@ static int pkg_searchpath(toku_State *T) {
 static const char *find_file(toku_State *T, const char *name,
                              const char *pname, const char *dirsep) {
     const char *path;
-    toku_get_fieldstr(T, toku_upvalueindex(0), pname); /* get 'package[pname]' */
+    toku_get_field_str(T, toku_upvalueindex(0), pname); /* get 'package[pname]' */
     path = toku_to_string(T, -1);
     if (t_unlikely(path == NULL)) /* path template is not a string? */
         tokuL_error(T, "'package.%s' must be a string", pname);
@@ -432,7 +432,7 @@ static void find_loader(toku_State *T, const char *name) {
     int i;
     tokuL_Buffer msg; /* to build error message */
     /* push 'package.searchers' list to index 2 in the stack */
-    if (toku_get_fieldstr(T, toku_upvalueindex(0), "searchers") != TOKU_T_LIST)
+    if (toku_get_field_str(T, toku_upvalueindex(0), "searchers") != TOKU_T_LIST)
         tokuL_error(T, "'package.searchers' must be list");
     tokuL_buff_init(T, &msg);
     for (i = 0; ; i++) { /* iter over available searchers to find a loader */
@@ -461,8 +461,8 @@ static void find_loader(toku_State *T, const char *name) {
 static int l_import(toku_State *T) {
     const char *name = tokuL_check_string(T, 0);
     toku_setntop(T, 1); /* __LOADED table will be at index 1 */
-    toku_get_cfieldstr(T, TOKU_LOADED_TABLE); /* get __LOADED table */
-    toku_get_fieldstr(T, 1, name); /* get __LOADED[name] */
+    toku_get_cfield_str(T, TOKU_LOADED_TABLE); /* get __LOADED table */
+    toku_get_field_str(T, 1, name); /* get __LOADED[name] */
     if (toku_to_bool(T, -1)) /* is it there? */
         return 1; /* package is already loaded */
     /* else must load package */
@@ -475,13 +475,13 @@ static int l_import(toku_State *T) {
     toku_call(T, 2, 1); /* run loader to load module */
     /* stack: ...; loader data; result from loader */
     if (!toku_is_nil(T, -1)) /* non-nil return? */
-        toku_set_fieldstr(T, 1, name); /* __LOADED[name] = result from loader */
+        toku_set_field_str(T, 1, name); /* __LOADED[name] = result from loader */
     else
         toku_pop(T, 1); /* remove nil */
-    if (toku_get_fieldstr(T, 1, name) == TOKU_T_NIL) { /* module set no value? */
+    if (toku_get_field_str(T, 1, name) == TOKU_T_NIL) { /* module set no value? */
         toku_push_bool(T, 1); /* use true as result */
         toku_copy(T, -1, -2); /* replace loader result */
-        toku_set_fieldstr(T, 1, name); /* __LOADED[name] = true */
+        toku_set_field_str(T, 1, name); /* __LOADED[name] = true */
     }
     toku_rotate(T, -2, 1); /* loader data <-> module result  */
     return 2; /* return module result and loader data (in that order) */
@@ -522,7 +522,7 @@ static int gcmm(toku_State *T) {
 ** in the ctable.
 */
 static void create_clibs_userdata(toku_State *T) {
-    if (toku_get_cfieldstr(T, CLIBS) != TOKU_T_USERDATA) {
+    if (toku_get_cfield_str(T, CLIBS) != TOKU_T_USERDATA) {
         toku_pop(T, 1); /* remove value */
         toku_push_userdata(T, 0, 1); /* create clibs userdata */
         toku_push_list(T, 1); /* create the user value */
@@ -530,12 +530,12 @@ static void create_clibs_userdata(toku_State *T) {
         toku_set_index(T, -2, 0); /* set query table into the list */
         toku_set_uservalue(T, -2, 0); /* set list as first usr val of clibs */
         toku_push(T, -1); /* copy of clibs */
-        toku_set_cfieldstr(T, CLIBS); /* ctable[CLIBS] = userdata */
+        toku_set_cfield_str(T, CLIBS); /* ctable[CLIBS] = userdata */
     }
-    toku_push_list(T, TOKU_MT_GC + 1); /* push metalist */
+    toku_push_table(T, 1); /* push metatable */
     toku_push_cfunction(T, gcmm); /* push finalizer */
-    toku_set_index(T, -2, TOKU_MT_GC); /* set metalist finalizer */
-    toku_set_metalist(T, -2); /* set clibs metalist */
+    toku_set_field_str(T, -2, "__gc"); /* metatable.__gc = gcmm*/
+    toku_set_metatable(T, -2); /* set clibs metatable */
     toku_pop(T, 1); /* pop clibs */
 }
 
@@ -607,7 +607,7 @@ static void create_searchers_array(toku_State *T) {
         toku_push_cclosure(T, searchers[i], 1);
         toku_set_index(T, -2, i);
     }
-    toku_set_fieldstr(T, -2, "searchers"); /* package.searchers = list */
+    toku_set_field_str(T, -2, "searchers"); /* package.searchers = list */
 }
 
 
@@ -629,7 +629,7 @@ static void create_searchers_array(toku_State *T) {
 */
 static int noenv(toku_State *T) {
     int b;
-    toku_get_cfieldstr(T, "TOKU_NOENV");
+    toku_get_cfield_str(T, "TOKU_NOENV");
     b = toku_to_bool(T, -1);
     toku_pop(T, 1); /* remove value */
     return b;
@@ -664,7 +664,7 @@ static void setpath(toku_State *T, const char *fieldname, const char *envname,
         tokuL_buff_end(&b);
     }
     setprogdir(T);
-    toku_set_fieldstr(T, -3, fieldname); /* package[fieldname] = path value */
+    toku_set_field_str(T, -3, fieldname); /* package[fieldname] = path value */
     toku_pop(T, 1); /* pop versioned variable name ('nver') */
 }
 
@@ -678,13 +678,13 @@ TOKUMOD_API int tokuopen_package(toku_State *T) {
     /* set 'package.config' */
     toku_push_literal(T, TOKU_DIRSEP "\n" TOKU_PATH_SEP "\n" TOKU_PATH_MARK "\n"
                         TOKU_EXEC_DIR "\n" TOKU_IGMARK "\n");
-    toku_set_fieldstr(T, -2, "config");
+    toku_set_field_str(T, -2, "config");
     /* ctable[__LOADED] = table */
     tokuL_get_subtable(T, TOKU_CTABLE_INDEX, TOKU_LOADED_TABLE);
-    toku_set_fieldstr(T, -2, "loaded"); /* 'package.loaded' = __LOADED */
+    toku_set_field_str(T, -2, "loaded"); /* 'package.loaded' = __LOADED */
     /* ctable[__PRELOAD] = table */
     tokuL_get_subtable(T, TOKU_CTABLE_INDEX, TOKU_PRELOAD_TABLE);
-    toku_set_fieldstr(T, -2, "preload"); /* 'package.preload' = __PRELOAD */
+    toku_set_field_str(T, -2, "preload"); /* 'package.preload' = __PRELOAD */
     toku_push_globaltable(T); /* open library into global table */
     toku_push(T, -2); /* set 'package' as upvalue for next lib */
     tokuL_set_funcs(T, load_funcs, 1);

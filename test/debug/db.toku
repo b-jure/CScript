@@ -690,11 +690,11 @@ assert(typeof(debug.getclist()) == "list");
     }
     local ml = [];
     foreach i in range(0, __MT.n) {
-        if (i == __MT.init or i == __MT.metalist)
+        if (i == __MT.init or i == __MT.metatable)
             continue;
         ml[i] = f;
     }
-    setmetalist(getclass(a), ml);
+    setmetatable(getclass(a), ml);
     assert(ml[__MT.getidx] == f); assert(ml[__MT.setidx] == f);
     assert(ml[__MT.gc] == f); assert(ml[__MT.close] == f);
     assert(ml[__MT.call] == f); assert(ml[__MT.init] == nil);
@@ -707,7 +707,7 @@ assert(typeof(debug.getclist()) == "list");
     assert(ml[__MT.bxor] == f); assert(ml[__MT.unm] == f);
     assert(ml[__MT.bnot] == f); assert(ml[__MT.eq] == f);
     assert(ml[__MT.lt] == f); assert(ml[__MT.le] == f);
-    assert(ml[__MT.metalist] == nil);
+    assert(ml[__MT.metatable] == nil);
     assert(__MT.n == ml.len);
 
     local b = getclass(a)();
@@ -724,18 +724,18 @@ assert(typeof(debug.getclist()) == "list");
     assert(~a == "bnot");
 
     /// test __init
-    assert(getmetalist(a))[__MT.init] = fn(self) {
+    assert(getmetatable(a))[__MT.init] = fn(self) {
         local info = debug.getinfo(1);
         assert(info.namewhat == "" and !info.name);
         return self;
     };
     assert(typeof(getclass(a)()) == "instance");
 
-    /// test __metalist
-    assert(getmetalist(a))[__MT.metalist] = fn(self) { return nil; };
-    assert(typeof(getmetalist(a)) == "function");
-    local st,err = pcall(setmetalist, a, nil);
-    assert(!st and string.find(err, "protected metalist"));
+    /// test __metatable
+    assert(getmetatable(a))[__MT.metatable] = fn(self) { return nil; };
+    assert(typeof(getmetatable(a)) == "function");
+    local st,err = pcall(setmetatable, a, nil);
+    assert(!st and string.find(err, "protected metatable"));
 }
 
 { /// testing for-iterator name
@@ -752,7 +752,7 @@ assert(typeof(debug.getclist()) == "list");
         assert(t.namewhat == "metamethod");
         name = t.name;
     };
-    setmetalist((class{})(), l); l = nil;
+    setmetatable((class{})(), l); l = nil;
     /// repeat until previous finalizer runs (setting 'name')
     loop { local a = {}; if (name) break; }
     assert(name == "__gc");

@@ -292,7 +292,7 @@ static void set_field(toku_State *T, const char *key, int value, int delta) {
             tokuL_error(T, "field '%s' is out-of-bound", key);
     #endif
     toku_push_integer(T, (toku_Integer)value + delta);
-    toku_set_fieldstr(T, -2, key);
+    toku_set_field_str(T, -2, key);
 }
 
 
@@ -300,7 +300,7 @@ static void set_bool_field(toku_State *T, const char *key, int value) {
     if (value < 0) /* undefined? */
         return; /* does not set field */
     toku_push_bool(T, value);
-    toku_set_fieldstr(T, -2, key);
+    toku_set_field_str(T, -2, key);
 }
 
 
@@ -321,9 +321,8 @@ static void set_all_fields(toku_State *T, struct tm *stm) {
 
 
 static int get_bool_field(toku_State *T, const char *key) {
-    int res = (toku_get_fieldstr(T, -1, key) == TOKU_T_NIL)
-            ? -1
-            : toku_to_bool(T, -1);
+    int res = (toku_get_field_str(T, -1, key) == TOKU_T_NIL)
+            ? -1 : toku_to_bool(T, -1);
     toku_pop(T, 1);
     return res;
 }
@@ -331,7 +330,7 @@ static int get_bool_field(toku_State *T, const char *key) {
 
 static int get_field(toku_State *T, const char *key, int dfl, int delta) {
     int isnum;
-    int t = toku_get_fieldstr(T, -1, key); /* get field and its type */
+    int t = toku_get_field_str(T, -1, key); /* get field and its type */
     toku_Integer res = toku_to_integerx(T, -1, &isnum);
     if (!isnum) { /* field is not an integer? */
         if (t_unlikely(t != TOKU_T_NIL)) /* some other value? */

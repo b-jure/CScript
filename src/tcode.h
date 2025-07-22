@@ -86,7 +86,7 @@
 /* 
 ** Binary operations.
 */
-typedef enum { /* ORDER OPR */
+typedef enum { /* "ORDER OP" */
     /* arithmetic operators */
     OPR_ADD, OPR_SUB, OPR_MUL,
     OPR_DIV, OPR_IDIV, OPR_MOD, OPR_POW,
@@ -111,13 +111,13 @@ typedef enum { /* ORDER OPR */
 /*
 ** Unary operations.
 */
-typedef enum { /* ORDER OP */
+typedef enum { /* "ORDER OP" */
     OPR_UNM, OPR_BNOT, OPR_NOT, OPR_NOUNOPR
 } Unopr;
 
 
 
-typedef enum { /* ORDER OP */
+typedef enum { /* "ORDER OP" */
 /* ------------------------------------------------------------------------
 ** Legend for reading OpCodet:
 ** ':' - value type
@@ -153,7 +153,7 @@ OP_NEWLIST,/*      S          'create and load new array of size 1<<(S-1)'  */
 OP_NEWCLASS,/*     S          'create and load new class of size 1<<(S-1)'  */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
-OP_SETMT,/*        S V1 V2    'V1->metalist[S] = V2'                        */
+OP_SETMT,/*        S V1 V2    'V1->metatable[g->tmnames[S]] = V2'           */
 
 OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
 
@@ -287,7 +287,7 @@ OP_RETURN,/*         L1 L2 S      'return V{L1}, ... ,V{L1+L2-2}' (check notet)*
 
 
 /* instruction format */
-typedef enum { /* ORDER OPFMT */
+typedef enum { /* "ORDER OPFMT" */
     FormatI,    /* instruction */
     FormatIS,   /* instruction + short arg */
     FormatISS,  /* instruction + 2x short arg */
@@ -300,9 +300,10 @@ typedef enum { /* ORDER OPFMT */
 } OpFormat;
 
 
-#define VD      (INT_MAX) /* flag for variable delta */
+#define VD      TOKU_MAXINT /* flag for variable delta */
 
 
+/* TODO: compress 'push','pop' and 'chgsp' into a single byte */
 typedef struct {
     OpFormat format; /* opcode format */
     int push; /* how many values the opcode pushes */
@@ -311,10 +312,6 @@ typedef struct {
 } OpProperties; 
 
 
-/*
-** bits 0-3     instruction format (OpFormat)
-** bit  4       instruction is a jump
-*/
 TOKUI_DEC(const OpProperties tokuC_opproperties[NUM_OPCODES];)
 
 #define getopFormat(i)  (tokuC_opproperties[i].format)

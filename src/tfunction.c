@@ -171,7 +171,7 @@ const char *tokuF_getlocalname(const Proto *fn, int lnum, int pc) {
 ** raise error if not.
 */
 static void checkclosem(toku_State *T, SPtr level) {
-    const TValue *fmm = tokuMM_get(T, s2v(level), TOKU_MT_CLOSE);
+    const TValue *fmm = tokuTM_objget(T, s2v(level), TM_CLOSE);
     if (t_unlikely(ttisnil(fmm))) { /* missing __close metamethod? */
         int vidx = cast_int(level - T->cf->func.p);
         const char *name = tokuD_findlocal(T, T->cf, vidx, NULL);
@@ -255,7 +255,7 @@ static void poptbclist(toku_State *T) {
 */
 static void callclosemm(toku_State *T, TValue *obj, TValue *errobj) {
     SPtr top = T->sp.p;
-    const TValue *method = tokuMM_get(T, obj, TOKU_MT_CLOSE);
+    const TValue *method = tokuTM_objget(T, obj, TM_CLOSE);
     toku_assert(!ttisnil(method));
     setobj2s(T, top, method);
     setobj2s(T, top + 1, obj);

@@ -9,7 +9,7 @@
 
 
 /* raise 2 to the power of 'x' */
-#define twoto(x)        (1<<(x))
+#define twoto(x)        (1u<<(x))
 
 
 /* bit manipulation */
@@ -31,7 +31,7 @@
 
 
 /* set 'src' byte at offset 'o' to 'v' */
-#define setbyte(src,o,v)    (*(cast_ubytep(src) + (o)) = (v))
+#define setbyte(src,o,v)    (*(cast_ubytep(src) + (o)) = cast_ubyte(v))
 
 
 /* 

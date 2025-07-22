@@ -220,7 +220,7 @@ static int collect_args(char **argv, int *first) {
 static int msghandler(toku_State *T) {
     const char *msg = toku_to_string(T, -1);
     if (msg == NULL) { /* error object is not a string? */
-        if (tokuL_callmeta(T, -1, TOKU_MT_TOSTRING) && /* it has a metamethod, */
+        if (tokuL_callmeta(T, -1, "__tostring") && /* it has a metamethod, */
             toku_type(T, -1) == TOKU_T_STRING) /* that produces a string? */
             return 1; /* that is the message */
         else
@@ -714,7 +714,7 @@ static int pmain(toku_State *T) {
         print_version(); /* print version with copyright */
     if (args & arg_E) { /* option '-E'? */
         toku_push_bool(T, 1); /* signal for libraries to ignore env. vars. */
-        toku_set_cfieldstr(T, "TOKU_NOENV");
+        toku_set_cfield_str(T, "TOKU_NOENV");
     }
     tokuL_openlibs(T); /* open standard libraries */
     create_arg_lists(T, argv, argc, script); /* create 'cliargs' and 'args' */

@@ -106,37 +106,6 @@ typedef struct toku_Debug toku_Debug;
 typedef void (*toku_Hook)(toku_State *T, toku_Debug *ar);
 
 
-// TODO: update docs
-/* meta tags for indexing the metalist (ORDER MT) */
-#define TOKU_MT_GETIDX      0
-#define TOKU_MT_SETIDX	    1
-#define TOKU_MT_GC	    2
-#define TOKU_MT_CLOSE	    3
-#define TOKU_MT_CALL	    4
-#define TOKU_MT_INIT	    5
-#define TOKU_MT_CONCAT	    6
-#define TOKU_MT_ADD	    7
-#define TOKU_MT_SUB	    8
-#define TOKU_MT_MUL	    9
-#define TOKU_MT_DIV	    10
-#define TOKU_MT_IDIV	    11
-#define TOKU_MT_MOD	    12
-#define TOKU_MT_POW	    13
-#define TOKU_MT_BSHL	    14
-#define TOKU_MT_BSHR	    15
-#define TOKU_MT_BAND	    16
-#define TOKU_MT_BOR	    17
-#define TOKU_MT_BXOR	    18
-#define TOKU_MT_UNM	    19
-#define TOKU_MT_BNOT	    20
-#define TOKU_MT_EQ	    21
-#define TOKU_MT_LT	    22
-#define TOKU_MT_LE	    23
-#define TOKU_MT_NAME	    24
-#define TOKU_MT_METALIST    25
-#define TOKU_MT_NUM	    26
-
-
 /* {======================================================================
 ** State manipulation
 ** ======================================================================= */
@@ -250,17 +219,15 @@ TOKU_API int  toku_get_global(toku_State *T, const char *name);
 TOKU_API int  toku_get_index(toku_State *T, int idx, int i);
 TOKU_API int  toku_get_cindex(toku_State *T, int i); 
 TOKU_API int  toku_get_field(toku_State *T, int idx); 
-TOKU_API int  toku_get_fieldstr(toku_State *T, int idx, const char *s); 
-TOKU_API int  toku_get_fieldptr(toku_State *T, int idx, const void *p); 
-TOKU_API int  toku_get_fieldint(toku_State *T, int idx, toku_Integer i); 
-TOKU_API int  toku_get_fieldflt(toku_State *T, int idx, toku_Number f); 
-TOKU_API int  toku_get_cfieldstr(toku_State *T, const char *s); 
+TOKU_API int  toku_get_field_str(toku_State *T, int idx, const char *s); 
+TOKU_API int  toku_get_field_int(toku_State *T, int idx, toku_Integer i); 
+TOKU_API int  toku_get_cfield_str(toku_State *T, const char *s); 
 TOKU_API int  toku_get_class(toku_State *T, int idx); 
 TOKU_API int  toku_get_superclass(toku_State *T, int idx); 
 TOKU_API int  toku_get_method(toku_State *T, int idx); 
 TOKU_API int  toku_get_self(toku_State *T, int idx);
 TOKU_API int  toku_get_supermethod(toku_State *T, int idx);
-TOKU_API int  toku_get_metalist(toku_State *T, int idx);
+TOKU_API int  toku_get_metatable(toku_State *T, int idx);
 TOKU_API int  toku_get_uservalue(toku_State *T, int idx, unsigned short n); 
 TOKU_API int  toku_get_methods(toku_State *T, int idx); 
 TOKU_API void toku_get_fields(toku_State *T, int idx); 
@@ -275,17 +242,15 @@ TOKU_API void toku_set_global(toku_State *T, const char *name);
 TOKU_API void toku_set_index(toku_State *T, int idx, int i);
 TOKU_API void toku_set_cindex(toku_State *T, int i);
 TOKU_API void toku_set_field(toku_State *T, int idx); 
-TOKU_API void toku_set_fieldstr(toku_State *T, int idx, const char *s); 
-TOKU_API void toku_set_fieldptr(toku_State *T, int idx, const void *p); 
-TOKU_API void toku_set_fieldint(toku_State *T, int idx, toku_Integer i); 
-TOKU_API void toku_set_fieldflt(toku_State *T, int idx, toku_Number f); 
-TOKU_API void toku_set_cfieldstr(toku_State *T, const char *s);
+TOKU_API void toku_set_field_str(toku_State *T, int idx, const char *s); 
+TOKU_API void toku_set_field_int(toku_State *T, int idx, toku_Integer i); 
+TOKU_API void toku_set_cfield_str(toku_State *T, const char *s);
 TOKU_API void toku_set_superclass(toku_State *T, int idx); 
-TOKU_API void toku_set_metalist(toku_State *T, int idx);
+TOKU_API void toku_set_metatable(toku_State *T, int idx);
 TOKU_API int  toku_set_uservalue(toku_State *T, int idx, unsigned short n); 
 TOKU_API void toku_set_methods(toku_State *T, int idx); 
 TOKU_API void toku_set_fields(toku_State *T, int idx);
-TOKU_API void toku_sec_listlen(toku_State *T, int idx, int len);
+TOKU_API void toku_set_listlen(toku_State *T, int idx, int len);
 /* }====================================================================== */
 
 /* {======================================================================
@@ -395,7 +360,7 @@ TOKU_API unsigned    toku_numuservalues(toku_State *T, int idx);
 
 #define toku_push_clist(C)        toku_push(C, TOKU_CLIST_INDEX)
 #define toku_push_ctable(C)       toku_push(C, TOKU_CTABLE_INDEX)
-#define toku_push_metalist(C)     toku_push_list(C, TOKU_MT_NUM)
+
 #define toku_push_literal(C, s)   toku_push_string(C, "" s)
 #define toku_push_cfunction(C,f)  toku_push_cclosure(C,f,0)
 

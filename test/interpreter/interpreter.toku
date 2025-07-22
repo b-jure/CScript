@@ -266,10 +266,10 @@ warn("@allow");
 /// the errors in the finalizers must generate warnings
 local ml = [];
 ml[__MT.gc] = fn() { error("XYZ"); };
-u1 = setmetalist((class{})(), ml);
+u1 = setmetatable((class{})(), ml);
 ml = [];
 ml[__MT.gc] = fn() { error("ZYX"); };
-u2 = setmetalist((class{})(), ml);
+u2 = setmetatable((class{})(), ml);
 ml = nil;
 ]=]);
 RUN("tokudae -W %s 2> %s", prog, out);
@@ -285,7 +285,7 @@ prepfile([=[
     /// this finalizer should be called last
     local ml = [];
     ml[__MT.gc] = fn() { print(1); };
-    setmetalist((class{})(), ml);
+    setmetatable((class{})(), ml);
     ml = []; /// new list
     print("creating 2");
     ml[__MT.gc] = fn() {
@@ -295,12 +295,12 @@ prepfile([=[
         /// this finalizer should not be called, as object will be
         /// created after 'toku_close' has been called
         ml[__MT.gc] = fn() { print(3); };
-        setmetalist((class{})(), ml);
+        setmetatable((class{})(), ml);
         ml = nil;
         print(gc() or false); /// cannot call collector here
         os.exit(0, true);
     };
-    setmetalist((class{})(), ml);
+    setmetatable((class{})(), ml);
     ml = nil;
 ]=]);
 RUN("tokudae -W %s > %s", prog, out);
@@ -367,7 +367,7 @@ prompt = [=[
         C = C .. \"X\";
         return C;
     };
-    __PROMPT=setmetalist((class{})(), ml);
+    __PROMPT=setmetatable((class{})(), ml);
     ml = nil;
 ]=];
 prepfile([=[ ///
@@ -386,9 +386,9 @@ m = class {
     __init = fn() { self.x = 0; return self; };
 };
 m = m();
-local ml = getmetalist(m);
+local ml = getmetatable(m);
 ml[__MT.tostring] = fn(x) { return tostr(debug.getinfo(4).currline + x.x); };
-setmetalist(m, ml);
+setmetatable(m, ml);
 ml = nil;
 error(m);
 ]=]);
@@ -453,10 +453,10 @@ prepfile([=[
         assert(err == nil);
         print("Ok");
     };
-    local x <close> = setmetalist((class{})(), ml);
+    local x <close> = setmetatable((class{})(), ml);
     ml = []; /// new list
     ml[__MT.close] = fn(_, _) { print(120); };
-    local e1 <close> = setmetalist((class{})(), ml);
+    local e1 <close> = setmetatable((class{})(), ml);
     ml = nil;
     os.exit(true, true);
 ]=]);

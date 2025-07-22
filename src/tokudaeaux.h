@@ -22,9 +22,6 @@
 /* type for storing name:function pairs or placeholders */
 typedef struct tokuL_Entry tokuL_Entry;
 
-/* type for storing metaindex:function pairs */
-typedef struct tokuL_MetaEntry tokuL_MetaEntry;
-
 
 /* type for buffering system */
 typedef struct tokuL_Buffer tokuL_Buffer;
@@ -32,13 +29,6 @@ typedef struct tokuL_Buffer tokuL_Buffer;
 
 /* new status code for file-related errors in 'tokuL_loadfile' */
 #define TOKU_STATUS_EFILE       TOKU_STATUS_NUM
-
-
-/*
-** Meta tag for a new metalist metamethod that triggers in
-** 'tokuL_to_lstring'
-*/
-#define TOKU_MT_TOSTRING        TOKU_MT_NUM
 
 
 /* key, in the ctable, for table of loaded modules */
@@ -94,23 +84,13 @@ TOKULIB_API int tokuL_loadbuffer(toku_State *T, const char *buff, size_t sz,
 /* }======================================================================= */
 
 /* {=======================================================================
-** Userdata and Metalist functions
+** Userdata and metatable functions
 ** ======================================================================== */
-TOKULIB_API int   tokuL_new_metalist(toku_State *T, const char *ln);
-TOKULIB_API void  tokuL_set_metalist(toku_State *T, const char *ln);
-TOKULIB_API int   tokuL_get_metaindex(toku_State *T, int idx, int mt);
-TOKULIB_API int   tokuL_callmeta(toku_State *T, int idx, int mt);
-TOKULIB_API int   tokuL_new_usermethods(toku_State *T, const char *tn, int sz);
-TOKULIB_API void  tokuL_set_usermethods(toku_State *T, const char *tn);
+TOKULIB_API int   tokuL_new_metatable(toku_State *T, const char *ln);
+TOKULIB_API void  tokuL_set_metatable(toku_State *T, const char *ln);
+TOKULIB_API int   tokuL_get_metafield(toku_State *T, int idx, const char *ev);
+TOKULIB_API int   tokuL_callmeta(toku_State *T, int idx, const char *ev);
 TOKULIB_API void *tokuL_test_userdata(toku_State *T, int idx, const char *ln);
-
-typedef struct tokuL_MetaEntry {
-    int mt; /* metatag */
-    toku_CFunction metaf; /* metamethod function */
-} tokuL_MetaEntry;
-
-TOKULIB_API void tokuL_set_metafuncs(toku_State *T, const tokuL_MetaEntry *l,
-                                     int nup);
 /* }======================================================================= */
 
 /* {=======================================================================
@@ -127,10 +107,8 @@ TOKULIB_API const char *tokuL_to_lstring(toku_State *T, int idx, size_t *len);
 TOKULIB_API void       *tokuL_to_fulluserdata(toku_State *T, int idx);
 TOKULIB_API void       *tokuL_to_lightuserdata(toku_State *T, int idx);
 TOKULIB_API void        tokuL_where(toku_State *T, int lvl);
-TOKULIB_API int      tokuL_get_fieldstr(toku_State *T, int idx, const char *f);
-TOKULIB_API int         tokuL_get_property(toku_State *T, int idx);
 TOKULIB_API toku_State *tokuL_newstate(void);
-TOKULIB_API int      tokuL_get_subtable(toku_State *T, int idx, const char *f);
+TOKULIB_API int      tokuL_get_subtable(toku_State *T, int idx, const char *k);
 TOKULIB_API void        tokuL_importf(toku_State *T, const char *modname,
                                       toku_CFunction fopen, int global);
 TOKULIB_API void        tokuL_traceback(toku_State *T, toku_State *T1, int lvl,
@@ -160,41 +138,39 @@ TOKULIB_API void tokuL_unref(toku_State *T, int a, int ref);
 /* {=======================================================================
 ** Useful macros
 ** ======================================================================== */
-#define tokuL_check_version(C)      tokuL_check_version_(C, TOKU_VERSION_NUM)
-#define tokuL_check_string(C,idx)   tokuL_check_lstring(C, idx, NULL)
+#define tokuL_check_version(T)      tokuL_check_version_(T, TOKU_VERSION_NUM)
 
-#define tokuL_check_arg(C,cond,idx,extramsg) \
-        ((void)(tokui_likely(cond) || tokuL_error_arg(C, (idx), (extramsg))))
+#define tokuL_check_string(T,idx)   tokuL_check_lstring(T, idx, NULL)
 
-#define tokuL_opt_string(C,idx,dfl)     tokuL_opt_lstring(C, idx, dfl, NULL)
+#define tokuL_check_arg(T,cond,idx,extramsg) \
+        ((void)(tokui_likely(cond) || tokuL_error_arg(T, (idx), (extramsg))))
 
-#define tokuL_opt(C,fn,idx,dfl) \
-        (toku_is_noneornil(C, idx) ? (dfl) : fn(C, idx))
+#define tokuL_opt_string(T,idx,dfl)     tokuL_opt_lstring(T, idx, dfl, NULL)
 
-#define tokuL_expect_arg(C,cond,idx,tname) \
-        ((void)(tokui_likely(cond) || tokuL_error_type(C, (idx), (tname))))
+#define tokuL_opt(T,fn,idx,dfl) \
+        (toku_is_noneornil(T, idx) ? (dfl) : fn(T, idx))
 
-#define tokuL_typename(C,idx)   toku_typename(C, toku_type(C, idx))
+#define tokuL_expect_arg(T,cond,idx,tname) \
+        ((void)(tokui_likely(cond) || tokuL_error_type(T, (idx), (tname))))
 
-#define tokuL_push_fail(C)       toku_push_nil(C)
-#define tokuL_push_libtable(C,l) toku_push_table(C, sizeof(l)/sizeof((l)[0])-1)
+#define tokuL_typename(T,idx)   toku_typename(T, toku_type(T, idx))
 
-#define tokuL_push_lib(C,l) \
-    (tokuL_check_version(C), tokuL_push_libtable(C,l), tokuL_set_funcs(C,l,0))
+#define tokuL_push_fail(T)      toku_push_nil(T)
 
-#define tokuL_push_metalist(C,lname,l) \
-        (tokuL_new_metalist(C,lname), tokuL_set_metafuncs(C,l,0))
+#define tokuL_push_libtable(T,l) \
+        toku_push_table(T, sizeof(l)/sizeof((l)[0])-1)
 
-#define tokuL_push_methods(C,tname,l) \
-    { tokuL_new_usermethods(C, tname, sizeof(l)/sizeof(l[0]) - 1); \
-      tokuL_set_funcs(C,l,0); }
+#define tokuL_push_lib(T,l) \
+    (tokuL_check_version(T), tokuL_push_libtable(T,l), tokuL_set_funcs(T,l,0))
 
-#define tokuL_get_methods(C,tname)      toku_get_cfieldstr(C, tname)
-#define tokuL_get_metalist(C,lname)     toku_get_cfieldstr(C, lname)
+#define tokuL_push_methods(T,tname,l) \
+    { tokuL_new_usermethods(T, tname, sizeof(l)/sizeof(l[0]) - 1); \
+      tokuL_set_funcs(T,l,0); }
 
-// TODO: add docs
-#define tokuL_find_index(C,idx,mask) \
-        toku_find_index(C, idx, mask, 0, toku_len(C, idx))
+#define tokuL_get_metatable(T,tname)    toku_get_cfield_str(T, (tname))
+
+#define tokuL_find_index(T,idx,mask) \
+        toku_find_index(T, idx, mask, 0, toku_len(T, idx))
 
 
 /*
@@ -262,15 +238,12 @@ TOKULIB_API void  tokuL_buff_endsz(tokuL_Buffer *B, size_t sz);
 ** ======================================================================== */
 
 /*
-** A file handle is a userdata with 'TOKU_FILEHANDLE' metalist,
-** 'TOKU_FILEHANDLE_METHODS' methods table and initial structure
-** 'tokuL_Stream' (it may contain other fields after that initial
-** structure).
+** A file handle is a userdata with 'TOKU_FILEHANDLE' metatable,
+** and initial structure 'tokuL_Stream' (it may contain other fields
+** after that initial structure).
 */
 
 #define TOKU_FILEHANDLE   "FILE*"
-
-#define TOKU_FILEHANDLE_METHODS   "FILEMTAB*"
 
 typedef struct tokuL_Stream {
     FILE *f; /* stream (NULL for incompletely created streams) */

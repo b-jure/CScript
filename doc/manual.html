@@ -106,12 +106,12 @@
         <br/>
         Standard Tokudae uses 64-bit integers and double-precision (64-bit)
         floats. Configuration header can be tinkered to allow 32-bit integers
-        and/or single-precision (32-bit) floats, but this but would probably
+        and/or single-precision (32-bit) floats, but this would probably
         require internal patches (see <code>tokudaeconf.h</code> if interested).
         <br/>
-        Any overflow when manipulating integer values <em>wrap around</em>,
+        Unless stated otherwise,
+        any overflow when manipulating integer values <em>wrap around</em>,
         according to the usual rules of two-complement arithmetics.
-        This holds both for negative (signed) and positive (unsigned) integers.
         <br/>
         The conversion between the two subtypes mimics C standard.
         For example, if we were to do a mathematical operation between the two
@@ -137,20 +137,33 @@
         The type <em>function</em> can be a function written in Tokudae or
         C, both of which can be manipulated and called.
         <br/><br/>
+        <!-- bound method -->
+        The type <em>bound method</em> is an object comprised of a method
+        object and a receiver object usually referred to as <em>self</em>
+        in OOP-lingo. <em>self</em> is either a <em>full userdata</em>
+        or <em>instance</em>, and the method object is usually any callable
+        object. Provided that the <em>self</em> object does not have metamethod
+        for index access defined, the <em>bound method</em> object is created
+        each time you index <em>full userdata</em> or <em>instance</em>, where
+        the index value (a key) is entry in a method table, but not in the
+        fields table in case of <em>self</em> is an <em>instance</em>.
+        <br/><br/>
         <!-- userdata and light userdata -->
         The types <em>userdata</em> and <em>light userdata</em> are provided
         to allow arbitrary C&nbsp;data to be stored in a variable.
         Full/Light userdata value represents a block of raw memory.
         <em>full userdata</em> is an object with a block of memory managed
-        by Tokudae, and <em>light userdata</em>, is simply a C&nbsp;pointer value.
-        Userdata has no predefined operations in Tokudae except assignment
-        and identity test (<code>==</code>).
-        By using <em>metalists</em>, the programmer can define operations
-        for full userdata values (see <a href="#2.4">&sect;2.4</a>).
+        by Tokudae, and <em>light userdata</em>, is simply a C&nbsp;pointer
+        value. Userdata has no predefined operations in Tokudae except
+        assignment and identity test (<code>==</code>).
+        By using <em>metatables</em>, the programmer can define operations
+        for <em>full userdata</em> values (see <a href="#2.4">&sect;2.4</a>).
         Userdata values cannot be created or modified in Tokudae, only
         through the C&nbsp;API.
         This guarantees the integrity of data owned by the host program
         and C&nbsp;libraries.
+        Additionally the programmer can define and set the methods table
+        for <em>full userdata</em> through the C&nbsp;API.
         <br/><br/>
         <!-- table -->
         The type <em>table</em> implements associative arrays,
@@ -160,7 +173,7 @@
         used by the IEEE 754 standard to represent undefined numerical
         results, such as <code>0/0</code>).
         <br/>
-        Tables can be contain values of all types (except <b>nil</b>).
+        Tables can contain values of all types (except <b>nil</b>).
         Any key associated to the value <b>nil</b> is not considered part of
         the table. Conversely, any key that is not part of a table has
         an associated value <b>nil</b>.
@@ -172,34 +185,57 @@
         with the value of the variable.
         <br/><br/>
         <!-- list -->
-        The type <em>list</em> is a linear collection of values each
+        The type <em>list</em> is a dynamic array of Tokudae values, each
         identified by an <b>index</b>. Each <b>index</b> is an integer
         value starting from 0 which is used to index the <em>list</em> in
         order to retrieve the value (variable values can also be used in
         place of literal integers). Negative integer indices are not allowed.
+        <br/>
+        Additionally the list has special built-in fields.
+        Given the list <code>l</code>, the fields <code>x</code>,
+        <code>y</code>, <code>z</code> access the first, second and third list
+        elements respectively. We index it as <code>l.x</code> or
+        <code>l["x"]</code>, which is equivalent to <code>l[0]</code>.
+        The field <code>y</code> corresponds to index <code>1</code> and
+        field <code>z</code> to index 2.
+        Field <code>len</code> accesses the length of the list. So the
+        <code>l.len</code> or <code>l["len"]</code>, retrieves the list
+        length, and <code>l.len = 2</code> or <code>l["len"] = 2</code> sets
+        the list length to <code>2</code>.
+        The field <code>last</code> accesses the last element in the list.
+        If the list length is <code>5</code>, then <code>l.last = 1</code>
+        is equivalent to <code>l[4] = 1</code>.
         <br/><br/>
         <!-- class -->
-        The type <em>class</em> is useful abstraction for object-oriented
-        programming.
-        Class can contain <em>methods</em> which are defined upon class
-        creation and can not be changed thereafter.
-        <em>class</em> can inherit from another class, the name of the
+        The type <em>class</em> is an abstraction that provides a way to
+        bundle data and functionality.
+        Class contains <em>methods</em> and <em>metatable</em>.
+        Each time you call a <em>class</em> value, it creates a new
+        <em>instance</em> of that class object.
+        Class objects can inherit from other class objects, the name of the
         <em>class</em> from which we inherit is called a <em>superclass</em>.
-        When inheriting all of the <em>superclass methods</em> are copied over
-        to the <em>class</em> being created.
+        When inheriting all of the <em>methods</em> and <em>metatable</em>
+        entries are copied over from the <em>superclass</em> to the
+        <em>class</em> that is inheriting. However after the inherit is done,
+        the class being created overrides the superclass methods and metatable
+        indices with it's own definitions (in case they collide).
+        When defining <em>class</em> methods and <em>meatlist</em> entries,
+        a class that inherited has access to the <em>superclass</em> object
+        through the <code>super</code> keyword.
         <br/>
-        Similar to <em>full userdata</em>, classes can also make use of
-        <em>metalists</em> to define operations on their instances.
+        As mentioned, classes can also make use of <em>metatables</em> to
+        define operations on their instances.
         <br/><br/>
         <!-- instance -->
         The type <em>instance</em> is similar to <em>table</em>,
-        meaning they can be indexed in the same way as a table and therefore
+        meaning they can be indexed in the same way as tables and therefore
         can hold values (a state), these values are called
         <em>instance fields</em>.
         Each <em>instance</em> is constructed from a <em>class</em>.
-        The <em>class</em> methods of the <em>instance</em> can't be changed
-        but can be shadowed by creating a non-<b>nil</b> <em>field</em> under
-        the same index value.
+        When <em>instance</em> is indexed, first the <em>metatable</em>
+        <code>__getidx</code> entry is checked, if not found then the
+        <em>instance fields</em> are checked, finally the
+        <em>methods table</em> of the <em>instance</em> class is checked.
         <br/><br/>
         <!-- thread -->
         The type <em>thread</em> represents independent threads of execution.
@@ -210,20 +246,51 @@
         </p>
 
 
-        <h2>2.2 &ndash; <a name="2.2">Global Table</a></h2>
+        <h2>2.2 &ndash; <a name="2.2">Environments and the Global Environment</a></h2>
         <p>
         As we will discuss further in <a href="#3.2">&sect;3.2</a> and
         <a href="#3.3.3">&sect;3.3.3</a>, any reference to a free name
         (that is, a name not bound to any declaration) <code>var</code>
-        is considered to be a global variable and it's value is set into
-        the global table.
-        This value is kept aat a special index in the C registry
+        is syntactically translated to <code>__ENV.var</code>.
+        Moreover, every chunk is compiled in the scope of an external local
+        variable named <code>__ENV</code>
+        (see <a href="#3.3.2">&sect;3.3.2</a>), so <code>__ENV</code> itself
+        is never a free name in a chunk.
+        <br/><br/>
+        Despite the existence of this external <code>__ENV</code> variable and
+        the translation of free names, <code>__ENV</code> is a completely
+        regular name.
+        In particular, you can define new variables and parameters with
+        that name.
+        Each reference to a free name uses the <code>__ENV</code> that is
+        visible at that point in the program, following the usual visibility
+        rules of Tokudae (see <a href="#3.5">&sect;3.5</a>).
+        <br/><br/>
+        Any table used as the value of <code>__ENV</code> is called an
+        <em>environment</em>.
+        <br/><br/>
+        Tokudae keeps a distinguished environment called the
+        <em>global environment</em>.
+        This value is kept at a special index in the C table
         (see <a href="#4.3">&sect;4.3</a>).
-        Moreover, every chunk is compiled in the scope of global table.
-        This table can be accessed via <a href="#4">API</a> or the global
-        variable <a href="#__G"><code>__G</code></a>.
-        Note that <a href="#__G"><code>__G</code></a> is never used
-        internally, so changing its value will affect only your own code.
+        In Tokudae, the global variable <a href="#__G"><code>__G</code></a>
+        is initialized with this same value.
+        (<a href="#__G"><code>__G</code></a> is never used internally,
+        so changing its value will affect only your own code.)
+        <br/><br/>
+        When Tokudae loads a chunk, the default value for its
+        <code>__ENV</code> variable is the global environment
+        (see <a href="#load"><code>load</code></a>).
+        Therefore, by default, free names in Tokudae code refer to entries
+        in the global environment and, therefore, they are also called
+        <em>global variables</em>.
+        Moreover, all standard libraries are loaded in the global environment
+        and some functions there operate on that environment.
+        You can use <a href="#load"><code>load</code></a>
+        (or <a href="#loadfile"><code>loadfile</code></a>) to load a chunk
+        with a different environment. (In C, you have to load the chunk and
+        then change the value of its first upvalue;
+        see <a href="#toku_setupvalue"><code>toku_setupvalue</code></a>.)
         </p>
 
 
@@ -292,66 +359,66 @@
         </p>
 
 
-        <h2>2.4 &ndash; <a name="2.4">Metalists and Metamethods</a></h2>
+        <h2>2.4 &ndash; <a name="2.4">metatables and Metamethods</a></h2>
         <p>
-        Every value in Tokudae can have a <em>metalist</em>.
-        This <em>metalist</em> is an ordinary Tokudae list that defines
+        Every value in Tokudae can have a <em>metatable</em>.
+        This <em>metatable</em> is an ordinary Tokudae list that defines
         the behaviour of the original value under certain events.
         You can change several aspects of the behaviour of a value by
-        setting specific indices in its metalist.
+        setting specific indices in its metatable.
         For instance, when a non-numeric values are the operands of an
         addition, Tokudae checks for a function at the index 
-        <code>__add</code> of the value's metalist.
+        <code>__add</code> of the value's metatable.
         If it finds one, Tokudae calls this function to perform the addition.
         <br/><br/>
-        The index for each event in a metalist is a regular global integer
-        value prefixed by two underscores;
+        The index for each event in a metatable is a regular integer value;
+        in case you are defining class metatable entries, then the name
+        is a string prefixed by two underscores;
         the corresponding value is called a <em>metavalue</em>.
         For most events, the metavalue must be a function,
         which is then called a <em>metamethod</em>.
-        In the previous example, the index is the global variable
-        <code>__add</code> and the metamethod is the function that
-        performs the addition.
+        In the previous example, the index is either an integer defined
+        in the global table <code>__MT</code> so <code>__MT.add</code> or
+        a string <code>__add</code> in case of class definition.
+        And the metamethod is the function that performs the addition.
         Unless stated otherwise, a metamethod can in fact be any callable
         value, which is either a function, a class or a value with a
         <code>__call</code> metamethod.
         <br/><br/>
-        You can query the metalist of any value using the
-        <a href="#getmetalist"><code>getmetalist</code></a> function.
-        Tokudae queries metamethods in metalists by indexing the list
-        with predefined global values.
+        You can query the metatable of any value using the
+        <a href="#getmetatable"><code>getmetatable</code></a> function.
         <br/>
         Example:
 
         <pre>
     class Human { 
-        __init() {
+        __init = || {
             self.name = "Human";
             return self;
         }
     }
-    local ml = getmetalist(Human);  /* get 'Human' class metalist */
-    local mm = ml[__init];  /* get __init metamethod */</pre>
+    local ml = getmetatable(Human);  /* get 'Human' class metatable */
+    local mm = ml[__init];  /* get __init metamethod (function) */</pre>
 
-        You can replace the metalist of a class using the
-        <a href="#setmetalist"><code>setmetalist</code></a> function.
-        You cannot change the metalist of other types from Tokudae code.
+        You can replace the metatable of a class (or instance) using the
+        <a href="#setmetatable"><code>setmetatable</code></a> function.
+        You cannot change the metatable of full userdata from Tokudae code.
         <br/>
         Example:
 
         <pre>
     class Human {}
     local ml = [];  /* create list */
-    ml[__init] = fn(self) {  /* set function under index __init */
+    ml[__MT.init] = |self| {  /* set function under meta tag '__MT.init' */
         self.name = "Human";
         return self;
     };
-    setmetalist(Human, ml);  /* set 'Human' class metalist */</pre>
+    setmetatable(Human, ml);  /* set 'Human' class metatable */</pre>
 
-        Classes and full userdata have individual metalists,
-        although multiple classes and userdata can share their metalists.
+        Classes and full userdata can have individual metatables,
+        or they can share one.
         <br/><br/>
-        A detailed list of operations controlled by metalist is given next.
+        A detailed list of operations controlled by metatable is given next.
         By convention, all metamethod names used by Tokudae are composed by
         two underscores followed by lowercase Latin letters.
         <ul>
@@ -511,7 +578,8 @@
                 such as <code>MyClass()</code> (where <code>MyClass</code>
                 is a class value).
                 If present, instance of the class being called is passed
-                as the argument to this function.
+                as the argument to this function first, then all the other
+                arguments (if any).
                 This function returns a single result.
                 Usually this is used as the way to initialize the instance
                 (as the name suggests).
@@ -522,8 +590,30 @@
         </ul>
         In addition to the previous list, the interpreter also implements
         the following events:
-        <code>__gc</code> (see <a href="#2.5.2">&sect;2.5.2</a>) and
-        <code>__close</code> (see <a href="#3.3.8">&sect;3.3.8</a>)
+        <code>__gc</code> (see <a href="#2.5.2">&sect;2.5.2</a>),
+        <code>__close</code> (see <a href="#3.3.8">&sect;3.3.8</a>),
+        <code>__metatable</code> and <code>__name</code>.
+        The entry <code>__name</code>, when it contains a string,
+        may be used by <a href="tostr"><code>tostr</code></a> and in error
+        messages and the entry <code>__metatable</code> is returned when
+        retrieving metatable with
+        <a href="#getmetatable"><code>getmetatable</code></a>, additionally
+        if the entry is not empty, it raises error when trying to modifty
+        the metatable with <a href="#setmetatable"><code>setmetatable</code></a>.
+        <br/><br/>
+        Because metatables are regular lists, they can contain arbitrary values,
+        not only the event names defined above (indices are defined in
+        <code>__MT</code> table).
+        Some functions in the standard library
+        (e.g., <a href="#tostr"><code>tostr</code></a>)
+        use other fields in metatables for their own purposes.
+        <br/><br/>
+        It is a good practice to add all needed metamethods to a list
+        before setting it as a metatable of class/instance.
+        In particular, the <code>__gc</code> metamethod works only when this
+        order is followed (see <a href="#2.5.2">&sect;2.5.2</a>).
+        It is also a good practice to set the metatablea of class in the
+        class constructor or right after it the class is created.
         </p>
 
 
@@ -552,8 +642,9 @@
         (Here, <em>inaccessible from Tokudae</em> means that neither a
         variable nor another live object refer to the object.)
         Because Tokudae has no knowledge about C&nbsp;code, it never
-        collects objects accessible through the registry
-        (see <a href="#4.3">&sect;4.3</a>), which includes the global table
+        collects objects accessible through the C table or C list
+        (see <a href="#4.3">&sect;4.3</a>),
+        which includes the global environment
         (see <a href="#2.2">&sect;2.2</a>).
         <br/><br/>
         The garbage collector (GC) in Tokudae is incremental.
@@ -630,10 +721,10 @@
         <br/><br/>
         For an object (instance or userdata) to be finalized when collected,
         you must <em>mark</em> it for finalization.
-        You mark an object for finalization when you set its metalist and
-        metalist has <code>__gc</code> metamethod.
-        Note that if you set a metalist without setting <code>__gc</code>
-        index and later set that index in the metalist, the object will
+        You mark an object for finalization when you set its metatable and
+        metatable has <code>__gc</code> metamethod.
+        Note that if you set a metatable without setting <code>__gc</code>
+        index and later set that index in the metatable, the object will
         not be marked for finalization.
         <br/><br/>
         When a marked object becomes dead, it is not collected immediately
@@ -741,8 +832,10 @@
 
         <pre>
     +     -     *     /     //    %     ^     !
-    &amp;     ~     |     &lt;&lt;    &gt;&gt;    **
+    &amp;       |     &lt;&lt;    &gt;&gt;    **
     ==    !=    &lt;=    &gt;=    &lt;     &gt;     =
+    +=    -=    *=    /=    //=   %=    ^=
+    ..=   &amp;=    !=    |=    &lt;&lt;=   &gt;&gt;=   **=
     (     )     {     }     [     ]
     ;     ,     .     ..    ...</pre>
 
@@ -756,6 +849,7 @@
         '<code>\r</code>' (carriage return),
         '<code>\t</code>' (horizontal tab),
         '<code>\v</code>' (vertical tab),
+        '<code>\e</code>' (ANSI escape),
         '<code>\\</code>' (backslash),
         '<code>\"</code>' (quotation mark [double quote]),
         and '<code>\'</code>' (apostrophe [single quote]).
@@ -786,14 +880,43 @@
         example but this will additionally check if the sequence is a
         valid Unicode code point and throw syntax error otherwise.
         <br/><br/>
+        Literal strings can also be defined using a long format
+        enclosed by <em>long brackets</em>.
+        We define an <em>opening long bracket of level <em>n</em></em> as an
+        opening square bracket followed by <em>1+n</em> <code>=</code> signs
+        followed by another opening square bracket.
+        So, an opening long bracket of level&nbsp;0 is written as <code>[=[</code>, 
+        an opening long bracket of level&nbsp;1 is written as <code>[==[</code>, 
+        and so on.
+        A <em>closing long bracket</em> is defined similarly;
+        for instance,
+        a closing long bracket of level&nbsp;4 is written as  <code>]=====]</code>.
+        A <em>long literal</em> starts with an opening long bracket of any level and
+        ends at the first closing long bracket of the same level.
+        It can contain any text except a closing bracket of the same level.
+        Literals in this bracketed form can run for several lines,
+        do not interpret any escape sequences,
+        and ignore long brackets of any other level.
+        Any kind of end-of-line sequence
+        (carriage return, newline, carriage return followed by newline,
+        or newline followed by carriage return)
+        is converted to a simple newline.
+        When the opening long bracket is immediately followed by a newline,
+        the newline is not included in the string.
+        <br/><br/>
         As an example, in a system using ASCII
         (in which '<code>a</code>' is coded as&nbsp;97, newline is coded
-        as&nbsp;10, and '<code>1</code>' is coded as&nbsp;49), the two
-        literal strings below denote the same string:
+        as&nbsp;10, and '<code>1</code>' is coded as&nbsp;49),
+        the four literal strings below denote the same string:
 
         <pre>
-     a = "alo\n123\""
-     a = "\97lo\10\04923\""</pre>
+     a = "alo\n123\"";
+     a = "\97lo\10\04923\"";
+     a = [=[alo
+     123"]=];
+     a = [==[
+     alo
+     123"]==];</pre>
 
         Any byte in a literal string not explicitly affected by the
         previous rules represents itself.
@@ -807,16 +930,17 @@
         with an optional fractional part and an optional decimal exponent,
         marked by a letter '<code>e</code>' or '<code>E</code>'.
         Tokudae also accepts hexadecimal constants, which start with
-        <code>0x</code> or <code>0X</code>, and octal constants, which
-        start with <code>0</code>.
+        <code>0x</code> or <code>0X</code>, also the octal constants, which
+        start with <code>0</code>, and binary constants which start with
+        <code>0b</code> or <code>0B</code>.
         Octal constants (integers that start with leading zero) that contain
         decimal digit(s) are interpreted as decimal numbers.
         A <em>constant</em> <code>inf</code> or <code>infinity</code>
         represent positive infinity (putting '<code>-</code>' in front denotes
         negative infinity).
         Additionally all <em>numeric constants</em> can have '<code>_</code>'
-        in between digits, this acts as a separator, however this separator is
-        not allowed in fractional part.
+        in between digits (after first digit), this acts as a separator,
+        however this separator is not allowed in fractional part.
         Hexadecimal constants also accept an optional fractional part
         plus an optional binary exponent, marked by a letter
         '<code>p</code>' or '<code>P</code>' and written in decimal.
@@ -830,8 +954,8 @@
         (which is <em>2<sup>0</sup> == 1</em>).
         <br/><br/>
         A numeric constant with a radix point or an exponent denotes a float;
-        otherwise, if its value fits in an integer or it is a hexadecimal or
-        octal constant, it denotes an integer.
+        otherwise, if its value fits in an integer or it is a hexadecimal,
+        octal or binary constant, it denotes an integer.
         Hexadecimal numerals with neither a radix point nor an exponent
         always denote an integer value.
         If the <em>numeric constant</em> overflows or underflows, Tokudae
@@ -840,7 +964,7 @@
         Examples of valid integer constants are
 
         <pre>
-    3   345   0xff   0xBEBADA   015   000   15_523_123</pre>
+    3   345   0xff   0xBEBADA   015   000   15_523_123   0b1111_0011</pre>
 
         Examples of valid float constants are
 
@@ -849,7 +973,8 @@
     0x.1Ep0  0xA23p-4    0X1.921FB54442D18P+1    0x82_3A5.1124BFP1
     inf      infinity</pre>
 
-        A <em>short comment</em> starts with a pound sign (<code>#</code>)
+        A <em>short comment</em> starts with either a pound sign
+        (<code>#</code>) or triple forward slash (<code>///</code>)
         and runs until the end of the line.
         A <em>long comment</em> starts with a forward slash and
         asterisk sign (<code>/*</code>) and is delimited by asterisk sign and
@@ -861,7 +986,7 @@
         <p>
         Variables are places that store values.
         There are three kinds of variables in Tokudae:
-        global variables, local variables, table keys and instance fields.
+        global variables, local variables, table/instance fields.
         <br/><br/>
         A single name can denote a global variable or a local variable
         (or a function's formal parameter, which is a particular kind
@@ -893,6 +1018,11 @@
 
         <pre>
     var ::= prefixexp &lsquo;<b>.</b>&rsquo; Name</pre>
+
+        An access to a global variable <code>x</code> is equivalent to
+        <code>__ENV.x</code>. Due to the way that chunks are compiled,
+        the variable <code>__ENV</code> itself is never global
+        (see <a href="#2.2">&sect;2.2</a>).
         </p>
 
 
@@ -914,10 +1044,11 @@
         These declarations are executed sequentially:
 
         <pre>
-    stm ::= &lsquo;<b>{</b>&rsquo; loopblock &lsquo;<b>}</b>&rsquo;
+    stm ::= blockstm
+    blockstm ::= &lsquo;<b>{</b>&rsquo; loopblock &lsquo;<b>}</b>&rsquo;
     loopblock ::= {decl} [continuestm] | switchblock
     switchblock ::= {decl} [breakstm] | block
-    block ::= {decl} [retstm]</pre>
+    block ::= {decl} [returnstm]</pre>
         </p>
 
 
@@ -944,9 +1075,9 @@
         </p>
 
 
-        <h3>3.3.3 &ndash; <a name="3.3.3">Assignment</a></h3>
+        <h3>3.3.3 &ndash; <a name="3.3.3">Compound and Regular Assignment</a></h3>
         <p>
-        Tokudae allows multiple assignments.
+        Tokudae allows multiple compound or regular assignments.
         Therefore, the syntax for assignment defines a list of variables
         on the left side and a list of expressions on the right side.
         The elements in both lists are separated by commas and terminated
@@ -954,13 +1085,22 @@
 
         <pre>
     stm ::= expstm &lsquo;<b>;</b>&rsquo;
-    expstm ::= varlist &lsquo;<b>=</b>&rsquo; explist 
+    expstm ::= varlist assignop explist
+    assignop ::= &lsquo;<b>=</b>&rsquo; | &lsquo;<b>+=</b>&rsquo; | &lsquo;<b>-=</b>&rsquo; | &lsquo;<b>*=</b>&rsquo; 
+               | &lsquo;<b>/=</b>&rsquo; | &lsquo;<b>//=</b>&rsquo; | &lsquo;<b>**=</b>&rsquo; | &lsquo;<b>%=</b>&rsquo; 
+               | &lsquo;<b>&=</b>&rsquo; | &lsquo;<b>|=</b>&rsquo; | &lsquo;<b>^=</b>&rsquo; | &lsquo;<b>&gt;&gt;=</b>&rsquo; 
+               | &lsquo;<b>&lt;&lt;=</b>&rsquo; | &lsquo;<b>..=</b>&rsquo;
     varlist ::= var {&lsquo;<b>,</b>&rsquo; var}
     explist ::= exp {&lsquo;<b>,</b>&rsquo; exp}</pre>
 
         Expressions are discussed in <a href="#3.4">&sect;3.4</a>.
-        <br/><br/>
-        Before the assignment,
+        <br/>
+        There is also increment/decrement assignment:
+
+        <pre>
+    expstm ::= var &lsquo;<b>++</b>&rsquo; | var &lsquo;<b>--</b>&rsquo;</pre>
+
+        Before the compound or regular assignment,
         the list of values is <em>adjusted</em> to the length of
         the list of variables (see <a href="#3.4.12">&sect;3.4.12</a>).
         <br/><br/>
@@ -998,6 +1138,28 @@
         <br/><br/>
         The meaning of assignments to instance fields can be changed via
         metamethods (see <a href="#2.4">&sect;2.4</a>).
+        <br/><br/>
+        Additionally, this compound assignment:
+
+        <pre>
+    a, b += 2, 3;</pre>
+
+        is equivalent to:
+
+        <pre>
+    a, b = a + 2, b + 3;</pre>
+
+        and this one:
+
+        <pre>
+    a++;
+    b--;</pre>
+
+        is equivalent to:
+
+        <pre>
+    a = a + 1;
+    b = b - 1;</pre>
         </p>
 
 
@@ -1008,31 +1170,36 @@
         familiar syntax:
 
         <pre>
-    stm ::= <b>while</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; stm
-    stm ::= <b>for</b> &lsquo;<b>(</b>&rsquo; [forinit] &lsquo;<b>;</b>&rsquo; [exp] &lsquo;<b>;</b>&rsquo; [expstm] &lsquo;<b>)</b>&rsquo; stm
-    stm ::= <b>loop</b> stm
-    stm ::= <b>if</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; stm [<b>else</b> stm]
-    stm ::= <b>switch</b> &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; switchbody
-    switchbody ::= &lsquo;<b>{</b>&rsquo; {<b>case</b> exp &lsquo;<b>:</b>&rsquo; {stm}} [<b>default</b> &lsquo;<b>:</b>&rsquo; {stm}] &lsquo;<b>}</b>&rsquo;</pre>
-    forinit ::= localdecl | expstm
+    stm ::= whilestm | forstm | loopstm | ifstm | switchstm
+    whilestm ::= <b>while</b> exp stm
+    forstm ::= <b>for</b> forclauses stm
+    forclauses ::= &lsquo;<b>(</b>&rsquo; forinfix &lsquo;<b>)</b>&rsquo; | forinfix forsep
+    forinfix ::= [forinit] forsep [exp] forsep [expstm]
+    forinit ::= localstm | expstm
+    forsep ::= &lsquo;<b>,</b>&rsquo; | &lsquo;<b>;</b>&rsquo;
+    loopstm ::= <b>loop</b> stm
+    ifstm ::= <b>if</b> exp stm [<b>else</b> stm]
+    switchstm ::= <b>switch</b> exp switchbody
+    switchbody ::= &lsquo;<b>{</b>&rsquo; {<b>case</b> exp &rsquo;<b>:</b>&lsquo; {stm}} [<b>default</b> &rsquo;<b>:</b>&lsquo; {stm}] &lsquo;<b>}</b>&rsquo;</pre>
 
-        Tokudae also has a <b>foreach</b> statement
-        (see <a href="#3.3.5">&sect;3.3.5</a>).
+        Tokudae also has a <b>foreach</b> statement which is iterator based,
+        meaning generic (see <a href="#3.3.5">&sect;3.3.5</a>).
         <br/><br/>
         The condition expression of a control structure can return any value.
         Both <b>false</b> and <b>nil</b> test false.
         All values different from <b>nil</b> and <b>false</b> test true.
         In particular, the number 0 and the empty string also test true.
         <br/><br/>
-        The <b>break</b> statement terminates the execution of a <b>switch</b>
-        statement and a <b>while</b>, <b>loop</b>, or <b>for</b> loop,
-        skipping to the next statement after the loop or switch:
+        The <b>break</b> statement terminates the execution of a
+        <b>switch</b> statement and <b>while</b>, <b>loop</b>, or <b>for</b>
+        loops, skipping to the next statement (after the loop or switch):
 
         <pre>
     stm ::= breakstm
     breakstm ::= <b>break</b> &lsquo;<b>;</b>&rsquo;</pre>
 
-        A <b>break</b> ends the innermost enclosing loop or switch statement.
+        A <b>break</b> ends the innermost enclosing loop or switch statement,
+        and as such it must be written as the last statement of a block.
         <br/><br/>
         The <b>continue</b> statement is used to skip the current iteration
         and proceed to the next iteration of the loop:
@@ -1043,7 +1210,9 @@
 
         When a <b>continue</b> statement is encountered, the remaining
         statements in the loop body are skipped, and control is transferred
-        to the loop's next iteration.
+        to the loop's next iteration (wherever that might be).
+        <b>break</b> also must be written as the last statement of the
+        current block.
 
         The <b>return</b> statement is used to return values from a function
         or a chunk (which is handled as an anonymous function).
@@ -1051,11 +1220,11 @@
         <b>return</b> statement is
 
         <pre>
-    stm ::= retstm
-    retstm ::= <b>return</b> [explist] &lsquo;<b>;</b>&rsquo;</pre>
+    stm ::= returnstm
+    returnstm ::= <b>return</b> [explist] &lsquo;<b>;</b>&rsquo;</pre>
 
-        The <b>return</b> statement can only be written as the last statement
-        of a block or a chunk.
+        Finally the <b>return</b> statement also can only be written as the
+        last statement of a block or a chunk.
         If it is necessary to <b>return</b> in the middle of a block,
         then an explicit inner block can be used: <code>{ return; }</code>,
         because now <b>return</b> is the last statement in its (inner) block.
@@ -1071,7 +1240,8 @@
         The generic <b>foreach</b> loop has the following syntax:
 
         <pre>
-    stm ::= <b>foreach</b> namelist <b>in</b> forexplist stm
+    stm ::= foreachstm
+    foreachstm ::= <b>foreach</b> namelist <b>in</b> forexplist stm
     namelist ::= Name {&lsquo;<b>,</b>&rsquo; Name}
     forexplist ::= exp [&lsquo;<b>,</b>&rsquo; exp [&lsquo;<b>,</b>&rsquo; exp [&lsquo;<b>,</b>&rsquo; exp]]]</pre>
 
@@ -1084,11 +1254,11 @@
         <br/><br/>
         The names <em>var_i</em> declare loop variables local to the loop body.
         The first of these variables is the <em>control variable</em>.
-        <br/><br/>
+        <br/>
         The loop starts by evaluating <em>explist</em> to produce four values:
         an <em>iterator function</em>, a <em>state</em>, an initial value for
         the control variable, and a <em>closing value</em>.
-        <br/><br/>
+        <br/>
         Then, at each iteration, Tokudae calls the iterator function with
         two arguments: the state and the control variable.
         The results from this call are then assigned to the loop variables,
@@ -1114,7 +1284,8 @@
         function calls can be executed as statements:
 
         <pre>
-    stm ::= functioncall &lsquo;<b>;</b>&rsquo;</pre>
+    stm ::= lastcall &lsquo;<b>;</b>&rsquo;
+    lastcall ::= call</pre>
 
         In this case, all returned values are thrown away.
         Function calls are explained in <a href="#3.4.10">&sect;3.4.10</a>.
@@ -1127,9 +1298,9 @@
         The declaration can include an initialization:
 
         <pre>
-    decl ::= localdecl &lsquo;;&rsquo; | <b>local</b> <b>fn</b> Name funcbody | <b>local</b> <b>class</b> Name classbody | stm
-    localdecl ::= <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist]
-    attnamelist ::=  Name attrib {&lsquo;<b>,</b>&rsquo; Name attrib}</pre>
+    decl ::= localstm &lsquo;<b>;</b>&rsquo; | localfn | localclass | stm
+    localstm ::= <b>local</b> attnamelist [&lsquo;<b>=</b>&rsquo; explist]
+    attnamelist ::=  Name attrib {&lsquo;<b>,</b>&rsquo; Name attrib}
 
         If present, an initial assignment has the same semantics
         of a multiple assignment (see <a href="#3.3.3">&sect;3.3.3</a>).
@@ -1154,7 +1325,7 @@
         <br/><br/>
         The visibility rules for local variables are explained in
         <a href="#3.5">&sect;3.5</a>.
-        </p>
+        </pre>
 
 
         <h3>3.3.8 &ndash; <a name="3.3.8">To-be-closed Variables</a></h3>
@@ -1202,7 +1373,7 @@
     exp ::= prefixexp
     exp ::= exp binop exp
     exp ::= unop exp
-    prefixexp ::= var | functioncall | &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; | superexp</pre>
+    prefixexp ::= var | call [&lsquo;<b>?</b>&rsquo;] | &lsquo;<b>(</b>&rsquo; exp &lsquo;<b>)</b>&rsquo; | superexp</pre>
 
         Numbers and literal strings are explained in
         <a href="#3.1">&sect;3.1</a>;
@@ -1505,6 +1676,26 @@
         <br/><br/>
         The field or element list can have an optional trailing separator,
         as a convenience for machine-generated code.
+        <br/><br/>
+        As mentioned in <a href="#2.1">&sect;2.1</a>, list has special fields.
+        These fields are: <code>x</code>, <code>y</code>, <code>z</code>,
+        which represent indices <code>0</code>, <code>1</code> and
+        <code>2</code> respectively. Field <code>len</code> accesses the
+        length of the list, and <code>last</code> accesses the last value
+        in the list, or returns nil if list is empty.
+        <br/><br/>
+        Example:
+    <pre>
+    local l = [2, 3, 4];
+    assert(l.x == 2 and l.y == 3 and l.z == 4);
+    assert(l.len == 3 and l.last == 4);
+    l.len = 2;
+    assert(l.last == 3);
+    l.len = 0;
+    assert(l.last == nil);
+    l.last = 5;
+    assert(l.len == 0 and l.last == nil);
+    </pre>
         </p>
 
 
@@ -1513,7 +1704,7 @@
         A function call in Tokudae has the following syntax:
 
         <pre>
-    functioncall ::= prefixexp &lsquo;<b>(</b>&rsquo; [explist] &lsquo;<b>)</b>&rsquo;</pre>
+    call ::= prefixexp &lsquo;<b>(</b>&rsquo; [explist] &lsquo;<b>)</b>&rsquo;</pre>
 
         In a function call, first prefixexp and args are evaluated.
         <br/><br/>
@@ -1522,11 +1713,11 @@
         <br/><br/>
         If the value of prefixexp has type <em>class</em>, then
         if <code>__init</code> metamethod of that class is present,
-        it is called: its first and only argument is the instance of the class.
+        it is called: its first argument is the instance of the class then
+        all the other arguments provided to the call follow next (if any).
         If <code>__init</code> is not present, then calling a class directly
         returns the instance of that class (see <a href="#2.4">&sect;2.4</a>).
-        In both cases all the provided arguments are discarded as they are
-        not used, and a single result is returned, the instance.
+        This always returns a single result.
         <br/><br/>
         Finally if prefixexp is not a <em>class</em> and a <em>function</em>,
         and <code>__call</code> metamethod is present, it is called:
@@ -1534,6 +1725,13 @@
         call arguments (see <a href="#2.4">&sect;2.4</a>).
         <br/><br/>
         All argument expressions are evaluated before the call.
+        <br/><br/>
+        If the call is not a statement (see <a href="#3.3.6">&sect;3.3.6</a>), 
+        then the <code>?</code> can follow right after the call, this is a false
+        test that checks the first call result, and if it is false, it
+        returns from the function/chunk with all the results from that call.
+        Otherwise, if the value is not false, the return is skipped,
+        meaning <code>?</code> is ignored.
         </p>
 
 
@@ -1542,15 +1740,18 @@
         The syntax for function definition is
 
         <pre>
-    functiondef ::= <b>fn</b> funcbody
-    funcbody ::= &lsquo;<b>(</b>&rsquo; [parameters] &lsquo;<b>)</b>&rsquo; &lsquo;<b>{</b>&rsquo; block &lsquo;<b>}</b>&rsquo;</pre>
+    functiondef ::= <b>fn</b> parenparams funcbody | pipeparams funcbody
+    parenparams ::= &lsquo;<b>(</b>&rsquo; [parameters] &lsquo;<b>)</b>&rsquo;
+    pipeparams ::= &lsquo;<b>|</b>&rsquo; [parameters] &lsquo;<b>|</b>&rsquo;
+    funcbody ::= &lsquo;<b>{</b>&rsquo; block &lsquo;<b>}</b>&rsquo;</pre>
 
         The following syntactic sugar simplifies function definitions:
 
         <pre>
-    stm ::= <b>fn</b> indexedname funcbody
-    stm ::= <b>local</b> <b>fn</b> Name funcbody
-    indexedname ::= Name {&lsquo;<b>.</b>&rsquo; Name}</pre>
+    stm ::= fnstm
+    fnstm ::= <b>fn</b> dottedname parenparams funcbody
+    dottedname ::= Name {&lsquo;<b>.</b>&rsquo; Name}
+    localfn ::= <b>local</b> <b>fn</b> Name parenparams funcbody</pre>
 
         The statement
 
@@ -1733,22 +1934,22 @@
         it uses a <b>nil</b>.
 
         <pre>
-    print(x, f())      -- prints x and all results from f().
-    print(x, (f()))    -- prints x and the first result from f().
-    print(f(), x)      -- prints the first result from f() and x.
-    print(1 + f())     -- prints 1 added to the first result from f().
-    local x = ...      -- x gets the first vararg argument.
-    x,y = ...          -- x gets the first vararg argument,
+    print(x, f());     -- prints x and all results from f().
+    print(x, (f()));   -- prints x and the first result from f().
+    print(f(), x);     -- prints the first result from f() and x.
+    print(1 + f());    -- prints 1 added to the first result from f().
+    local x = ...;     -- x gets the first vararg argument.
+    x,y = ...;         -- x gets the first vararg argument,
                        -- y gets the second vararg argument.
-    x,y,z = w, f()     -- x gets w, y gets the first result from f(),
+    x,y,z = w, f();    -- x gets w, y gets the first result from f(),
                        -- z gets the second result from f().
-    x,y,z = f()        -- x gets the first result from f(),
+    x,y,z = f();       -- x gets the first result from f(),
                        -- y gets the second result from f(),
                        -- z gets the third result from f().
-    x,y,z = f(), g()   -- x gets the first result from f(),
+    x,y,z = f(), g();  -- x gets the first result from f(),
                        -- y gets the first result from g(),
                        -- z gets the second result from g().
-    x,y,z = (f())      -- x gets the first result from f(), y and z get nil.
+    x,y,z = (f());     -- x gets the first result from f(), y and z get nil.
     return f();        -- returns all results from f().
     return x, ...;     -- returns x and all received vararg arguments.
     return x,y,f();    -- returns x, y, and all results from f().
@@ -1764,14 +1965,24 @@
 
         <pre>
     classdef ::= <b>class</b> classbody
-    classbody ::= [<b>inherits</b> indexedname] &lsquo;<b>{</b>&rsquo; {method} &lsquo;<b>}</b>&rsquo;
-    method ::= <b>fn</b> Name funcbody</pre>
+    classbody ::= [<b>inherits</b> exp] &lsquo;<b>{</b>&rsquo; {definitions} &lsquo;<b>}</b>&rsquo;
+    definitions ::= method | metafield
+    method ::= <b>fn</b> Name parenparams funcbody
+    metafield ::= metatag &lsquo;<b>=</b>&rsquo; metavalue &lsquo;<b>;</b>&rsquo;
+    metatag ::= &lsquo;<b>__getidx</b>&rsquo; | &lsquo;<b>__setidx</b>&rsquo; | &lsquo;<b>__gc</b>&rsquo; | &lsquo;<b>__close</b>&rsquo; |  
+              | &lsquo;<b>__call</b>&rsquo; | &lsquo;<b>__init</b>&rsquo; | &lsquo;<b>__concat</b>&rsquo; | &lsquo;<b>__add</b>&rsquo; |  
+              | &lsquo;<b>__sub</b>&rsquo; | &lsquo;<b>__mul</b>&rsquo; | &lsquo;<b>__div</b>&rsquo; | &lsquo;<b>__idiv</b>&rsquo; |  
+              | &lsquo;<b>__mod</b>&rsquo; | &lsquo;<b>__pow</b>&rsquo; | &lsquo;<b>__shl</b>&rsquo; | &lsquo;<b>__shr</b>&rsquo; |  
+              | &lsquo;<b>__band</b>&rsquo; | &lsquo;<b>__bor</b>&rsquo; | &lsquo;<b>__bxor</b>&rsquo; | &lsquo;<b>__unm</b>&rsquo; |  
+              | &lsquo;<b>__bnot</b>&rsquo; | &lsquo;<b>__eq</b>&rsquo; | &lsquo;<b>__lt</b>&rsquo; | &lsquo;<b>__le</b>&rsquo; |  
+              | &lsquo;<b>__name</b>&rsquo; | &lsquo;<b>__metatable</b>&rsquo;
+    metavalue ::= functiondef | exp</pre>
 
         The following syntactic sugar simplifies class definitions:
 
         <pre>
-    stm ::= <b>class</b> indexedname classbody
-    stm ::= <b>local</b> <b>class</b> Name classbody</pre>
+    classstm ::= <b>class</b> dottedname classbody
+    localclass ::= <b>local</b> <b>class</b> Name classbody</pre>
 
         The statement
 
@@ -1813,38 +2024,35 @@
 
         <pre>
     class Vec2 {
-        fn __init(x, y) {
+        __init = |x, y| {
             self.x = (x or 0);
             self.y = (y or 0);
             return self;
-        }
-        fn __add(rhs) {
+        };
+        __add = |rhs| {
             return getclass(self)(self.x + rhs.x, self.y + rhs.y);
-        }
-        fn name() {
-            return "Vec2";
-        }
+        };
+        __name = || { return "Vec2"; };
     };
-    local class x inherits Vec2 {
-        fn name() {
-            return "x{" .. super.name() .. "}";
-        }
-    }
+    local class x inherits Vec2 {} /* inherits all metafields */
     local vec = x(2, 3) + x(3, 3);
     assert(vec.x == 5 and vec.y == 6);
-    assert(vec.name() == "x{Vec2}");</pre>
+    assert(string.find(tostr(vec), "Vec2"));</pre>
 
-        Class methods always have the instance as the first argument.
-        This argument is named <code>self</code> and it is hidden but
-        accessible.
+        Class and userdata methods always have the instance/userdata as the
+        first argument.
+        This argument is a local variable named <code>self</code> and it is
+        hidden but accessible.
         Additionally if the class inherits from another class, then the
-        <code>super</code> keyword is accessible for each method.
+        <code>super</code> keyword is accessible in each method and metafield
+        definition.
         This keyword can access the superclass and its methods.
         Here is the syntax:
-        <pre>
-    superexp ::= <b>super</b> [&lsquo;[&rsquo; exp &lsquo;]&rsquo;] | <b>super</b> [&lsquo;.&rsquo; Name] | <b>super</b></pre>
 
-        Here is the small exmple:
+        <pre>
+    superexp ::= <b>super</b> [&lsquo;<b>[</b>&rsquo; exp &lsquo;<b>]</b>&rsquo;] | <b>super</b> [&lsquo;<b>.</b>&rsquo; Name]</pre>
+
+        Here is the small example:
 
         <pre>
     local class Empty {
@@ -2176,7 +2384,7 @@
         </p>
 
 
-        <h2>4.3 &ndash; <a name="4.3">Registry</a></h2>
+        <h2>4.3 &ndash; <a name="4.3">C Table and C List</a></h2>
         <p>
         Tokudae provides a <em>registry</em>, a predefined list that can be
         used by any C&nbsp;code to store whatever Tokudae values it needs to
@@ -2648,37 +2856,37 @@ typedef struct toku_Debug {
         <p>
         <pre>
 typedef enum toku_MM {
-    TOKU_MT_GETIDX = 0,
-    TOKU_MT_SETIDX,
-    TOKU_MT_GC,
-    TOKU_MT_CLOSE,
-    TOKU_MT_CALL,
-    TOKU_MT_CONCAT,
-    TOKU_MT_ADD, 
-    TOKU_MT_SUB,
-    TOKU_MT_MUL,
-    TOKU_MT_DIV,
-    TOKU_MT_IDIV,
-    TOKU_MT_MOD,
-    TOKU_MT_POW,
-    TOKU_MT_BSHL,
-    TOKU_MT_BSHR,
-    TOKU_MT_BAND,
-    TOKU_MT_BOR,
-    TOKU_MT_BXOR,
-    TOKU_MT_UNM,
-    TOKU_MT_BNOT,
-    TOKU_MT_EQ,
-    TOKU_MT_LT,
-    TOKU_MT_LE,
-    TOKU_MT_NUM,
+    TM_GETIDX = 0,
+    TM_SETIDX,
+    TM_GC,
+    TM_CLOSE,
+    TM_CALL,
+    TM_CONCAT,
+    TM_ADD, 
+    TM_SUB,
+    TM_MUL,
+    TM_DIV,
+    TM_IDIV,
+    TM_MOD,
+    TM_POW,
+    TM_BSHL,
+    TM_BSHR,
+    TM_BAND,
+    TM_BOR,
+    TM_BXOR,
+    TM_UNM,
+    TM_BNOT,
+    TM_EQ,
+    TM_LT,
+    TM_LE,
+    TM_NUM,
 } toku_MM;</pre>
-        These values are indices for the metalist.
+        These values are indices for the metatable.
         <br/>
         Total number of metamethods defined by Tokudae without any libraries,
-        is denoted by <a name="TOKU_MT_NUM"><code>TOKU_MT_NUM</code></a>.
+        is denoted by <a name="TM_NUM"><code>TM_NUM</code></a>.
         <br/><br/>
-        For more information on metalists and metamethods see
+        For more information on metatables and metamethods see
         <a href="#2.4">&sect;2.4</a>.
         </p>
 
@@ -3453,7 +3661,7 @@ typedef enum toku_MM {
         <p>
         Similar to <a href="#toku_push_class"><code>toku_push_class</code></a>,
         except this function accepts additional argument <code>ml</code>
-        which is the index of <em>metalist</em>
+        which is the index of <em>metatable</em>
         (see <a href="#2.4">&sect;2.4</a>).
         </p>
 
@@ -3480,10 +3688,10 @@ typedef enum toku_MM {
         Returns the type of that value.
         </p>
 
-        <!-- toku_get_cfieldstr -->
-        <hr><h3><a name="toku_get_cfieldstr"><code>toku_get_cfieldstr</code></a></h3><p>
+        <!-- toku_get_cfield_str -->
+        <hr><h3><a name="toku_get_cfield_str"><code>toku_get_cfield_str</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int toku_get_cfieldstr (toku_State *T, const char *field);</pre>
+        <pre>int toku_get_cfield_str (toku_State *T, const char *field);</pre>
         <p>
         Equivalent to <code>t[field]</code> where <code>t</code> is the
         registry table located in the registry under index
@@ -3576,10 +3784,10 @@ typedef enum toku_MM {
         Returns the type of the pushed value.
         </p>
 
-        <!-- toku_get_fieldstr -->
-        <hr><h3><a name="toku_get_fieldstr"><code>toku_get_fieldstr</code></a></h3>
+        <!-- toku_get_field_str -->
+        <hr><h3><a name="toku_get_field_str"><code>toku_get_field_str</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int toku_get_fieldstr (toku_State *T, int index, const char *field);</pre>
+        <pre>int toku_get_field_str (toku_State *T, int index, const char *field);</pre>
         <p>
         Similar to <a href="#toku_get_field"><code>toku_get_field</code></a>
         but instead of using the value on top of the stack as key, it instead
@@ -3594,18 +3802,18 @@ typedef enum toku_MM {
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int toku_get_fieldptr (toku_State *T, int index, const void *field);</pre>
         <p>
-        Identical to <a href="toku_get_fieldstr"><code>toku_get_fieldstr</code></a>
+        Identical to <a href="toku_get_field_str"><code>toku_get_field_str</code></a>
         except the key is the pointer.
         <br/><br/>
         Returns the type of the pushed value.
         </p>
 
-        <!-- toku_get_fieldint -->
-        <hr><h3><a name="toku_get_fieldint"><code>toku_get_fieldint</code></a></h3>
+        <!-- toku_get_field_int -->
+        <hr><h3><a name="toku_get_field_int"><code>toku_get_field_int</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int toku_get_fieldint (toku_State *T, int index, toku_Integer field);</pre>
+        <pre>int toku_get_field_int (toku_State *T, int index, toku_Integer field);</pre>
         <p>
-        Identical to <a href="toku_get_fieldstr"><code>toku_get_fieldstr</code></a>
+        Identical to <a href="toku_get_field_str"><code>toku_get_field_str</code></a>
         except the key is Tokudae <a href="#toku_Integer"><code>integer</code></a>.
         <br/><br/>
         Returns the type of the pushed value.
@@ -3616,7 +3824,7 @@ typedef enum toku_MM {
         <span class="apii">[-0, +1, &ndash;]</span>
         <pre>int toku_get_fieldflt (toku_State *T, int index, toku_Number field);</pre>
         <p>
-        Identical to <a href="toku_get_fieldstr"><code>toku_get_fieldstr</code></a>
+        Identical to <a href="toku_get_field_str"><code>toku_get_field_str</code></a>
         except the key is Tokudae <a href="#toku_Number"><code>float</code></a>.
         <br/><br/>
         Returns the type of the pushed value.
@@ -3708,15 +3916,15 @@ typedef enum toku_MM {
         is pushed and 0 is returned.
         </p>
 
-        <!-- toku_get_metalist -->
-        <hr><h3><a name="toku_get_metalist"><code>toku_get_metalist</code></a></h3>
+        <!-- toku_get_metatable -->
+        <hr><h3><a name="toku_get_metatable"><code>toku_get_metatable</code></a></h3>
         <span class="apii">[-0, +(0|1), &ndash;]</span>
-        <pre>int toku_get_metalist (toku_State *T, int index);</pre>
+        <pre>int toku_get_metatable (toku_State *T, int index);</pre>
         <p>
-        Pushes the metalist of value at the given index on top of the stack.
+        Pushes the metatable of value at the given index on top of the stack.
         Only <em>fulluserdata</em>, <em>class</em> and transitively
-        <em>instance</em> values have metalist.
-        This returns 1 if the value at given index has a metalist,
+        <em>instance</em> values have metatable.
+        This returns 1 if the value at given index has a metatable,
         otherwise nothing is pushed on the stack and 0 is returned.
         </p>
 
@@ -3729,10 +3937,10 @@ typedef enum toku_MM {
         <code>name</code>.
         </p>
 
-        <!-- toku_set_cfieldstr -->
-        <hr><h3><a name="toku_set_cfieldstr"><code>toku_set_cfieldstr</code></a></h3>
+        <!-- toku_set_cfield_str -->
+        <hr><h3><a name="toku_set_cfield_str"><code>toku_set_cfield_str</code></a></h3>
         <span class="apii">[-1, +0, <em>m</em>]</span>
-        <pre>void toku_set_cfieldstr (toku_State *T, const char *field);</pre>
+        <pre>void toku_set_cfield_str (toku_State *T, const char *field);</pre>
         <p>
         Equivalent to <code>t[field] = v</code> where <code>t</code> is the
         registry table located in the registry under index
@@ -3803,10 +4011,10 @@ typedef enum toku_MM {
         This function pops both the key and value off the stack.
         </p>
 
-        <!-- toku_set_fieldstr -->
-        <hr><h3><a name="toku_set_fieldstr"><code>toku_set_fieldstr</code></a></h3>
+        <!-- toku_set_field_str -->
+        <hr><h3><a name="toku_set_field_str"><code>toku_set_field_str</code></a></h3>
         <span class="apii">[-1, +0, &ndash;]</span>
-        <pre>void toku_set_fieldstr (toku_State *T, int index, const char *field);</pre>
+        <pre>void toku_set_field_str (toku_State *T, int index, const char *field);</pre>
         <p>
         Similar to <a href="#toku_set_field"><code>toku_set_field</code></a>
         but instead of using the value on stack as the key, it instead uses
@@ -3827,10 +4035,10 @@ typedef enum toku_MM {
         This function pops the value off the stack.
         </p>
 
-        <!-- toku_set_fieldint -->
-        <hr><h3><a name="toku_set_fieldint"><code>toku_set_fieldint</code></a></h3>
+        <!-- toku_set_field_int -->
+        <hr><h3><a name="toku_set_field_int"><code>toku_set_field_int</code></a></h3>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>void toku_set_fieldint (toku_State *T, int index, toku_Integer field);</pre>
+        <pre>void toku_set_field_int (toku_State *T, int index, toku_Integer field);</pre>
         <p>
         Identical to <a href="#toku_set_field"><code>toku_set_field</code></a>
         except that the key argument is the Tokudae
@@ -3851,17 +4059,17 @@ typedef enum toku_MM {
         This function pops the value off the stack.
         </p>
 
-        <!-- toku_set_metalist -->
-        <hr><h3><a name="toku_set_metalist"><code>toku_set_metalist</code></a></h3>
+        <!-- toku_set_metatable -->
+        <hr><h3><a name="toku_set_metatable"><code>toku_set_metatable</code></a></h3>
         <span class="apii">[-1, +0, &ndash;]</span>
-        <pre>int toku_set_metalist (toku_State *T, int index);</pre>
+        <pre>int toku_set_metatable (toku_State *T, int index);</pre>
         <p>
         Pops a list or <b>nil</b> from the stack and sets that value as
-        the new metalist for the value at the given index.
-        (<b>nil</b> means no metalist.)
+        the new metatable for the value at the given index.
+        (<b>nil</b> means no metatable.)
         <br/><br/>
         If value at the given index is an instance, class or userdata, 1 is
-        returned, otherwise 0 is returned to indicate metalist was not set
+        returned, otherwise 0 is returned to indicate metatable was not set
         or removed.
         </p>
 
@@ -3954,7 +4162,7 @@ typedef enum toku_MM {
     toku_get_global(C, "f");                 /* function to be called */
     toku_push_literal(C, "how");                      /* 1st argument */
     toku_get_global(C, "t");                   /* table to be indexed */
-    toku_get_fieldstr(C, -1, "x");    /* push result of t.x (2nd arg) */
+    toku_get_field_str(C, -1, "x");    /* push result of t.x (2nd arg) */
     toku_remove(C, -2);                  /* remove 't' from the stack */
     toku_push_integer(C, 14);                         /* 3rd argument */
     toku_call(C, 3, 1);     /* call 'f' with 3 arguments and 1 result */
@@ -4510,13 +4718,13 @@ typedef enum toku_MM {
         (Tokudae may optimize this case.)
         </p>
 
-        <!-- toku_push_metalist -->
-        <hr><h3><a name="toku_push_metalist"><code>toku_push_metalist</code></a></h3>
+        <!-- toku_push_metatable -->
+        <hr><h3><a name="toku_push_metatable"><code>toku_push_metatable</code></a></h3>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>const char *toku_push_metalist (toku_State *T);</pre>
+        <pre>const char *toku_push_metatable (toku_State *T);</pre>
         <p>
         This macro is equivalent to
-        <code>toku_push_list(C, <a href="#TOKU_MT_NUM">TOKU_MT_NUM</a>)</code>
+        <code>toku_push_list(C, <a href="#TM_NUM">TM_NUM</a>)</code>
         (see <a href="#toku_push_list"><code>toku_push_list</code></a>).
         </p>
 
@@ -4992,11 +5200,11 @@ typedef enum toku_MM {
         error messages.
         </p>
 
-        <hr><h3><a name="tokuL_new_metalist"><code>tokuL_new_metalist</code></a></h3><p>
+        <hr><h3><a name="tokuL_new_metatable"><code>tokuL_new_metatable</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>int tokuL_new_metalist (toku_State *T, const char *lname);</pre>
+        <pre>int tokuL_new_metatable (toku_State *T, const char *lname);</pre>
         <p>
-        Creates a new list to be used as a metalist for userdata,
+        Creates a new list to be used as a metatable for userdata,
         adds it into into the table located in the registry at the index
         <a href="#TOKU_RINDEX_REGTABLE"><code>TOKU_RINDEX_REGTABLE</code></a>
         (see <a href="#4.3">&sect;4.3</a>) under the name <code>lname</code>,
@@ -5008,30 +5216,30 @@ typedef enum toku_MM {
         associated with <code>lname</code> in the registry table.
         </p>
 
-        <hr><h3><a name="tokuL_set_metalist"><code>tokuL_set_metalist</code></a></h3><p>
+        <hr><h3><a name="tokuL_set_metatable"><code>tokuL_set_metatable</code></a></h3><p>
         <span class="apii">[-0, +0, &ndash;]</span>
-        <pre>int tokuL_set_metalist (toku_State *T, const char *lname);</pre>
+        <pre>int tokuL_set_metatable (toku_State *T, const char *lname);</pre>
         <p>
-        Sets the metalist of the object on top of the stack as the metalist
+        Sets the metatable of the object on top of the stack as the metatable
         associated with name <code>lname</code> in the table located in
         the registry at the index
         <a href="#TOKU_RINDEX_REGTABLE"><code>TOKU_RINDEX_REGTABLE</code></a>
         (see <a href="#4.3">&sect;4.3</a> and
-        <a href="#tokuL_new_metalist"><code>tokuL_new_metalist</code></a>).
+        <a href="#tokuL_new_metatable"><code>tokuL_new_metatable</code></a>).
         <br/><br/>
         If the value on top of the stack is not a class, instance or userdata,
         this returns 0, otherwise 1 is returned.
         </p>
 
 
-        <hr><h3><a name="tokuL_get_metaindex"><code>tokuL_get_metaindex</code></a></h3><p>
+        <hr><h3><a name="tokuL_get_metafield"><code>tokuL_get_metafield</code></a></h3><p>
         <span class="apii">[-0, +(0|1), &ndash;]</span>
-        <pre>int tokuL_get_metaindex (toku_State *T, int index, int mm);</pre>
+        <pre>int tokuL_get_metafield (toku_State *T, int index, int mm);</pre>
         <p>
         Equivalent to <code>ml[mm]</code>, where <code>ml</code> is the
-        metalist of the value at the given index.
-        If the value at the given index does not have a metalist or the
-        value of metalist at the index <code>mm</code> is <b>nil</b>, then
+        metatable of the value at the given index.
+        If the value at the given index does not have a metatable or the
+        value of metatable at the index <code>mm</code> is <b>nil</b>, then
         nothing is pushed and <a href="#TOKU_T_NONE"><code>TOKU_T_NONE</code></a>
         is returned.
         Otherwise this returns the type of the value pushed on the stack.
@@ -5041,12 +5249,12 @@ typedef enum toku_MM {
         <span class="apii">[-0, +(0|1), <em>e</em>]</span>
         <pre>int tokuL_callmeta (toku_State *T, int index, int mm);</pre>
         <p>
-        If the value at the given index has a metalist and this metalist
+        If the value at the given index has a metatable and this metatable
         has a index <code>mm</code>, this function calls this index value
         passing the value at the given index as its only argument.
         In this case this function returns true and pushes onto the stack
         the value returned by the call.
-        If there is no metalist or no metamethod, this function returns
+        If there is no metatable or no metamethod, this function returns
         false without pushing any value on the stack.
         </p>
 
@@ -5082,11 +5290,11 @@ typedef enum toku_MM {
         <pre>void *tokuL_test_userdata (toku_State *T, int index, const char *lname);</pre>
         <p>
         Checks whether the value at the given index is a full userdata with
-        a metalist equal to the metalist <code>lname</code> in the registry
+        a metatable equal to the metatable <code>lname</code> in the registry
         table.
         If true, this returns the pointer to the underlying memory full
         userdata points to, otherwise if the value is not a full userdata or
-        it doesn't have a matching metalist, NULL is returned.
+        it doesn't have a matching metatable, NULL is returned.
         </p>
 
         <hr><h3><a name="tokuL_MetaEntry"><code>tokuL_MetaEntry</code></a></h3><p>
@@ -5098,7 +5306,7 @@ typedef struct tokuL_MetaEntry {
         <p>
         Type for arrays of functions to be registered by
         <a href="#tokuL_set_metafuncs"><code>tokuL_set_metafuncs</code></a>.
-        <code>mm</code> is the index into the metalist and <code>metaf</code>
+        <code>mm</code> is the index into the metatable and <code>metaf</code>
         is a pointer to the function.
         Any array of <a href="#tokuL_MetaEntry"><code>tokuL_MetaEntry</code></a>
         must end with a sentinel entry in which the <code>mm</code> is set
@@ -5116,7 +5324,7 @@ typedef struct tokuL_MetaEntry {
         When <code>nup</code> is not zero, all functions are created with
         <code>nup</code> upvalues, initialized with copies of the
         <code>nup</code> values previously pushed on the stack on top
-        of the metalist.
+        of the metatable.
         These values are popped from the stack after the registration.
         <br/><br/>
         A function with a <code>NULL</code> value means that the index for
@@ -5161,8 +5369,8 @@ typedef struct tokuL_MetaEntry {
         If <code>len</code> is not <code>NULL</code>, the function also sets
         <code>*len</code> with the string length.
         <br/><br/>
-        If the value has a metalist with a
-        <a name="TOKU_MT_TOSTRING"><code>TOKU_MT_TOSTRING</code></a> index
+        If the value has a metatable with a
+        <a name="TM_TOSTRING"><code>TM_TOSTRING</code></a> index
         set, then <code>tokuL_to_lstring</code> calls the corresponding
         metamethod with the value as argument, and uses the result of the
         call as its result.
@@ -5457,9 +5665,9 @@ typedef struct tokuL_MetaEntry {
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
 
-        <hr><h3><a name="tokuL_push_metalist"><code>tokuL_push_metalist</code></a></h3><p>
+        <hr><h3><a name="tokuL_push_metatable"><code>tokuL_push_metatable</code></a></h3><p>
         <span class="apii">[-0, +1, <em>m</em>]</span>
-        <pre>void tokuL_push_metalist (toku_State *T, const char *lname, const tokuL_MetaEntry l[]);</pre>
+        <pre>void tokuL_push_metatable (toku_State *T, const char *lname, const tokuL_MetaEntry l[]);</pre>
         <p>
         Gets (or creates) a list <code>lname</code> in the registry table and
         registers there the functions in the list <code>l</code>.
@@ -5467,7 +5675,7 @@ typedef struct tokuL_MetaEntry {
         It is implemented as the following macro:
 
         <pre>
-    (tokuL_new_metalist(C,lname), tokuL_set_metafuncs(C,l,0))</pre>
+    (tokuL_new_metatable(C,lname), tokuL_set_metafuncs(C,l,0))</pre>
 
         The array <code>l</code> must be the actual array, not a pointer to it.
         </p>
@@ -5493,15 +5701,15 @@ typedef struct tokuL_MetaEntry {
         <pre>int tokuL_get_methods (toku_State *T, const char *tname);</pre>
         <p>
         This is implemented as a macro equivalent to
-        <a href="#toku_get_cfieldstr"><code>toku_get_cfieldstr</code></a>.
+        <a href="#toku_get_cfield_str"><code>toku_get_cfield_str</code></a>.
         </p>
 
-        <hr><h3><a name="tokuL_get_metalist"><code>tokuL_get_metalist</code></a></h3><p>
+        <hr><h3><a name="tokuL_get_metatable"><code>tokuL_get_metatable</code></a></h3><p>
         <span class="apii">[-0, +1, &ndash;]</span>
-        <pre>int tokuL_get_metalist (toku_State *T, const char *name);</pre>
+        <pre>int tokuL_get_metatable (toku_State *T, const char *name);</pre>
         <p>
         This is implemented as a macro equivalent to
-        <a href="#toku_get_cfieldstr"><code>toku_get_cfieldstr</code></a>.
+        <a href="#toku_get_cfield_str"><code>toku_get_cfield_str</code></a>.
         </p>
 
         <hr><h3><a name="tokuL_intop"><code>tokuL_intop</code></a></h3><p>
@@ -5717,14 +5925,14 @@ typedef struct tokuL_Stream {
         The standard representation for file handles used by the standard
         I/O library.
         <br/><br/>
-        A file handle is implemented as a full userdata, with a metalist
+        A file handle is implemented as a full userdata, with a metatable
         called <code>TOKU_FILEHANDLE</code> and methods table
         called <code>TOKU_FILEHANDLE_METHODS</code>
-        (where <code>TOKU_FILEHANDLE</code> is a macro with the metalist's
+        (where <code>TOKU_FILEHANDLE</code> is a macro with the metatable's
         name and <code>TOKU_FILEHANDLE_METHODS</code> is a macro with the name
         of the methods table).
-        The metalist and the methods table are created by the I/O library
-        (see <a href="#tokuL_new_metalist"><code>tokuL_new_metalist</code></a>
+        The metatable and the methods table are created by the I/O library
+        (see <a href="#tokuL_new_metatable"><code>tokuL_new_metatable</code></a>
         and <a href="#tokuL_new_usermethods"><code>tokuL_new_usermethods</code></a>).
         <br/><br/>
         This userdata must start with the structure <code>tokuL_Stream</code>;
@@ -5940,18 +6148,18 @@ typedef struct tokuL_Stream {
         caller (that is, <code>runfile</code> does not run in protected mode).
         </p>
 
-        <!-- getmetalist -->
-        <hr/><h3><a name="getmetalist"><code>getmetalist (object)</code></a></h3>
+        <!-- getmetatable -->
+        <hr/><h3><a name="getmetatable"><code>getmetatable (object)</code></a></h3>
         <p>
-        Returns the metalist of the given <code>object</code>.
-        If <code>object</code> does not have a metalist, <b>nil</b> is returned.
+        Returns the metatable of the given <code>object</code>.
+        If <code>object</code> does not have a metatable, <b>nil</b> is returned.
         </p>
 
-        <!-- setmetalist -->
-        <hr/><h3><a name="setmetalist"><code>setmetalist (class, metalist)</code></a></h3>
+        <!-- setmetatable -->
+        <hr/><h3><a name="setmetatable"><code>setmetatable (class, metatable)</code></a></h3>
         <p>
-        Sets the metalist for the given class.
-        If <code>metalist</code> is <b>nil</b>, metatable of the given class
+        Sets the metatable for the given class.
+        If <code>metatable</code> is <b>nil</b>, metatable of the given class
         is removed.
         <br/><br/>
         This function returns <code>class</code>.
@@ -6244,181 +6452,181 @@ typedef struct tokuL_Stream {
         <hr/><h3><a name="__getidx"><code>__getidx</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__getidx</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __setidx -->
         <hr/><h3><a name="__setidx"><code>__setidx</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__setidx</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __gc -->
         <hr/><h3><a name="__gc"><code>__gc</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__gc</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __close -->
         <hr/><h3><a name="__close"><code>__close</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__close</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __call -->
         <hr/><h3><a name="__call"><code>__call</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__call</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __init -->
         <hr/><h3><a name="__init"><code>__init</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__init</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __concat -->
         <hr/><h3><a name="__concat"><code>__concat</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__concat</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __add -->
         <hr/><h3><a name="__add"><code>__add</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__add</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __sub -->
         <hr/><h3><a name="__sub"><code>__sub</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__sub</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __mul -->
         <hr/><h3><a name="__mul"><code>__mul</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__mul</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __div -->
         <hr/><h3><a name="__div"><code>__div</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__div</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __idiv -->
         <hr/><h3><a name="__idiv"><code>__idiv</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__idiv</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __mod -->
         <hr/><h3><a name="__mod"><code>__mod</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__mod</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __pow -->
         <hr/><h3><a name="__pow"><code>__pow</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__pow</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __shl -->
         <hr/><h3><a name="__shl"><code>__shl</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__shl</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __shr -->
         <hr/><h3><a name="__shr"><code>__shr</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__shr</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __band -->
         <hr/><h3><a name="__band"><code>__band</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__band</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __bor -->
         <hr/><h3><a name="__bor"><code>__bor</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__bor</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __bxor -->
         <hr/><h3><a name="__bxor"><code>__bxor</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__bxor</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __unm -->
         <hr/><h3><a name="__unm"><code>__unm</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__unm</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __bnot -->
         <hr/><h3><a name="__bnot"><code>__bnot</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__bnot</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __eq -->
         <hr/><h3><a name="__eq"><code>__eq</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__eq</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __lt -->
         <hr/><h3><a name="__lt"><code>__lt</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__lt</code> metamethod in the
-        metalist.
+        metatable.
         </p>
 
         <!-- __le -->
         <hr/><h3><a name="__le"><code>__le</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__le</code> metamethod in the
-        metalist.
+        metatable.
 
         <!-- __tostring -->
         <hr/><h3><a name="__tostring"><code>__tostring</code></a></h3>
         A global variable that holds integer index that
         corresponds to the index for <code>__tostring</code> metamethod in
-        the metalist.
+        the metatable.
         </p>
 
         <!-- __N -->
         <hr/><h3><a name="__N"><code>__N</code></a></h3>
         A global variable that holds total number of
         metamethods reserved by the Tokudae and the standard library.
-        In other terms, this is the first free index in the metalist.
+        In other terms, this is the first free index in the metatable.
         </p>
 
         <h2>6.2 &ndash; <a name="6.2">Package Library</a></h2>
@@ -7631,7 +7839,7 @@ typedef struct tokuL_Stream {
         <a href="io.open"><code>io.open</code></a> returns a file handle
         and then all operations are supplied as methods of the file handle.
         <br/><br/>
-        The metalist for file handles provides metamethods
+        The metatable for file handles provides metamethods
         for <code>__gc</code> and <code>__close</code> that try
         to close the file when called.
         <br/><br/>
@@ -8199,18 +8407,14 @@ typedef struct tokuL_Stream {
         As usual in extended BNF, {A} means 0 or more As, and [A] means an
         optional A.
         (For operator precedences, see <a href="#3.4.7">&sect;3.4.7</a>;
-<<<<<<< Updated upstream
-        for a description of the terminals Name, Numeral,
-=======
         for a description of the terminals Name, Number,
->>>>>>> Stashed changes
         and LiteralString, see <a href="#3.1">&sect;3.1</a>.)
         <br/><br/>
 
         <pre>
     chunk ::= block
     
-    block ::= {decl} [retstm]
+    block ::= {decl} [returnstm]
     
     decl ::= localdecl &lsquo;;&rsquo;
            | <b>local</b> <b>fn</b> Name funcbody
@@ -8225,7 +8429,7 @@ typedef struct tokuL_Stream {
     
     stm ::= &lsquo;;&rsquo;
           | expstm &lsquo;;&rsquo;
-          | functioncall &lsquo;;&rsquo;
+          | call &lsquo;;&rsquo;
           | breakstm
           | continuestm
           | <b>fn</b> indexedname funcbody
@@ -8237,7 +8441,7 @@ typedef struct tokuL_Stream {
           | <b>if</b> &lsquo;(&rsquo; exp &lsquo;)&rsquo; stm [<b>else</b> stm]
           | <b>switch</b> &lsquo;(&rsquo; exp &lsquo;)&rsquo; switchbody
           | &lsquo;{&rsquo; loopblock &lsquo;}&rsquo; 
-          | retstm
+          | returnstm
     
     expstm ::= varlist &lsquo;=&rsquo; explist
     
@@ -8271,7 +8475,7 @@ typedef struct tokuL_Stream {
     switchblock ::= {decl} [breakstm]
                   | block
 
-    retstm ::= <b>return</b> [explist] &lsquo;;&rsquo;
+    returnstm ::= <b>return</b> [explist] &lsquo;;&rsquo;
     
     exp ::= <b>true</b>
           | <b>false</b>
@@ -8288,11 +8492,11 @@ typedef struct tokuL_Stream {
           | unop exp
     
     prefixexp ::= var
-                | functioncall
+                | call
                 | &lsquo;(&rsquo; exp &lsquo;)&rsquo;
                 | superexp
     
-    functioncall ::= prefixexp &lsquo;(&rsquo; [explist] &lsquo;)&rsquo;
+    call ::= prefixexp &lsquo;(&rsquo; [explist] &lsquo;)&rsquo;
     
     superexp ::= <b>super</b> [&lsquo;[&rsquo; exp &lsquo;]&rsquo;]
                | <b>super</b> [&lsquo;.&rsquo; Name]

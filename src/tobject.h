@@ -278,6 +278,20 @@ typedef struct List {
 #define setemptyval(o)      settt(o, TOKU_VEMPTY)
 
 #define ttisnil(o)          checktype((o), TOKU_T_NIL)
+
+/*
+** Macro to test the result of a table access. Formally, it should
+** distinguish between TOKU_VEMPTY/TOKU_VABSTKEY and other tags.
+** As currently nil is equivalent to LUA_VEMPTY, it is simpler to
+** just test whether the value is nil.
+*/
+#define tagisempty(tag)		(novariant(tag) == TOKU_T_NIL)
+
+/*
+** By default, entries with any kind of nil are considered empty.
+** (In any definition, values associated with absent keys must also
+** be accepted as empty.)
+*/
 #define isempty(o)          ttisnil(o)
 
 #define isabstkey(v)        checktag((v), TOKU_VABSTKEY)
@@ -360,6 +374,7 @@ typedef union Node {
 
 typedef struct Table {
     ObjectHeader; /* internal only object */
+    t_ubyte flags; /* 1<<p means tagmethod(p) is not present */
     t_ubyte size; /* log2 of array size */
     Node *node; /* memory block */
     Node *lastfree; /* any free position is before this position */
@@ -427,6 +442,9 @@ typedef struct OString {
 } OString;
 
 
+#define strisshr(ts)	((ts)->shrlen < 0xFF)
+
+
 /*
 ** Get string bytes from 'OString'. (Both generic version and specialized
 ** versions for long and short strings.)
@@ -462,7 +480,7 @@ typedef struct OString {
 typedef struct OClass {
     ObjectHeader;
     struct OClass *sclass;
-    List *metalist;
+    Table *metatable;
     Table *methods;
 } OClass;
 
@@ -747,8 +765,7 @@ typedef struct UserData {
     ObjectHeader;
     t_ushort nuv; /* number of 'uservalues' */
     size_t size; /* size of 'UserData' memory in bytes */
-    List *metalist;
-    Table *methods;
+    Table *metatable;
     GCObject *gclist;
     UValue uv[]; /* user values */
     /* 'UserData' memory starts here */
@@ -767,8 +784,7 @@ typedef struct EmptyUserData {
     ObjectHeader;
     t_ushort nuv;
     size_t size;
-    List *metalist;
-    Table *methods;
+    Table *metatable;
     union {TOKUI_MAXALIGN;} bin;
     /* 'UserData' memory starts here */
 } EmptyUserData;
@@ -820,7 +836,7 @@ typedef enum N2IMode {
 
 
 /* fast 'module' operation for hashing (sz is always power of 2) */
-#define hashmod(h,sz) \
+#define tmod(h,sz) \
         (check_exp(((sz&(sz-1))==0), (cast_int((h) & ((sz)-1)))))
 
 

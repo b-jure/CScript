@@ -17,7 +17,7 @@
 #define vm_break            fetch(); vm_dispatch(I)
 
 
-static const void *const jmptable[NUM_OPCODES] = { /* ORDER OP */
+static const void *const jmptable[NUM_OPCODES] = { /* "ORDER OP" */
     &&L_OP_TRUE,
     &&L_OP_FALSE,
     &&L_OP_SUPER,

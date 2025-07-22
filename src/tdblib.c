@@ -96,17 +96,17 @@ static toku_State *getthread(toku_State *T, int *arg) {
 */
 static void settabss(toku_State *T, const char *k, const char *v) {
     toku_push_string(T, v);
-    toku_set_fieldstr(T, -2, k);
+    toku_set_field_str(T, -2, k);
 }
 
 static void settabsi(toku_State *T, const char *k, int v) {
     toku_push_integer(T, v);
-    toku_set_fieldstr(T, -2, k);
+    toku_set_field_str(T, -2, k);
 }
 
 static void settabsb(toku_State *T, const char *k, int v) {
     toku_push_bool(T, v);
-    toku_set_fieldstr(T, -2, k);
+    toku_set_field_str(T, -2, k);
 }
 
 
@@ -115,14 +115,14 @@ static void settabsb(toku_State *T, const char *k, int v) {
 ** results on the stack; later it creates the result table to put
 ** these objects. Function 'treatstackoption' puts the result from
 ** 'toku_getinfo' on top of the result table so that it can call
-** 'toku_set_fieldstr'.
+** 'toku_set_field_str'.
 */
 static void treatstackoption(toku_State *T, toku_State *T1, const char *fname) {
     if (T == T1)
         toku_rotate(T, -2, 1); /* exchange object and table */
     else
         toku_xmove(T1, T, 1); /* move object to the "main" stack */
-    toku_set_fieldstr(T, -2, fname); /* put object into table */
+    toku_set_field_str(T, -2, fname); /* put object into table */
 }
 
 
@@ -154,7 +154,7 @@ static int db_getinfo(toku_State *T) {
     toku_push_table(T, 0); /* table to collect results */
     if (strchr(options, 's')) {
         toku_push_lstring(T, ar.source, ar.srclen);
-        toku_set_fieldstr(T, -2, "source");
+        toku_set_field_str(T, -2, "source");
         settabss(T, "shortsrc", ar.shortsrc);
         settabsi(T, "defline", ar.defline);
         settabsi(T, "lastdefline", ar.lastdefline);
@@ -303,7 +303,7 @@ static int db_upvaluejoin(toku_State *T) {
 */
 static void hookf(toku_State *T, toku_Debug *ar) {
     static const char *const hooknames[] = {"call","return","line","count"};
-    toku_get_cfieldstr(T, HOOKKEY);
+    toku_get_cfield_str(T, HOOKKEY);
     toku_push_thread(T);
     if (toku_get_raw(T, -2) == TOKU_T_FUNCTION) { /* is there a hook function? */
         toku_push_string(T, hooknames[ar->event]); /* push event name */
@@ -377,7 +377,7 @@ static int db_gethook(toku_State *T) {
     } else if (hook != hookf) /* external hook? */
         toku_push_literal(T, "external hook");
     else { /* hook table must exist */
-        toku_get_cfieldstr(T, HOOKKEY);
+        toku_get_cfield_str(T, HOOKKEY);
         checkstack(T, T1, 1);
         toku_push_thread(T1); toku_xmove(T1, T, 1);
         toku_get_raw(T, -2); /* 1st result = hooktable[T1] */
@@ -459,8 +459,8 @@ static const tokuL_Entry dblib[] = {
 TOKUMOD_API int tokuopen_debug(toku_State *T) {
     tokuL_push_lib(T, dblib);
     toku_push_integer(T, TOKUI_MAXCCALLS);
-    toku_set_fieldstr(T, -2, "cstacklimit");
+    toku_set_field_str(T, -2, "cstacklimit");
     toku_push_integer(T, TOKUI_MAXSTACK);
-    toku_set_fieldstr(T, -2, "maxstack");
+    toku_set_field_str(T, -2, "maxstack");
     return 1;
 }

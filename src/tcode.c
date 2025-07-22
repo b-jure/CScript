@@ -26,19 +26,16 @@
 #define hasjumps(e)     ((e)->t != (e)->f)
 
 
-/* unary operation to opcode */
-#define unopr2op(opr) \
+#define unop2opcode(opr) \
         cast(OpCode, cast_int(opr) - OPR_UNM + OP_UNM)
 
 
-/* binary operation to opcode */
-#define binopr2op(opr,x,from) \
+#define binop2opcode(opr,x,from) \
         cast(OpCode, (cast_int(opr) - cast_int(x)) + cast_int(from))
 
 
-/* binary opcode to metamethod tag */
-#define binop2mm(op) \
-        ((cast_int(op) - OP_ADD) + cast_int(TOKU_MT_ADD))
+#define binop2event(op) \
+        ((cast_int(op) - OP_ADD) + cast_int(TM_ADD))
 
 
 /*
@@ -54,7 +51,7 @@
 ** first do '1000_0001 & 0111_1111', then convert to signed
 ** '(char)(~0000_0001 + 1)'.
 ** Note: all of this is done on integers, so the exact bit operations
-** differ from the ones shown above.
+** differ from the ones shown here.
 */
 #define MIN_IMM         (MIN_ARG_S>>1)
 #define MAX_IMM         (MAX_ARG_S>>1)
@@ -70,7 +67,7 @@
 
 /* 
 ** OpCode properties table.
-** ORDER OP
+** "ORDER OP"
 */
 TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
     /* FORMAT PSH POP CHGTOP */
@@ -182,7 +179,7 @@ TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
 /* 
 ** OpFormat size table (in bytes).
 */
-TOKUI_DEF const t_ubyte tokuC_opsize[FormatN] = { /* ORDER OPFMT */
+TOKUI_DEF const t_ubyte tokuC_opsize[FormatN] = { /* "ORDER OPFMT" */
     SIZE_INSTR,                             /* FormatI */
     SIZE_INSTR+SIZE_ARG_S,                  /* FormatIS */
     SIZE_INSTR+SIZE_ARG_S*2,                /* FormatISS */
@@ -197,7 +194,7 @@ TOKUI_DEF const t_ubyte tokuC_opsize[FormatN] = { /* ORDER OPFMT */
 /* 
 ** Names of all instructions.
 */
-TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* ORDER OP */
+TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* "ORDER OP" */
 "TRUE", "FALSE", "SUPER", "NIL", "POP", "LOAD", "CONST", "CONSTL",
 "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
 "CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMT", "MBIN", "ADDK",
@@ -436,31 +433,47 @@ int tokuC_vararg(FunctionState *fs, int nreturns) {
 }
 
 
-/* add constant value to the function */
-static int addK(FunctionState *fs, TValue *key, TValue *v) {
-    TValue val;
+/*
+** Add constant 'v' to prototype's list of constants (field 'k').
+*/
+static int addK(FunctionState *fs, Proto *p, TValue *v) {
     toku_State *T = fs->lx->T;
-    Proto *p = fs->p;
-    const TValue *index = tokuH_get(fs->lx->tab, key); /* from scanner table */
-    int k, oldsz;
-    if (ttisint(index)) { /* value is integer? */
-        k = cast_int(ival(index)); /* get the index... */
-        /* ...and check if the value is correct */
-        if (k < fs->nk && ttypetag(&p->k[k]) == ttypetag(v) &&
-                          tokuV_raweq(&p->k[k], v))
-            return k; /* reuse index */
-    } /* otherwise constant not found; create a new entry */
-    oldsz = p->sizek;
-    k = fs->nk;
-    setival(&val, k);
-    tokuH_finishset(T, fs->lx->tab, index, key, &val);
+    int oldsize = p->sizek;
+    int k = fs->nk;
     tokuM_growarray(T, p->k, p->sizek, k, MAX_ARG_L, "constants", TValue);
-    while (oldsz < p->sizek) /* nil out the new part */
-        setnilval(&p->k[oldsz++]);
+    while (oldsize < p->sizek)
+        setnilval(&p->k[oldsize++]);
     setobj(T, &p->k[k], v);
     fs->nk++;
     tokuG_barrier(T, p, v);
-    return k; /* new index */
+    return k;
+}
+
+
+/*
+** Use scanner's table to cache position of constants in constant list
+** and try to reuse constants. Because some values should not be used
+** as keys (nil cannot be a key, integer keys can collapse with float
+** keys), the caller must provide a useful 'key' for indexing the cache.
+*/
+static int k2proto(FunctionState *fs, TValue *key, TValue *value) {
+    TValue val;
+    Proto *p = fs->p;
+    t_ubyte tag = tokuH_get(fs->kcache, key, &val); /* query scanner table */
+    int k;
+    if (!tagisempty(tag)) { /* is there an index? */
+        k = cast_int(ival(&val));
+        /* collisions can happen only for float keys */
+        toku_assert(ttisflt(key) || tokuV_raweq(&p->k[k], value));
+        return k;  /* reuse index */
+    }
+    /* constant not found; create a new entry */
+    k = addK(fs, p, value);
+    /* cache it for reuse; numerical value does not need GC barrier;
+       table is not a metatable, so it does not need to invalidate cache */
+    setival(&val, k);
+    tokuH_set(fs->lx->T, fs->kcache, key, &val);
+    return k;
 }
 
 
@@ -468,8 +481,9 @@ static int addK(FunctionState *fs, TValue *key, TValue *v) {
 static int nilK(FunctionState *fs) {
     TValue nv, key;
     setnilval(&nv);
-    settval(fs->lx->T, &key, fs->lx->tab);
-    return addK(fs, &key, &nv);
+    /* cannot use nil as key; instead use table itself */
+    settval(fs->lx->T, &key, fs->kcache);
+    return k2proto(fs, &key, &nv);
 }
 
 
@@ -477,7 +491,7 @@ static int nilK(FunctionState *fs) {
 static int trueK(FunctionState *fs) {
     TValue btv;
     setbtval(&btv);
-    return addK(fs, &btv, &btv);
+    return k2proto(fs, &btv, &btv);
 }
 
 
@@ -485,7 +499,7 @@ static int trueK(FunctionState *fs) {
 static int falseK(FunctionState *fs) {
     TValue bfv;
     setbfval(&bfv);
-    return addK(fs, &bfv, &bfv);
+    return k2proto(fs, &bfv, &bfv);
 }
 
 
@@ -493,7 +507,7 @@ static int falseK(FunctionState *fs) {
 static int stringK(FunctionState *fs, OString *s) {
     TValue vs;
     setstrval(fs->lx->T, &vs, s);
-    return addK(fs, &vs, &vs);
+    return k2proto(fs, &vs, &vs);
 }
 
 
@@ -501,39 +515,41 @@ static int stringK(FunctionState *fs, OString *s) {
 static int intK(FunctionState *fs, toku_Integer i) {
     TValue vi;
     setival(&vi, i);
-    return addK(fs, &vi, &vi);
+    return k2proto(fs, &vi, &vi);
 }
 
 
 /*
 ** Add a float to list of constants and return its index. Floats
 ** with integral values need a different key, to avoid collision
-** with actual integers. To that, we add to the number its smaller
+** with actual integers. To do that, we add to the number its smallest
 ** power-of-two fraction that is still significant in its scale.
 ** For doubles, that would be 1/2^52.
-** (This method is not bulletproof: there may be another float
-** with that value, and for floats larger than 2^53 the result is
-** still an integer. At worst, this only wastes an entry with
-** a duplicate.)
+** This method is not bulletproof: different numbers may generate the
+** same key (e.g., very large numbers will overflow to 'inf') and for
+** floats larger than 2^53 the result is still an integer. At worst,
+** this only wastes an entry with a duplicate.
 */
 static int fltK(FunctionState *fs, toku_Number n) {
-    TValue vn;
-    toku_Integer ik;
+    TValue vn, kv;
     setfval(&vn, n);
-    if (!tokuO_n2i(n, &ik, N2IEQ)) { /* not an integral value? */
-        return addK(fs, &vn, &vn); /* use number itself as key */
-    } else { /* otherwise must build an alternative key */
-        /* number of mantissa bits including the leading bit (1) */
+    if (n == 0) { /* handle zero as a special case */
+        setpval(&kv, fs); /* use FunctionState as index */
+        return k2proto(fs, &kv, &vn);/* cannot collide */
+    } else {
         const int nmb = t_floatatt(MANT_DIG); 
-        /* q = 1.0 * (1/2^52) */
         const toku_Number q = t_mathop(ldexp)(t_mathop(1.0), -nmb + 1);
-        const toku_Number k = (ik == 0 ? q : n + n*q); /* new key */
-        TValue kv;
+        const toku_Number k = n * (1 + q); /* key */
+        toku_Integer ik;
         setfval(&kv, k);
-        /* result is not an integral value, unless value is too large */
-        toku_assert(!tokuO_n2i(k, &ik, N2IEQ) ||
-                   t_mathop(fabs)(n) >= t_mathop(1e6));
-        return addK(fs, &kv, &vn);
+        if (!tokuO_n2i(n, &ik, N2IEQ)) { /* not an integral value? */
+            int n = k2proto(fs, &kv, &vn); /* use key */
+            if (tokuV_raweq(&fs->p->k[n], &vn)) /* correct value? */
+                return n;
+        }
+        /* else, either key is still an integer or there was a collision;
+           anyway, do not try to reuse constant; instead, create a new one */
+        return addK(fs, fs->p, &vn);
     }
 }
 
@@ -600,7 +616,7 @@ void tokuC_setmulret(FunctionState *fs, ExpInfo *e) {
 ** can be merged.
 */
 static int canmerge(FunctionState *fs, OpCode op) {
-    static const int okbarrier[] = { 2, 1, }; /* ORDER OP */
+    static const int okbarrier[] = { 2, 1, }; /* "ORDER OP" */
     op -= OP_NIL;
     toku_assert(0 <= op && op < 2);
     toku_assert(0 <= fs->opbarrier && fs->opbarrier <= 3);
@@ -686,7 +702,7 @@ void tokuC_methodset(FunctionState *fs, ExpInfo *e) {
 
 
 void tokuC_mtset(FunctionState *fs, int mt) {
-    toku_assert(0 <= mt && mt < TOKU_MT_NUM);
+    toku_assert(0 <= mt && mt < TM_NUM);
     tokuC_emitIS(fs, OP_SETMT, mt);
     freeslots(fs, 1);
 }
@@ -1316,7 +1332,7 @@ void tokuC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
         case OPR_UNM: case OPR_BNOT: {
             if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + TOKU_OP_UNM))
                 break; /* folded */
-            codeunary(fs, e, unopr2op(uopr), line);
+            codeunary(fs, e, unop2opcode(uopr), line);
             break;
         }
         case OPR_NOT:  {
@@ -1493,7 +1509,7 @@ t_sinline void swapexp(ExpInfo *e1, ExpInfo *e2) {
 */
 static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                     int commutative, int line) {
-    OpCode op = binopr2op(opr, OPR_ADD, OP_ADD);
+    OpCode op = binop2opcode(opr, OPR_ADD, OP_ADD);
     int swap = !commutative && !onstack(e1) && onstack(e2);
     tokuC_exp2stack(fs, e1);
     tokuC_exp2stack(fs, e2);
@@ -1501,7 +1517,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
     e1->u.info = tokuC_emitIS(fs, op, swap);
     e1->et = EXP_FINEXPR;
     tokuC_fixline(fs, line);
-    tokuC_emitIS(fs, OP_MBIN, binop2mm(op));
+    tokuC_emitIS(fs, OP_MBIN, binop2event(op));
     tokuC_fixline(fs, line);
 }
 
@@ -1509,7 +1525,7 @@ static void codebin(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
 /* code binary instruction variant where second operator is constant */
 static void codebinK(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
-    OpCode op = binopr2op(opr, OPR_ADD, OP_ADDK);
+    OpCode op = binop2opcode(opr, OPR_ADD, OP_ADDK);
     int ik = e2->u.info; /* index into 'constants' */
     toku_assert(OP_ADDK <= op && op <= OP_BXORK);
     toku_assert(e2->et == EXP_K);
@@ -1537,7 +1553,7 @@ static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
     int imm = e2->u.i;
-    OpCode op = binopr2op(opr, OPR_ADD, OP_ADDI);
+    OpCode op = binop2opcode(opr, OPR_ADD, OP_ADDI);
     toku_assert(e2->et == EXP_INT);
     tokuC_exp2stack(fs, e1);
     e1->u.info = tokuC_emitIL(fs, op, (imm < 0 ? imml(imm) : imm));
@@ -1618,11 +1634,11 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
     if (isnumIK(e2, &imm)) {
         /* use immediate operand */
         tokuC_exp2stack(fs, e1);
-        op = binopr2op(opr, OPR_LT, OP_LTI);
+        op = binop2opcode(opr, OPR_LT, OP_LTI);
     } else if (isnumIK(e1, &imm)) {
         /* transform (A < B) to (B > A) and (A <= B) to (B >= A) */
         tokuC_exp2stack(fs, e2);
-        op = binopr2op(opr, OPR_LT, OP_GTI);
+        op = binop2opcode(opr, OPR_LT, OP_GTI);
     } else { /* regular case, compare two stack values */
         int swap = 0;
         if (!swapped)
@@ -1633,7 +1649,7 @@ static void codeorder(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
             swap = 0;
         tokuC_exp2stack(fs, e1);
         tokuC_exp2stack(fs, e2);
-        op = binopr2op(opr, OPR_LT, OP_LT);
+        op = binop2opcode(opr, OPR_LT, OP_LT);
         e1->u.info = tokuC_emitIS(fs, op, swap);
         freeslots(fs, 1); /* one stack value is removed */
         goto l_fin;

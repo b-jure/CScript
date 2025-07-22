@@ -12,24 +12,40 @@
 
 
 /* generic loop private variable offsets */
-#define VAR_ITER    0  /* iterator offset */
-#define VAR_STATE   1  /* invariant state offset */
-#define VAR_CNTL    2  /* control variable offset */
-#define VAR_TBC     3  /* to-be-closed variable offset */
-#define VAR_N       4
+#define VAR_ITER    0 /* iterator offset */
+#define VAR_STATE   1 /* invariant state offset */
+#define VAR_CNTL    2 /* control variable offset */
+#define VAR_TBC     3 /* to-be-closed variable offset */
+#define VAR_N       4 /* totaal number of vars */
 
 
+/* raw equality ('T' == NULL) */
 #define tokuV_raweq(v1_,v2_)    tokuV_ordereq(NULL, v1_, v2_)
 
 
-#define tokuV_setlist(C,l,key,val,f) \
-    { f(C, l, key, val); tokuG_barrierback(C, obj2gco(l), val); }
-
-#define tokuV_settable(C,t,key,val,f) \
-    { f(C, t, key, val); tokuG_barrierback(C, obj2gco(t), val); }
+/* set table slot or list index, check GC barrier and do 'pos' */
+#define tokuV_setbarrier_pos(T,o,key,val,f,pos) \
+    { f(T, o, key, val); tokuG_barrierback(T, obj2gco(o), val); pos; }
 
 
-TOKUI_FUNC void tokuV_inherit(toku_State *T, OClass *cls, OClass *scl);
+/* set object index and check GC barrier */
+#define tokuV_setbarrier(T,o,key,val,f) \
+        tokuV_setbarrier_pos(T, o, key, val, f, (void)0)
+
+
+/* set list and check GC barrier */
+#define tokuV_setlist(T,l,key,val,f)    tokuV_setbarrier(T, l, key, val, f)
+
+
+/* set table and check GC barrier */
+#define tokuV_settable(T,t,key,val,f)   tokuV_setbarrier(T, t, key, val, f)
+
+
+/* set table, check GC barrier and invalidate table TM cache */
+#define tokuV_settableTM(T,t,key,val,f) \
+        tokuV_setbarrier_pos(T, t, key, val, f, invalidateTMcache(t))
+
+
 TOKUI_FUNC void tokuV_call(toku_State *T, SPtr fn, int nreturns);
 TOKUI_FUNC void tokuV_concat(toku_State *T, int n);
 TOKUI_FUNC toku_Integer tokuV_divi(toku_State *T, toku_Integer x,

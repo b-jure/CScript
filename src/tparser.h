@@ -192,6 +192,7 @@ typedef struct FunctionState {
     struct Scope *scope;        /* chain, current scope */
     struct Scope *loopscope;    /* chain, innermost loop scope */
     struct Scope *switchscope;  /* chain, innermost switch scope */
+    Table *kcache;      /* cache for reusing constants */
     int firstlocal;     /* index of first local in 'lvars' */
     int loopstart;      /* innermost loop start offset */
     int prevpc;         /* previous instruction pc */

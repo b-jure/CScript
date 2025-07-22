@@ -462,6 +462,6 @@ static tokuL_Entry lstlib[] = {
 TOKUMOD_API int tokuopen_list(toku_State *T) {
     tokuL_push_lib(T, lstlib);
     toku_push_integer(T, TOKU_MAXLISTINDEX);
-    toku_set_fieldstr(T, -2, "maxindex");
+    toku_set_field_str(T, -2, "maxindex");
     return 1;
 }

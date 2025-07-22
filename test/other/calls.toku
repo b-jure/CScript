@@ -147,7 +147,7 @@ assert(a.deep(30000) == 101);
 
     /// tail calls x metamethods
     local ml = []; ml[__MT.call] = foo;
-    local z = setmetalist(class {}, ml)();
+    local z = setmetatable(class {}, ml)();
     local fn foo2(x) { return z(10, x); };
     a, b, c = foo2(100);
     assert(a == z and b == 10 and c == 100);
@@ -199,7 +199,7 @@ assert(a.deep(30000) == 101);
     foreach i in range(0, 15) {
         local ml = [];
         ml[__MT.call] = foo;
-        foo = setmetalist(class {}, ml)();
+        foo = setmetatable(class {}, ml)();
     }
 
     assert((fn() { return foo(); })() == 1023);
@@ -212,7 +212,7 @@ assert(a.deep(30000) == 101);
     local u = (class { __call = fn(...) { return [...]; }; })();
     foreach i in range(0, N) {
         local ml = []; ml[__MT.call] = u;
-        u = setmetalist(class {}, ml)();
+        u = setmetatable(class {}, ml)();
         u[0] = i;
     }
     local Res = u("a", "b", "c");
@@ -229,7 +229,7 @@ assert(a.deep(30000) == 101);
     local u = (class { __init = fn(...) { return [...]; }; });
     foreach i in range(0, N) {
         local ml = []; ml[__MT.init] = u;
-        u = setmetalist(class {}, ml);
+        u = setmetatable(class {}, ml);
     }
     local Res = u("a", "b", "c");
     assert(len(Res) == N + 3);

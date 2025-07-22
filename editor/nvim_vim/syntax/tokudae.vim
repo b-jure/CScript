@@ -74,7 +74,7 @@ syn match tokudaeCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\|\\[
 
 "-Numbers---------{
 " decimal integers
-syn match tokudaeNumber /\<\%(0\|[1-9][[:digit:]_]*\)\>/
+syn match tokudaeNumber /\<[0-9][[:digit:]_]*\>/
 " hexadecimal integers
 syn match tokudaeNumber /\<0x\x[[:xdigit:]_]*\>/
 " binary integers
@@ -94,9 +94,6 @@ syn match tokudaeFloat /\<\d[_0-9]*[eE][-+]\=\d[[:digit:]_]*\>/
 syn match tokudaeFloat /\<0[xX]\x[[:xdigit:]_]*\.\x\+[pP][-+]\=\d[[:digit:]_]*\>/
 " hexadecimal floating point number, with leading digits, optional dot, with exponent
 syn match tokudaeFloat /\<0x\x[[:digit:]_]*\.\=[pP][-+]\=\d[[:digit:]_]*\>/
-
-" flag an octal number with wrong digits
-syn match tokudaeOctalError /0[0-7]*[89]\d*/
 "-----------------}
 
 "-Keywords--------{
@@ -200,12 +197,12 @@ syn region tokudaeClosure transparent matchgroup=tokudaeStatement start=/|\ze\_s
 syn keyword tokudaeMetaTag __getidx __setidx __gc __close __call __init
 syn keyword tokudaeMetaTag __concat __mod __pow __add __sub __mul __div
 syn keyword tokudaeMetaTag __shl __shr __band __bor __bxor __unm __bnot
-syn keyword tokudaeMetaTag __eq __lt __le __name __metalist
+syn keyword tokudaeMetaTag __eq __lt __le __name __metatable
 "-----------------}
 
 "-Basic library---{{
-syn keyword tokudaeFunc error assert gc load loadfile runfile getmetalist
-syn keyword tokudaeFunc setmetalist getmethods setmethods nextfield pairs
+syn keyword tokudaeFunc error assert gc load loadfile runfile getmetatable
+syn keyword tokudaeFunc setmetatable getmethods setmethods nextfield pairs
 syn keyword tokudaeFunc ipairs pcall xpcall print printf warn len rawequal
 syn keyword tokudaeFunc rawget rawset getargs tonum tostr typeof getclass
 syn keyword tokudaeFunc clone unwrapmethod getsuper range
@@ -236,7 +233,7 @@ syn match tokudaeFunc /\<__MT\.eq\>/
 syn match tokudaeFunc /\<__MT\.lt\>/
 syn match tokudaeFunc /\<__MT\.le\>/
 syn match tokudaeFunc /\<__MT\.name\>/
-syn match tokudaeFunc /\<__MT\.metalist\>/
+syn match tokudaeFunc /\<__MT\.metatable\>/
 syn match tokudaeFunc /\<__MT\.tostring\>/
 "-Package library-}{
 syn keyword tokudaeFunc import
@@ -418,7 +415,6 @@ hi def link tokudaeConstant             Constant
 hi def link tokudaeCurlyError           tokudaeError
 hi def link tokudaeErrorInParen         tokudaeError
 hi def link tokudaeErrorInBracket       tokudaeError
-hi def link tokudaeOctalError           tokudaeError
 hi def link tokudaeCommentError         tokudaeError
 hi def link tokudaeCommentStartError    tokudaeError
 hi def link tokudaeWrongComTail	        tokudaeError

@@ -66,8 +66,8 @@ static int checkcache(toku_State *T, int index) {
 
 
 /*
-** More often than not, the value to query in cache table is
-** on stack top.
+** More often than not, the value to query in cache table is on
+** stack top.
 */
 #define checkcachetop(T)   checkcache(T, -1)
 
@@ -113,18 +113,17 @@ static void clonetable(toku_State *T, int index) {
 }
 
 
-/* auxiliary clone function for meta objects */
-static void clonemetalist(toku_State *T, int index) {
+static void clonemetatable(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
-    if (toku_get_metalist(T, index)) {
+    if (toku_get_metatable(T, index)) {
         if (!checkcachetop(T))
-            clonelist(T, toku_gettop(T));
+            clonetable(T, toku_gettop(T));
         toku_replace(T, -2); /* replace original */
-        toku_set_metalist(T, -2);
+        toku_set_metatable(T, -2);
     }
 }
 
-/* auxiliary clone function for meta objects */
+
 static void clonemethods(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
     if (toku_get_methods(T, index)) {
@@ -135,7 +134,7 @@ static void clonemethods(toku_State *T, int index) {
     }
 }
 
-/* auxiliary clone function for meta objects */
+
 static void clonesuperclass(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
     if (toku_get_superclass(T, index)) {
@@ -149,9 +148,9 @@ static void clonesuperclass(toku_State *T, int index) {
 
 static void cloneclass(toku_State *T, int index) {
     toku_assert(CACHEINDEX < index);
-    tokuL_check_stack(T, 4, errclone); /* class+(list/table/superclass)+cache */
+    tokuL_check_stack(T, 4, errclone); /* class+(mt/table/superclass)+cache */
     toku_push_class(T);
-    clonemetalist(T, index);
+    clonemetatable(T, index);
     clonemethods(T, index);
     clonesuperclass(T, index);
     cacheobject(T, index);
@@ -172,12 +171,11 @@ static void cloneuserdata(toku_State *T, int index) {
     void *p;
     t_uint nuv = toku_numuservalues(T, check_exp(CACHEINDEX < index, index));
     size_t size = toku_lenudata(T, index);
-    tokuL_check_stack(T, 5, errclone); /* udata+(mlist/methods/2xudval)+cache */
+    tokuL_check_stack(T, 5, errclone); /* udata+(mt/methods/2xudval)+cache */
     p = toku_push_userdata(T, size, nuv);
     memcpy(p, toku_to_userdata(T, index), size);
-    clonemethods(T, index);
-    if (toku_get_metalist(T, index))
-        toku_set_metalist(T, -2); /* keep metalist the same */
+    if (toku_get_metatable(T, index))
+        toku_set_metatable(T, -2); /* keep metatable the same for userdata */
     cloneuservalues(T, index, nuv);
     cacheobject(T, index);
 }
@@ -444,14 +442,14 @@ static int b_runfile(toku_State *T) {
 
 
 // TODO: update docs
-static int b_getmetalist(toku_State *T) {
+static int b_getmetatable(toku_State *T) {
     tokuL_check_any(T, 0);
-    if (!toku_get_metalist(T, 0)) {
+    if (!toku_get_metatable(T, 0)) {
         toku_push_nil(T);
-        return 1; /* no metalist */
+        return 1; /* no metatable */
     }
-    tokuL_get_metaindex(T, 0, TOKU_MT_METALIST);
-    return 1; /* return either metalist tag value (if present) or metalist */
+    tokuL_get_metafield(T, 0, "__metatable");
+    return 1; /* return either __metatable value (if present) or metatable */
 }
 
 
@@ -461,15 +459,15 @@ static int b_getmetalist(toku_State *T) {
 
 
 // TODO: update docs
-static int b_setmetalist(toku_State *T) {
+static int b_setmetatable(toku_State *T) {
     int t = toku_type(T, 0);
     expectmeta(T, t, 0);
     t = toku_type(T, 1);
-    tokuL_expect_arg(T, t == TOKU_T_NIL || t == TOKU_T_LIST, 1, "nil/list");
-    if (t_unlikely(tokuL_get_metaindex(T, 0, TOKU_MT_METALIST) != TOKU_T_NONE))
-        return tokuL_error(T, "cannot change a protected metalist");
+    tokuL_expect_arg(T, t == TOKU_T_NIL || t == TOKU_T_TABLE, 1, "nil/table");
+    if (t_unlikely(tokuL_get_metafield(T, 0, "__metatable") != TOKU_T_NONE))
+        return tokuL_error(T, "cannot change a protected metatable");
     toku_setntop(T, 2);
-    toku_set_metalist(T, 0);
+    toku_set_metatable(T, 0);
     return 1;
 }
 
@@ -968,8 +966,8 @@ static const tokuL_Entry basic_funcs[] = {
     {"load", b_load},
     {"loadfile", b_loadfile},
     {"runfile", b_runfile},
-    {"getmetalist", b_getmetalist},
-    {"setmetalist", b_setmetalist},
+    {"getmetatable", b_getmetatable},
+    {"setmetatable", b_setmetatable},
     {"unwrapmethod", b_unwrapmethod},
     {"getmethods", b_getmethods},
     {"setmethods", b_setmethods},
@@ -1006,9 +1004,9 @@ static const tokuL_Entry basic_funcs[] = {
 
 
 static void set_compat(toku_State *T, const char *have, const char *missing) {
-    if (have) toku_set_fieldstr(T, -2, have);
+    if (have) toku_set_field_str(T, -2, have);
     toku_push_nil(T);
-    toku_set_fieldstr(T, -2, missing);
+    toku_set_field_str(T, -2, missing);
 }
 
 
@@ -1026,39 +1024,17 @@ static void set_compat_flags(toku_State *T) {
 }
 
 
-/* create __MT table that holds meta tags */
-static void create_meta(toku_State *T) {
-    const char *mm[TOKU_MT_NUM] = { /* ORDER MT */
-        "getidx", "setidx", "gc", "close", "call", "init", "concat", "add",
-        "sub", "mul", "div", "idiv", "mod", "pow", "shl", "shr", "band",
-        "bor", "bxor", "unm", "bnot", "eq", "lt", "le", "name", "metalist"
-    };
-    toku_push_table(T, TOKU_MT_NUM + 1);
-    for (int i = 0; i < TOKU_MT_NUM; i++) {
-        toku_push_integer(T, i);
-        toku_set_fieldstr(T, -2, mm[i]);
-    }
-    toku_push_integer(T, TOKU_MT_NUM);
-    toku_set_fieldstr(T, -2, "tostring");
-    toku_push_integer(T, TOKU_MT_NUM + 1);
-    toku_set_fieldstr(T, -2, "n");
-    toku_set_fieldstr(T, -2, "__MT");
-}
-
-
 TOKUMOD_API int tokuopen_basic(toku_State *T) {
     /* open lib into global instance */
     toku_push_globaltable(T);
     tokuL_set_funcs(T, basic_funcs, 0);
     /* set global __G */
     toku_push(T, -1); /* copy of global table */
-    toku_set_fieldstr(T, -2, TOKU_GNAME);
+    toku_set_field_str(T, -2, TOKU_GNAME);
     /* set global __VERSION */
     toku_push_literal(T, TOKU_VERSION);
-    toku_set_fieldstr(T, -2, "__VERSION");
+    toku_set_field_str(T, -2, "__VERSION");
     /* set compatibility flags */
     set_compat_flags(T);
-    /* set global metalist indices */
-    create_meta(T);
     return 1;
 }

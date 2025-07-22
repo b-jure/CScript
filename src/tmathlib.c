@@ -632,13 +632,13 @@ const tokuL_Entry mathlib[] = {
 TOKUMOD_API int tokuopen_math(toku_State *T) {
     tokuL_push_lib(T, mathlib);
     toku_push_number(T, PI);
-    toku_set_fieldstr(T, -2, "pi");
+    toku_set_field_str(T, -2, "pi");
     toku_push_number(T, TOKU_HUGE_VAL);
-    toku_set_fieldstr(T, -2, "huge");
+    toku_set_field_str(T, -2, "huge");
     toku_push_integer(T, TOKU_INTEGER_MAX);
-    toku_set_fieldstr(T, -2, "maxint");
+    toku_set_field_str(T, -2, "maxint");
     toku_push_integer(T, TOKU_INTEGER_MIN);
-    toku_set_fieldstr(T, -2, "minint");
+    toku_set_field_str(T, -2, "minint");
     set_rand_funcs(T);
     return 1;
 }

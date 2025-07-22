@@ -111,7 +111,7 @@ static void f_newstate(toku_State *T, void *ud) {
     init_cstorage(T, gs);
     tokuS_init(T); /* keep this init first */
     tokuY_init(T);
-    tokuMM_init(T);
+    tokuTM_init(T);
     tokuA_init(T);
     gs->gcstop = 0;
     setnilval(&gs->nil); /* signal that state is fully built */

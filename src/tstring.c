@@ -28,8 +28,21 @@
 #include <locale.h>
 
 
-/* maximum size for string table */
-#define MAXSTRTABLE     TOKU_MAXINT
+/*
+** Maximum size for string table.
+*/
+#define MAXSTRTABLE	cast_int(tokuM_limitN(INT_MAX, OString*))
+
+
+/*
+** Initial size for the string table (must be power of 2).
+** The Tokudae core alone registers ~50 strings (reserved words +
+** metaevent keys + a few others). Libraries would typically add
+** a few dozens more.
+*/
+#if !defined(MINSTRTABSIZE)
+#define MINSTRTABSIZE       128
+#endif
 
 
 /* string equality */
@@ -83,7 +96,7 @@ static void rehashtable(OString **arr, int osz, int nsz) {
         arr[i] = NULL; /* clear the slot */
         while (s) { /* for each string in the chain */
             OString *next = s->u.next; /* save 'next' */
-            t_uint h = hashmod(s->hash, nsz); /* get hash position */
+            t_uint h = tmod(s->hash, nsz); /* get hash position */
             s->u.next = arr[h]; /* chain it into array */
             arr[h] = s;
             s = next;
@@ -120,9 +133,9 @@ void tokuS_init(toku_State *T) {
     GState *gs = G(T);
     StringTable *tab = &gs->strtab;
     /* first initialize string table... */
-    tab->hash = tokuM_newarray(T, TOKUI_MINSTRTABSIZE, OString*);
-    rehashtable(tab->hash, 0, TOKUI_MINSTRTABSIZE); /* clear array */
-    tab->size = TOKUI_MINSTRTABSIZE;
+    tab->hash = tokuM_newarray(T, MINSTRTABSIZE, OString*);
+    rehashtable(tab->hash, 0, MINSTRTABSIZE); /* clear array */
+    tab->size = MINSTRTABSIZE;
     toku_assert(tab->nuse == 0);
     /* allocate the memory-error message */
     gs->memerror = tokuS_newlit(T, MEMERRMSG);
@@ -153,7 +166,7 @@ OString *tokuS_newlngstrobj(toku_State *T, size_t len) {
 
 void tokuS_remove(toku_State *T, OString *s) {
     StringTable *tab = &G(T)->strtab;
-    OString **pp = &tab->hash[hashmod(s->hash, tab->size)];
+    OString **pp = &tab->hash[tmod(s->hash, tab->size)];
     while (*pp != s) /* find previous element */
         pp = &(*pp)->u.next;
     *pp = (*pp)->u.next; /* remove it from list */
@@ -178,7 +191,7 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
     GState *gs = G(T);
     StringTable *tab = &gs->strtab;
     t_uint h = tokuS_hash(str, l, gs->seed);
-    OString **list = &tab->hash[hashmod(h, tab->size)];
+    OString **list = &tab->hash[tmod(h, tab->size)];
     toku_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
         if (s->shrlen==l && (memcmp(str, getshrstr(s), l*sizeof(char))==0)) {
@@ -190,7 +203,7 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
     /* else must create a new string */
     if (tab->nuse >= tab->size) { /* need to grow the table? */
         growtable(T, tab);
-        list = &tab->hash[hashmod(h, tab->size)]; /* rehash with new size */
+        list = &tab->hash[tmod(h, tab->size)]; /* rehash with new size */
     }
     s = newstrobj(T, l, TOKU_VSHRSTR, h);
     s->shrlen = cast_ubyte(l);

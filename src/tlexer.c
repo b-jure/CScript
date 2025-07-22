@@ -181,21 +181,26 @@ static void inclinenr(Lexer *lx) {
 }
 
 
-/* create new string and fix it inside of lexer htable */
-OString *tokuY_newstring(Lexer *lx, const char *str, size_t l) {
+OString *anchorstring(Lexer *lx, OString *s) {
     toku_State *T = lx->T;
-    OString *s = tokuS_newl(T, str, l);
-    const TValue *o = tokuH_getstr(lx->tab, s);
-    if (!ttisnil(o)) /* string already present? */
-        s = keystrval(cast(Node *, o));
+    TValue olds;
+    t_ubyte tag = tokuH_getstr(lx->tab, s, &olds);
+    if (!tagisempty(tag)) /* string already present? */
+        return strval(&olds); /* use stored value */
     else {
-        TValue *stkv = s2v(T->sp.p++); /* reserve stack space for string */
-        setstrval(T, stkv, s); /* anchor */
-        tokuH_setstr(T, lx->tab, strval(stkv), stkv); /* t[string] = string */
+        TValue *stv = s2v(T->sp.p++); /* reserve stack space for string */
+        setstrval(T, stv, s); /* anchor */
+        tokuH_setstr(T, lx->tab, strval(stv), stv); /* t[string] = string */
+        /* table is not a metatable, so it does not need to invalidate cache */
         tokuG_checkGC(T);
         T->sp.p--; /* remove string from stack */
+        return s;
     }
-    return s;
+}
+
+
+OString *tokuY_newstring(Lexer *lx, const char *str, size_t l) {
+    return anchorstring(lx, tokuS_newl(lx->T, str, l));
 }
 
 
@@ -647,6 +652,7 @@ convert:
 
 
 // TODO:add docs, Tokudae now supports binary integer constants
+/* read base 2 (binary) numeral */
 static int read_binnum(Lexer *lx, Literal *k) {
     if (t_unlikely(!tisbdigit(lx->c)))
         lexerror(lx, "invalid suffix 'b|B' on integer constant", TK_INT);

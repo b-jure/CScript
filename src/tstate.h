@@ -10,6 +10,7 @@
 
 #include "tobject.h"
 #include "tlist.h"
+#include "tmeta.h"
 
 #include <setjmp.h>
 
@@ -116,8 +117,8 @@ typedef struct GState {
     t_mem gcdebt; /* number of bytes not yet compensated by collector */
     t_umem gcestimate; /* gcestimate of non-garbage memory in use */
     StringTable strtab; /* interned strings (weak refs) */
-    TValue c_list; /* global C list */
-    TValue c_table; /* global C table */
+    TValue c_list; /* API list */
+    TValue c_table; /* API table */
     TValue nil; /* special nil value (also init flag) */
     t_uint seed; /* initial seed for hashing */
     t_ubyte whitebit; /* current white bit (WHITEBIT0 or WHITEBIT1) */
@@ -125,7 +126,7 @@ typedef struct GState {
     t_ubyte gcstopem; /* stops emergency collections */
     t_ubyte gcstop; /* control whether GC is running */
     t_ubyte gcemergency; /* true if this is emergency collection */
-    t_ubyte gcparams[TOKU_GCP_NUM];
+    t_ubyte gcparams[TOKU_GCP_NUM]; /* GC options */
     t_ubyte gccheck; /* true if collection was triggered since last check */
     GCObject *objects; /* list of all collectable objects */
     GCObject **sweeppos; /* current position of sweep in list */
@@ -140,7 +141,7 @@ typedef struct GState {
     struct toku_State *mainthread; /* thread that also created global state */
     OString *listfields[LFNUM]; /* array with names of list fields */
     OString *memerror; /* preallocated message for memory errors */
-    OString *mtnames[TOKU_MT_NUM]; /* array with metatag names */
+    OString *tmnames[TM_NUM]; /* array with tag method names */
     OString *strcache[TOKUI_STRCACHE_N][TOKUI_STRCACHE_M]; /* string cache */
     toku_WarnFunction fwarn; /* warning function */
     void *ud_warn; /* userdata for 'fwarn' */

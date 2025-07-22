@@ -1,11 +1,8 @@
 chunk ::= block
 
-block ::= {decl} [retstm]
+block ::= {decl} [returnstm]
 
-decl ::= localstm ';'
-       | 'local' 'fn' Name funcbody
-       | 'local' 'class' Name classbody
-       | stm
+decl ::= localstm ';' | localfn | localclass | stm
 
 localstm ::= 'local' attnamelist ['=' explist]
 
@@ -13,29 +10,22 @@ attnamelist ::= Name attrib {',' Name attrib}
 
 attrib ::= ['<' Name '>']
 
-stm ::= ';'
-      | expstm ';'
-      | functioncall ';'
-      | breakstm
-      | continuestm
-      | 'fn' indexedname funcbody
-      | 'class' indexedname classbody
-      | 'loop' stm
-      | 'while' '(' exp ')' stm
-      | 'for' '(' [forinit] ';' [exp] ';' [expstm] ')' stm
-      | 'foreach' namelist 'in' forexplist stm
-      | 'if' '(' exp ')' stm ['else' stm]
-      | 'switch' '(' exp ')' switchbody
-      | '{' loopblock '}'
-      | retstm
+localfn ::= 'local' 'fn' Name parenparams funcbody
 
-expstm ::= varlist '=' explist
+localclass ::= 'local' 'class' Name classbody
+
+stm ::= ';' | expstm ';' | lastcall ';' | breakstm | continuestm | fnstm
+      | classstm | loopstm | whilestm | forstm | foreachstm | ifstm
+      | switchstm | blockstm | returnstm
+
+assignop ::= '=' | '+=' | '-=' | '*=' | '/=' | '//=' | '**='
+           | '%=' | '&=' | '|=' | '^=' | '>>=' | '<<=' | '..='
+
+expstm ::= varlist assignop explist | var '++' | var '--'
 
 varlist ::= var {',' var}
 
-var ::= Name
-      | prefixexp '[' exp ']'
-      | prefiexp '.' Name
+var ::= Name | prefixexp '[' exp ']' | prefiexp '.' Name
 
 explist ::= exp {',' exp}
 
@@ -43,10 +33,25 @@ breakstm ::= 'break' ';'
 
 continuestm ::= 'continue' ';'
 
-indexedname ::= Name {'.' Name}
+dottedname ::= Name {'.' Name}
 
-forinit ::= localstm
-          | expstm
+fnstm ::= 'fn' dottedname parenparams funcbody
+
+classstm ::= 'class' dottedname classbody
+
+loopstm ::= 'loop' stm
+
+whilestm ::= 'while' exp stm
+
+forsep ::= ';' | ','
+
+forinit ::= localstm | expstm
+
+forinfix ::= [forinit] forsep [exp] forsep [expstm]
+
+forclauses ::= '(' forinfix ')' | forinfix forsep
+
+forstm ::= 'for' forclauses stm
 
 namelist ::= Name {',' Name}
 
@@ -54,90 +59,77 @@ forexplist ::= exp [',' exp]
              | exp ',' exp [',' exp]
              | exp ',' exp ',' exp [',' exp]
 
-switchbody ::= '{' {case exp ':' {stm}} ['default' ':' {stm}] '}'
+foreachstm ::= 'foreach' namelist 'in' forexplist stm
 
-loopblock ::= {decl} [continuestm]
-            | switchblock
+ifstm ::= 'if' exp stm ['else' stm]
 
-switchblock ::= {decl} [breakstm]
-              | block
+switchbody ::= '{' {'case' exp ':' {stm}} ['default' ':' {stm}] '}'
 
-retstm ::= 'return' [explist] ';'
+switchstm ::= 'switch' exp switchbody
 
-exp ::= 'true'
-      | 'false'
-      | 'nil'
-      | '...'
-      | Number
-      | LiteralString
-      | listdef
-      | tabledef
-      | functiondef
-      | classdef
-      | prefixexp
-      | exp binop exp
-      | unop exp
+switchblock ::= {decl} [breakstm] | block
 
-prefixexp ::= var
-            | functioncall
-            | '(' exp ')'
-            | superexp
+loopblock ::= {decl} [continuestm] | switchblock
 
-functioncall ::= prefixexp '(' [explist] ')'
+blockstm ::= '{' loopblock '}'
 
-superexp ::= 'super' ['[' exp ']']
-           | 'super' ['.' Name]
-           | 'super'
+returnstm ::= 'return' [explist] ';'
 
-listdef ::= '[' [elementlist] ']'
-
-elementlist ::= exp {sep exp} [sep]
-
-tabledef ::= '{' [fieldlist] '}'
-
-fieldlist ::= field {sep field} [sep]
-
-field ::= '[' exp ']' '=' exp
-        | Name '=' exp
+functiondef ::= 'fn' parenparams funcbody | pipeparams funcbody
 
 sep ::= ',' | ';'
 
-functiondef ::= 'fn' funcbody
+elementlist ::= exp {sep exp} [sep]
 
-funcbody ::= '(' [parameters] ')' '{' block '}'
+listdef ::= '[' [elementlist] ']'
 
-parameters ::= namelist [',' '...']
-             | '...'
+field ::= '[' exp ']' '=' exp | Name '=' exp
+
+fieldlist ::= field {sep field} [sep]
+
+tabledef ::= '{' [fieldlist] '}'
+
+parameters ::= namelist [',' '...'] | '...'
+
+pipeparams ::= '|' [parameters] '|'
+
+parenparams ::= '(' [parameters] ')'
+
+funcbody ::= '{' block '}'
+
+method ::= 'fn' Name parenparams funcbody
+
+metatag ::= '__getidx' | '__setidx' | '__gc' | '__close' | '__call'
+          | '__init' | '__concat' | '__add' | '__sub' | '__mul'
+          | '__div' | '__idiv' | '__mod' | '__pow' | '__shl'
+          | '__shr' | '__band' | '__bor' | '__bxor' | '__unm'
+          | '__bnot' | '__eq' | '__lt' | '__le' | '__name' | '__metatable'
+
+metavalue ::= functiondef | exp
+
+metafield ::= metatag '=' metavalue ';'
+
+definitions ::= method | metafield
+
+classbody ::= ['inherits' exp] '{' {definitions} '}'
 
 classdef ::= 'class' classbody
 
-classbody ::= '{' {method} '}'
+prefixexp ::= var | call ['?'] | '(' exp ')' | superexp
 
-method ::= 'fn' Name funcbody
+call ::= prefixexp '(' [explist] ')'
 
-binop ::= '+'
-        | '-'
-        | '*'
-        | '/'
-        | '//'
-        | '**'
-        | '%'
-        | '&'
-        | '~'
-        | '|'
-        | '^'
-        | '>>'
-        | '<<'
-        | '..'
-        | '<'
-        | '<='
-        | '>'
-        | '>='
-        | '=='
-        | '!='
-        | and
-        | or
+lastcall ::= call
 
-unop ::= '-'
-       | '!'
-       | '~'
+superexp ::= 'super' ['[' exp ']'] | 'super' ['.' Name]
+
+binop ::= '+' | '-' | '*' | '/' | '//' | '**' | '%'
+        | '&' | '~' | '|' | '^' | '>>' | '<<' | '..'
+        | '<' | '<=' | '>' | '>=' | '=='| '!='
+        | and | or
+
+unop ::= '-' | '!' | '~'
+
+exp ::= 'true' | 'false' | 'nil' | '...' | Number | LiteralString
+      | listdef | tabledef | functiondef | classdef | prefixexp
+      | exp binop exp | unop exp

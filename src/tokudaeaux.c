@@ -19,6 +19,9 @@
 #include "tokudaelimits.h"
 
 
+/* {=======================================================================
+** Errors
+** ======================================================================== */
 
 TOKULIB_API int tokuL_error(toku_State *T, const char *fmt, ...) {
     va_list ap;
@@ -33,24 +36,24 @@ TOKULIB_API int tokuL_error(toku_State *T, const char *fmt, ...) {
 
 
 /*
-** Find field in table at index -1. If field value is found
-** meaning the object at 'index' is equal to the field value, then
+** Find field in table at idx -1. If field value is found
+** meaning the object at 'idx' is equal to the field value, then
 ** this function returns 1. Only string keys are considered and
 ** limit is the limit of recursive calls in case table field
 ** contains another table value.
 */
-static int findfield(toku_State *T, int index, int limit) {
+static int findfield(toku_State *T, int idx, int limit) {
     if (limit == 0 || !toku_is_table(T, -1))
         return 0; /* not found */
     toku_push_nil(T); /* start 'next' loop (from beginning) */
     while (toku_nextfield(T, -2)) { /* for each pair in the table */
         if (toku_type(T, -2) == TOKU_T_STRING) { /* ignore non-string keys */
-            if (toku_rawequal(T, index, -1)) { /* found object (function)? */
+            if (toku_rawequal(T, idx, -1)) { /* found object (function)? */
                 toku_pop(T, 1); /* remove value (but keep name) */
                 return 1;
-            } else if (findfield(T, index, limit - 1)) { /* try recursively */
+            } else if (findfield(T, idx, limit - 1)) { /* try recursively */
                 /* stack: lib_name, lib_table, field_name (top) */
-                toku_push_literal(T, "."); /* place '.' between the two names */
+                toku_push_literal(T, "."); /* place '.' between the names */
                 toku_replace(T, -3); /* (in the slot occupied by table) */
                 toku_concat(T, 3); /* lib_name.field_name */
                 return 1;
@@ -67,11 +70,11 @@ static int findfield(toku_State *T, int index, int limit) {
 ** If function is global function, then the its name is pushed
 ** on the top of the stack.
 */
-static int push_glbfunt_name(toku_State *T, toku_Debug *ar) {
+static int push_glbfunc_name(toku_State *T, toku_Debug *ar) {
     int top = toku_gettop(T); /* index of value on top of the stack */
     int func = top + 1;
     toku_getinfo(T, "f", ar); /* push function (top + 1) */
-    toku_get_cfieldstr(T, TOKU_LOADED_TABLE);
+    toku_get_cfield_str(T, TOKU_LOADED_TABLE);
     tokuL_check_stack(T, 6, "not enough stack space"); /* for 'findfield' */
     if (findfield(T, func, 2)) { /* found? */
         const char *name = toku_to_string(T, -1);
@@ -96,19 +99,20 @@ TOKULIB_API int tokuL_error_arg(toku_State *T, int arg, const char *extra) {
     toku_getinfo(T, "n", &ar);
     if (strcmp(ar.namewhat, "metamethod") == 0) {
         /* NOTE: currently, this is unreachable! */
+        toku_assert(0);
         arg--; /* ignore 'self' */
         if (arg == -1) /* 'self' is the invalid argument? */
             tokuL_error(T, "calling '%s' on a bad 'self' (%s)", ar.name, extra);
     }
     if (ar.name == NULL)
-        ar.name = (push_glbfunt_name(T, &ar)) ? toku_to_string(T, -1) : "?";
+        ar.name = (push_glbfunc_name(T, &ar)) ? toku_to_string(T, -1) : "?";
     return tokuL_error(T, "bad argument #%d to '%s' (%s)", arg+1, ar.name, extra);
 }
 
 
 TOKULIB_API int tokuL_error_type(toku_State *T, int arg, const char *tname) {
     const char *msg, *type;
-    if (tokuL_get_metaindex(T, arg, TOKU_MT_NAME) == TOKU_T_STRING)
+    if (tokuL_get_metafield(T, arg, "__name") == TOKU_T_STRING)
         type = toku_to_string(T, -1);
     else
         type = tokuL_typename(T, arg);
@@ -121,12 +125,18 @@ static void terror(toku_State *T, int arg, int t) {
     tokuL_error_type(T, arg, toku_typename(T, t));
 }
 
+/* }======================================================================= */
 
-TOKULIB_API toku_Number tokuL_check_number(toku_State *T, int index) {
+
+/* {=======================================================================
+** Required argument/option and other checks
+** ======================================================================== */
+
+TOKULIB_API toku_Number tokuL_check_number(toku_State *T, int idx) {
     int isnum;
-    toku_Number n = toku_to_numberx(T, index, &isnum);
+    toku_Number n = toku_to_numberx(T, idx, &isnum);
     if (t_unlikely(!isnum))
-        terror(T, index, TOKU_T_NUMBER);
+        terror(T, idx, TOKU_T_NUMBER);
     return n;
 }
 
@@ -139,29 +149,28 @@ static void interror(toku_State *T, int argindex) {
 }
 
 
-TOKULIB_API toku_Integer tokuL_check_integer(toku_State *T, int index) {
+TOKULIB_API toku_Integer tokuL_check_integer(toku_State *T, int idx) {
     int isint;
-    toku_Integer i = toku_to_integerx(T, index, &isint);
+    toku_Integer i = toku_to_integerx(T, idx, &isint);
     if (t_unlikely(!isint))
-        interror(T, index);
+        interror(T, idx);
     return i;
 }
 
 
-TOKULIB_API const char *tokuL_check_lstring(toku_State *T, int index,
+TOKULIB_API const char *tokuL_check_lstring(toku_State *T, int idx,
                                                            size_t *len) {
-    const char *str = toku_to_lstring(T, index, len);
+    const char *str = toku_to_lstring(T, idx, len);
     if (t_unlikely(str == NULL))
-        terror(T, index, TOKU_T_STRING);
+        terror(T, idx, TOKU_T_STRING);
     return str;
 }
 
 
-TOKULIB_API void *tokuL_check_userdata(toku_State *T, int index,
-                                                      const char *name) {
-    void *p = tokuL_test_userdata(T, index, name);
+TOKULIB_API void *tokuL_check_userdata(toku_State *T, int idx, const char *n) {
+    void *p = tokuL_test_userdata(T, idx, n);
     if (t_unlikely(p == NULL))
-        tokuL_error_type(T, index, name);
+        tokuL_error_type(T, idx, n);
     return p;
 }
 
@@ -192,37 +201,48 @@ TOKULIB_API int tokuL_check_option(toku_State *T, int arg, const char *dfl,
                                    const char *const opts[]) {
     const char *str = dfl ? tokuL_opt_string(T, arg, dfl)
                           : tokuL_check_string(T, arg);
-    for (int i=0; opts[i]; i++)
+    for (int i = 0; opts[i]; i++)
         if (strcmp(str, opts[i]) == 0)
             return i;
     return tokuL_error_arg(T, arg,
                          toku_push_fstring(T, "invalid option '%s'", str));
 }
 
+/* }======================================================================= */
 
-TOKULIB_API toku_Number tokuL_opt_number(toku_State *T, int index,
+
+/* {=======================================================================
+** Optional argument
+** ======================================================================== */
+
+TOKULIB_API toku_Number tokuL_opt_number(toku_State *T, int idx,
                                                         toku_Number dfl) {
-    return tokuL_opt(T, tokuL_check_number, index, dfl);
+    return tokuL_opt(T, tokuL_check_number, idx, dfl);
 }
 
 
-TOKULIB_API toku_Integer tokuL_opt_integer(toku_State *T, int index,
+TOKULIB_API toku_Integer tokuL_opt_integer(toku_State *T, int idx,
                                                           toku_Integer dfl) {
-    return tokuL_opt(T, tokuL_check_integer, index, dfl);
+    return tokuL_opt(T, tokuL_check_integer, idx, dfl);
 }
 
 
-TOKULIB_API const char *tokuL_opt_lstring(toku_State *T, int index,
+TOKULIB_API const char *tokuL_opt_lstring(toku_State *T, int idx,
                                           const char *dfl, size_t *plen) {
-    if (toku_is_noneornil(T, index)) {
+    if (toku_is_noneornil(T, idx)) {
         if (plen)
             *plen = (dfl ? strlen(dfl) : 0);
         return dfl;
     }
-    return tokuL_check_lstring(T, index, plen);
+    return tokuL_check_lstring(T, idx, plen);
 }
 
+/* }======================================================================= */
 
+
+/* {=======================================================================
+** Chunk loading
+** ======================================================================== */
 
 typedef struct LoadFile {
     int n; /* number of pre-read characters */
@@ -245,35 +265,35 @@ static const char *filereader(toku_State *T, void *data, size_t *szread) {
 }
 
 
-static int errorfile(toku_State *T, const char *what, int filename_index) {
+static int errorfile(toku_State *T, const char *what, int fidx) {
     int err = errno;
-    const char *filename = toku_to_string(T, filename_index);
+    const char *fname = toku_to_string(T, fidx);
     if (err != 0)
-        toku_push_fstring(T, "cannot %s %s: %s", what, filename, strerror(err)); 
+        toku_push_fstring(T, "cannot %s %s: %s", what, fname, strerror(err)); 
     else
-        toku_push_fstring(T, "cannot %s %s", what, filename);
-    toku_remove(T, filename_index);
+        toku_push_fstring(T, "cannot %s %s", what, fname);
+    toku_remove(T, fidx);
     return TOKU_STATUS_EFILE;
 }
 
 
-TOKULIB_API int tokuL_loadfile(toku_State *T, const char *filename) {
+TOKULIB_API int tokuL_loadfile(toku_State *T, const char *fname) {
     LoadFile lf = {0};
     int status, readstatus;
     int filename_index = toku_getntop(T);
-    if (filename == NULL) { /* stdin? */
+    if (fname == NULL) { /* stdin? */
         toku_push_string(T, "=stdin");
         lf.fp = stdin;
     } else { /* otherwise real file */
-        toku_push_fstring(T, "@%s", filename);
+        toku_push_fstring(T, "@%s", fname);
         errno = 0;
-        lf.fp = fopen(filename, "r");
+        lf.fp = fopen(fname, "r");
         if (lf.fp == NULL)
             return errorfile(T, "open", filename_index);
     }
     status = toku_load(T, filereader, &lf, toku_to_string(T, -1));
     readstatus = ferror(lf.fp);
-    if (filename) /* real file ? */
+    if (fname) /* real file ? */
         fclose(lf.fp); /* close it */
     if (readstatus) { /* error while reading */
         toku_setntop(T, filename_index); /* remove any results */
@@ -313,102 +333,80 @@ TOKULIB_API int tokuL_loadbuffer(toku_State *T, const char *buff, size_t sz,
     return toku_load(T, stringreader, &ls, name);
 }
 
+/* }======================================================================= */
 
-TOKULIB_API int tokuL_new_metalist(toku_State *T, const char *lname) {
-    if (tokuL_get_metalist(T, lname) != TOKU_T_NIL) /* name already in use? */
-        return 0; /* false; metalist already exists */
+
+/* {=======================================================================
+** Userdata and metatable functions
+** ======================================================================== */
+
+TOKULIB_API int tokuL_new_metatable(toku_State *T, const char *tname) {
+    if (tokuL_get_metatable(T, tname) != TOKU_T_NIL) /* name already in use? */
+        return 0; /* false; metatable already exists */
     toku_pop(T, 1); /* remove nil */
-    toku_push_metalist(T); /* create metalist */
-    toku_push(T, -1); /* push metalist copy */
-    toku_set_cfieldstr(T, lname); /* ctable.lname = metalist */
-    return 1; /* true; created new metalist */
+    toku_push_table(T, 2); /* create metatable */
+    toku_push_string(T, tname);
+    toku_set_field_str(T, -2, "__name"); /* metatable.__name = tname */
+    toku_push(T, -1); /* metatable copy */
+    toku_set_cfield_str(T, tname); /* ctable.tname = metatable */
+    return 1; /* true; created new metatable */
 }
 
 
 // TODO: update docs
-TOKULIB_API void tokuL_set_metalist(toku_State *T, const char *lname) {
-    tokuL_get_metalist(T, lname);
-    toku_set_metalist(T, -2);
+TOKULIB_API void tokuL_set_metatable(toku_State *T, const char *tname) {
+    tokuL_get_metatable(T, tname);
+    toku_set_metatable(T, -2);
 }
 
 
-TOKULIB_API int tokuL_get_metaindex(toku_State *T, int index, int mt) {
-    if (!toku_get_metalist(T, index))
+TOKULIB_API int tokuL_get_metafield(toku_State *T, int idx, const char *ev) {
+    if (!toku_get_metatable(T, idx))
         return TOKU_T_NONE;
     else {
-        int t = toku_get_index(T, -1, mt);
+        int t = toku_get_field_str(T, -1, ev);
         if (t == TOKU_T_NIL) {
-            toku_pop(T, 2); /* remove metalist and nil */
+            toku_pop(T, 2); /* remove metatable and nil */
             t = TOKU_T_NONE;
         } else
-            toku_remove(T, -2); /* remove only metalist */
-        return t; /* return metalist index value type */
+            toku_remove(T, -2); /* remove only metatable */
+        return t; /* return value type */
     }
 }
 
 
-TOKULIB_API int tokuL_callmeta(toku_State *T, int index, int mt) {
-    int t = toku_type(T, index);
-    index = toku_absindex(T, index);
+TOKULIB_API int tokuL_callmeta(toku_State *T, int idx, const char *event) {
+    int t = toku_type(T, idx);
+    idx = toku_absindex(T, idx);
     if ((t != TOKU_T_INSTANCE && t != TOKU_T_USERDATA) ||
-            tokuL_get_metaindex(T, index, mt) == TOKU_T_NONE)
+            tokuL_get_metafield(T, idx, event) == TOKU_T_NONE)
         return 0;
-    toku_push(T, index);
+    toku_push(T, idx);
     toku_call(T, 1, 1);
     return 1;
 }
 
 
-TOKULIB_API int tokuL_new_usermethods(toku_State *T, const char *tname,
-                                                     int sz) {
-    if (tokuL_get_methods(T, tname) != TOKU_T_NIL) /* name already in use? */
-        return 0; /* false; methods table already exists */
-    toku_pop(T, 1); /* remove nil */
-    toku_push_table(T, sz); /* create methods table */
-    toku_push(T, -1); /* push table copy */
-    toku_set_cfieldstr(T, tname); /* ctable.tname = table */
-    return 1; /* true; created new methods table */
-}
-
-
-TOKULIB_API void tokuL_set_usermethods(toku_State *T, const char *tname) {
-    tokuL_get_methods(T, tname);
-    toku_set_methods(T, -2);
-}
-
-
-TOKULIB_API void *tokuL_test_userdata(toku_State *T, int index,
-                                                     const char *lname) {
-    void *p = tokuL_to_fulluserdata(T, index);
-    if (p != NULL) { /* 'index' is full userdata? */
-        if (toku_get_metalist(T, 0)) { /* it has a metalist? */
-            tokuL_get_metalist(T, lname); /* get correct metalist */
+TOKULIB_API void *tokuL_test_userdata(toku_State *T, int idx, const char *tn) {
+    void *p = tokuL_to_fulluserdata(T, idx);
+    if (p != NULL) { /* 'idx' is full userdata? */
+        if (toku_get_metatable(T, 0)) { /* it has a metatable? */
+            tokuL_get_metatable(T, tn); /* get correct metatable */
             if (!toku_rawequal(T, -1, -2)) /* not the same? */
                 p = NULL;
-            toku_pop(T, 2); /* remove both metalists */
+            toku_pop(T, 2); /* remove both metatables */
             return p;
         }
     }
-    return NULL; /* value is not a userdata with a metalist */
+    return NULL; /* value is not a userdata with a metatable */
 }
 
+/* }======================================================================= */
 
-TOKULIB_API void tokuL_set_metafuncs(toku_State *T, const tokuL_MetaEntry *l,
-                                 int nup) {
-    tokuL_check_stack(T, nup, "too many upvalues");
-    for (; l->mt >= 0; l++) { /* for each metamethod */
-        if (l->metaf == NULL) /* placeholder? */
-            toku_push_bool(T, 0);
-        else {
-            for (int i = 0; i < nup; i++) /* copy upvalues */
-                toku_push(T, -nup);
-            toku_push_cclosure(T, l->metaf, nup); /* create closure */
-        }
-        toku_set_index(T, -(nup + 2), l->mt);
-    }
-    toku_pop(T, nup);
-}
 
+/* {=======================================================================
+** File/Exec result process functions
+** ======================================================================== */
 
 TOKULIB_API int tokuL_fileresult(toku_State *T, int ok, const char *fname) {
     int err = errno;
@@ -464,42 +462,49 @@ TOKULIB_API int tokuL_execresult(toku_State *T, int stat) {
     }
 }
 
+/* }======================================================================= */
 
-TOKULIB_API const char *tokuL_to_lstring(toku_State *T, int index,
+
+/* {=======================================================================
+** Miscellaneous functions
+** ======================================================================== */
+
+TOKULIB_API const char *tokuL_to_lstring(toku_State *T, int idx,
                                                         size_t *plen) {
-    index = toku_absindex(T, index);
-    if (tokuL_callmeta(T, index, TOKU_MT_TOSTRING)) {
+    idx = toku_absindex(T, idx);
+    if (tokuL_callmeta(T, idx, "__tostring")) {
         if (!toku_is_string(T, -1))
             tokuL_error(T, "'__tostring' must return a string");
     } else {
-        switch (toku_type(T, index)) {
+        switch (toku_type(T, idx)) {
             case TOKU_T_NIL: {
                 toku_push_literal(T, "nil");
                 break;
             }
             case TOKU_T_BOOL: {
-                toku_push_string(T, (toku_to_bool(T, index) ? "true" : "false"));
+                toku_push_string(T, (toku_to_bool(T, idx) ? "true" : "false"));
                 break;
             }
             case TOKU_T_NUMBER: {
-                if (toku_is_integer(T, index))
-                    toku_push_fstring(T, "%I", toku_to_integer(T, index));
+                if (toku_is_integer(T, idx))
+                    toku_push_fstring(T, "%I", toku_to_integer(T, idx));
                 else
-                    toku_push_fstring(T, "%f", toku_to_number(T, index));
+                    toku_push_fstring(T, "%f", toku_to_number(T, idx));
                 break;
             }
             case TOKU_T_STRING: {
-                toku_push(T, index);
+                toku_push(T, idx);
                 break;
             }
             default: {
-                /* get metalist entry '__name' */
-                int tt = tokuL_get_metaindex(T, index, TOKU_MT_NAME);
+                /* get metatable entry '__name' */
+                int tt = tokuL_get_metafield(T, idx, "__name");
                 const char *kind = (tt == TOKU_T_STRING) /* is it a string? */
                                  ? toku_to_string(T, -1) /* use it */
-                                 : tokuL_typename(T, index); /* fallback name */
-                toku_push_fstring(T, "%s: %p", kind, toku_to_pointer(T, index));
-                if (tt != TOKU_T_NONE) toku_remove(T, -2); /* remove '__name' */
+                                 : tokuL_typename(T, idx); /* fallback name */
+                toku_push_fstring(T, "%s: %p", kind, toku_to_pointer(T, idx));
+                if (tt != TOKU_T_NONE)
+                    toku_remove(T, -2); /* remove '__name' */
                 break;
             }
         }
@@ -508,13 +513,13 @@ TOKULIB_API const char *tokuL_to_lstring(toku_State *T, int index,
 }
 
 
-TOKULIB_API void *tokuL_to_fulluserdata(toku_State *T, int index) {
-    return toku_is_fulluserdata(T, index) ? toku_to_userdata(T, index) : NULL;
+TOKULIB_API void *tokuL_to_fulluserdata(toku_State *T, int idx) {
+    return toku_is_fulluserdata(T, idx) ? toku_to_userdata(T, idx) : NULL;
 }
 
 
-TOKULIB_API void *tokuL_to_lightuserdata(toku_State *T, int index) {
-    return toku_is_lightuserdata(T, index) ? toku_to_userdata(T, index) : NULL;
+TOKULIB_API void *tokuL_to_lightuserdata(toku_State *T, int idx) {
+    return toku_is_lightuserdata(T, idx) ? toku_to_userdata(T, idx) : NULL;
 }
 
 
@@ -528,26 +533,6 @@ TOKULIB_API void tokuL_where(toku_State *T, int level) {
         }
     }
     toku_push_literal(T, "");
-}
-
-
-// TODO: add docs
-TOKULIB_API int tokuL_get_fieldstr(toku_State *T, int index,
-                                                  const char *field) {
-    int t = toku_type(T, index);
-    if (t == TOKU_T_INSTANCE || t == TOKU_T_TABLE)
-        return toku_get_fieldstr(T, index, field);
-    return TOKU_T_NONE;
-}
-
-
-// TODO: update docs?
-TOKULIB_API int tokuL_get_property(toku_State *T, int index) {
-    if (toku_get_field(T, index) == TOKU_T_NIL) {
-        toku_pop(T, 1); /* remove nil */
-        toku_get_method(T, index);
-    }
-    return toku_type(T, -1);
 }
 
 
@@ -660,32 +645,31 @@ TOKULIB_API toku_State *tokuL_newstate(void) {
 }
 
 
-TOKULIB_API int tokuL_get_subtable(toku_State *T, int index,
-                                                  const char *field) {
-    if (toku_get_fieldstr(T, index, field) == TOKU_T_TABLE) {
+TOKULIB_API int tokuL_get_subtable(toku_State *T, int idx, const char *k) {
+    if (toku_get_field_str(T, idx, k) == TOKU_T_TABLE) {
         return 1; /* true, already have table */
     } else {
         toku_pop(T, 1); /* pop previous result */
-        index = toku_absindex(T, index);
+        idx = toku_absindex(T, idx);
         toku_push_table(T, 0);
         toku_push(T, -1); /* copy will be left on the top */
-        toku_set_fieldstr(T, index, field); /* table[field] = newtable */
+        toku_set_field_str(T, idx, k); /* table[k] = newtable */
         return 0; /* false, no table was found */
     }
 }
 
 
 TOKULIB_API void tokuL_importf(toku_State *T, const char *modname,
-                           toku_CFunction openf, int global) {
+                               toku_CFunction openf, int global) {
     tokuL_get_subtable(T, TOKU_CTABLE_INDEX, TOKU_LOADED_TABLE);
-    toku_get_fieldstr(T, -1, modname); /* get __LOADED[modname] */
+    toku_get_field_str(T, -1, modname); /* get __LOADED[modname] */
     if (!toku_to_bool(T, -1)) { /* package not already loaded? */
         toku_pop(T, 1); /* remove field */
         toku_push_cfunction(T, openf); /* push func that opens the module */
         toku_push_string(T, modname); /* argument to 'openf' */
         toku_call(T, 1, 1); /* call 'openf' */
         toku_push(T, -1);  /* make copy of the module (call result) */
-        toku_set_fieldstr(T, -3, modname); /* __LOADED[modname] = module */
+        toku_set_field_str(T, -3, modname); /* __LOADED[modname] = module */
     }
     toku_remove(T, -2); /* remove __LOADED table */
     if (global) { /* set the module as global? */
@@ -717,15 +701,15 @@ static int lastlevel(toku_State *T) {
 }
 
 
-static void push_funt_name(toku_State *T, toku_Debug *ar) {
+static void push_func_name(toku_State *T, toku_Debug *ar) {
     if (*ar->namewhat != '\0') /* name from code? */
         toku_push_fstring(T, "%s '%s'", ar->namewhat, ar->name);
     else if (*ar->what == 'm') /* main? */
         toku_push_literal(T, "main chunk");
-    else if (push_glbfunt_name(T, ar)) { /* try global name */
+    else if (push_glbfunc_name(T, ar)) { /* try global name */
         toku_push_fstring(T, "function '%s'", toku_to_string(T, -1));
         toku_remove(T, -2); /* remove name */
-    } else if (*ar->what != 'T') /* for Tokudae functions, use <file:line> */
+    } else if (*ar->what != 'C') /* for Tokudae functions, use <file:line> */
         toku_push_fstring(T, "function <%s:%d>", ar->shortsrc, ar->defline);
     else /* unknown */
         toku_push_literal(T, "?");
@@ -735,7 +719,7 @@ static void push_funt_name(toku_State *T, toku_Debug *ar) {
 #define STACKLEVELS     10
 
 TOKULIB_API void tokuL_traceback(toku_State *T, toku_State *T1,
-                             int level, const char *msg) {
+                                 int level, const char *msg) {
     tokuL_Buffer B;
     toku_Debug ar;
     int last = lastlevel(T1);
@@ -759,7 +743,7 @@ TOKULIB_API void tokuL_traceback(toku_State *T, toku_State *T1,
             else
                 toku_push_fstring(T, "\n\t%s:%d: in ", ar.shortsrc, ar.currline);
             tokuL_buff_push_stack(&B);
-            push_funt_name(T, &ar);
+            push_func_name(T, &ar);
             tokuL_buff_push_stack(&B);
         }
     }
@@ -777,7 +761,7 @@ TOKULIB_API void tokuL_set_funcs(toku_State *T, const tokuL_Entry *l, int nup){
                 toku_push(T, -nup);
             toku_push_cclosure(T, l->func, nup); /* create closure */
         }
-        toku_set_fieldstr(T, -(nup + 2), l->name);
+        toku_set_field_str(T, -(nup + 2), l->name);
     }
     toku_pop(T, nup); /* remove upvalues */
 }
@@ -797,10 +781,12 @@ TOKULIB_API unsigned tokuL_makeseed(toku_State *T) {
     return tokui_makeseed();
 }
 
+/* }======================================================================= */
 
-/* ------------------------------------------------------------------------
-** Reference System
-** ------------------------------------------------------------------------ */
+
+/* {=======================================================================
+** Reference system
+** ======================================================================== */
 
 /* index of free-list header (after the predefined values) */
 #define freelist    (TOKU_CLIST_LAST + 1)
@@ -844,10 +830,12 @@ TOKULIB_API void tokuL_unref(toku_State *T, int a, int ref) {
     }
 }
 
+/* }======================================================================= */
 
-/* ------------------------------------------------------------------------
-** Buffering
-** ------------------------------------------------------------------------ */
+
+/* {=======================================================================
+** Buffer manipulation
+** ======================================================================== */
 
 typedef struct UserBox {
     void *p; /* data */
@@ -855,10 +843,10 @@ typedef struct UserBox {
 } UserBox;
 
 
-static void *resizebox(toku_State *T, int index, size_t newsz) {
+static void *resizebox(toku_State *T, int idx, size_t newsz) {
     void *ud;
     toku_Alloc falloc = toku_getallocf(T, &ud);
-    UserBox *box = (UserBox *)toku_to_userdata(T, index);
+    UserBox *box = (UserBox *)toku_to_userdata(T, idx);
     void *newblock = falloc(box->p, box->sz, newsz, ud);
     if (t_unlikely(newblock == NULL && newsz > 0)) {
         toku_push_literal(T, "out of memory");
@@ -880,12 +868,12 @@ static void newbox(toku_State *T) {
     UserBox *box = toku_push_userdata(T, sizeof(*box), 0);
     box->p = NULL;
     box->sz = 0;
-    toku_push_list(T, TOKU_MT_NUM);
+    toku_push_table(T, 2); /* push metatable */
     toku_push_cfunction(T, boxgc);
-    toku_set_index(T, -2, TOKU_MT_GC);
+    toku_set_field_str(T, -2, "__gc"); /* metatable.__gc = boxgc */
     toku_push_cfunction(T, boxgc);
-    toku_set_index(T, -2, TOKU_MT_CLOSE);
-    toku_set_metalist(T, -2);
+    toku_set_field_str(T, -2, "__close"); /* metatable.__close = boxgc */
+    toku_set_metatable(T, -2);
 }
 
 
@@ -909,15 +897,15 @@ TOKULIB_API void tokuL_buff_init(toku_State *T, tokuL_Buffer *B) {
 
 
 /*
-** Whenever buffer is accessed, slot 'index' must be either a box,
+** Whenever buffer is accessed, slot 'idx' must be either a box,
 ** meaning the buffer is stored as 'UserBox' (which cannot be NULL)
 ** or it is a placeholder for the buffer (meaning that buffer is
 ** still using 'init.b[TOKUL_BUFFERSIZE]').
 */
-#define checkbufflevel(B, index) \
+#define checkbufflevel(B, idx) \
         toku_assert(buffonstack(B) \
-                ? toku_to_userdata((B)->T, index) != NULL \
-                : toku_to_userdata((B)->T, index) == (void*)(B))
+                ? toku_to_userdata((B)->T, idx) != NULL \
+                : toku_to_userdata((B)->T, idx) == (void*)(B))
 
 
 /* calculate new buffer size */
@@ -1010,7 +998,8 @@ TOKULIB_API void tokuL_buff_push_string(tokuL_Buffer *B, const char *s) {
 /*
 ** Pushes the string value on top of the stack into the buffer.
 ** This function expects buffer placeholder or its 'UserBox' to be on
-** the stack below the string value being pushed, which is on top of the stack.
+** the stack below the string value being pushed, which is on top of
+** the stack.
 */
 TOKULIB_API void tokuL_buff_push_stack(tokuL_Buffer *B) {
     size_t len;
@@ -1026,9 +1015,9 @@ TOKULIB_API void tokuL_buff_push_gsub(tokuL_Buffer *B, const char *s,
                                       const char *p, const char *r) {
     const char *wild;
     size_t l = strlen(p);
-    while ((wild = strstr(s, p)) != NULL) {
+    while ((wild = strstr(s, p)) != NULL) { /* find 'p' (pattern) */
         tokuL_buff_push_lstring(B, s, wild - s); /* push prefix */
-        tokuL_buff_push_string(B, r); /* push replacement in place of pattern */
+        tokuL_buff_push_string(B, r); /* push 'r' in place of pattern */
         s = wild + l; /* continue after 'p' */
     }
     tokuL_buff_push_string(B, s); /* push last suffix */
@@ -1063,3 +1052,5 @@ TOKULIB_API void tokuL_buff_endsz(tokuL_Buffer *B, size_t sz) {
     tokuL_buffadd(B, sz);
     tokuL_buff_end(B);
 }
+
+/* }======================================================================= */

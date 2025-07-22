@@ -20,19 +20,7 @@
 #include "tokudaelimits.h"
 
 
-/* macro to 'unsign' a character */
-#define uchar(c)	((t_ubyte)(c))
-
-
-/*
-** Some sizes are better limited to fit in 'int', but must also fit in
-** 'size_t'. (We assume that 'toku_Integer' cannot be smaller than 'int'.)
-*/
-#define MAX_SIZET	cast_sizet(~cast_sizet(0))
-
-
-#define STR_TOKU_MAXSIZE \
-	(sizeof(size_t) < sizeof(int) ? MAX_SIZET : cast_sizet(TOKU_MAXINT))
+#define uchar(c)        ((t_ubyte)(c))
 
 
 /*

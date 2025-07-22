@@ -144,7 +144,8 @@ static int checkmode(const char *mode) {
 typedef tokuL_Stream CStream;
 
 
-#define tocstream(T)    ((CStream *)tokuL_check_userdata(T, 0, TOKU_FILEHANDLE))
+#define tocstream(T) \
+        ((CStream *)tokuL_check_userdata(T, 0, TOKU_FILEHANDLE))
 
 #define isclosed(p)     ((p)->closef == NULL)
 #define markclosed(p)   ((p)->closef = NULL)
@@ -162,16 +163,14 @@ static FILE *tofile(toku_State *T) {
 
 
 /*
-** Create new Tokudae stream userdata with TOKU_FILEHANDLE metalist and
-** TOKU_FILEHANDLE_METHODS methods table.
+** Create new Tokudae stream userdata with TOKU_FILEHANDLE metatable.
 ** Additionally 'closef' is set as NULL as the stream is considered
 ** "closed".
 */
 static CStream *new_cstream(toku_State *T) {
     CStream *p = (CStream *)toku_push_userdata(T, sizeof(CStream), 0);
     p->closef = NULL; /* mark as closed */
-    tokuL_set_usermethods(T, TOKU_FILEHANDLE_METHODS);
-    tokuL_set_metalist(T, TOKU_FILEHANDLE);
+    tokuL_set_metatable(T, TOKU_FILEHANDLE);
     return p;
 }
 
@@ -233,14 +232,14 @@ static int f_close(toku_State *T);
 
 static int io_close(toku_State *T) {
     if (toku_is_none(T, 0)) /* no arguments? */
-        toku_get_cfieldstr(T, IO_OUTPUT); /* use default output */
+        toku_get_cfield_str(T, IO_OUTPUT); /* use default output */
     return f_close(T);
 }
 
 
 static FILE *getiofile(toku_State *T, const char *fname) {
     CStream *p;
-    toku_get_cfieldstr(T, fname);
+    toku_get_cfield_str(T, fname);
     p = (CStream *)toku_to_userdata(T, -1);
     if (t_unlikely(isclosed(p)))
         tokuL_error(T, "default %s file is closed", fname + IOPREF_LEN);
@@ -264,10 +263,10 @@ static int open_or_set_iofile(toku_State *T, const char *f, const char *mode) {
             tofile(T); /* check that it's a valid file handle */
             toku_push(T, 0); /* push on top */
         }
-        toku_set_cfieldstr(T, f); /* set new file handle */
+        toku_set_cfield_str(T, f); /* set new file handle */
     }
     /* return current value */
-    toku_get_cfieldstr(T, f);
+    toku_get_cfield_str(T, f);
     return 1;
 }
 
@@ -364,7 +363,7 @@ static int io_lines(toku_State *T) {
     int toclose;
     if (toku_is_none(T, 0)) toku_push_nil(T); /* at least one argument */
     if (toku_is_nil(T, 0)) { /* no file name? */
-        toku_get_cfieldstr(T, IO_INPUT); /* get default input */
+        toku_get_cfield_str(T, IO_INPUT); /* get default input */
         toku_replace(T, 0); /* put it at index 0 */
         tofile(T); /* check that it's a valid file handle */
         toclose = 0; /* do not close it after iteration */
@@ -389,16 +388,13 @@ static int io_lines(toku_State *T) {
 ** READ
 ** ======================================================= */
 
-/* types of digits for 'read_digits' */
-#define DIGDEC  0
-#define DIGHEX  1
-#define DIGOCT  2
-
-
 /* maximum length of a numeral */
 #if !defined(T_MAXNUMERAL)
 #define T_MAXNUMERAL    200
 #endif
+
+
+typedef enum { DTDEC, DTHEX, DTBIN } DigitType;
 
 
 /* auxiliary structure used by 'read_number' */
@@ -441,26 +437,26 @@ static int test2(NumBuff *nb, const char *set) {
 
 
 /* read sequence of (hex)digits */
-static int read_digits(NumBuff *nb, int dtype, int rad) {
+static int read_digits(NumBuff *nb, DigitType dt, int rad) {
     int count = 0;
     for (;;) {
         if (count > 0 && !rad && nb->c == '_') {
             if (!skipchar(nb))
                 break; /* buffer overflow */
         } else {
-            switch (dtype) {
-                case DIGDEC: {
+            switch (dt) {
+                case DTDEC: {
                     if (!isdigit(nb->c))
                         return count;
                     break;
                 }
-                case DIGHEX: {
+                case DTHEX: {
                     if (!isxdigit(nb->c))
                         return count;
                     break;
                 }
-                case DIGOCT: {
-                    if (!isdigit(nb->c) || nb->c > '7')
+                case DTBIN: {
+                    if (nb->c != '0' && nb->c != '1')
                         return count;
                     break;
                 }
@@ -483,7 +479,7 @@ static int read_digits(NumBuff *nb, int dtype, int rad) {
 static int read_number(toku_State *T, FILE *f) {
     NumBuff nb;
     int count = 0;
-    int dtype = DIGDEC;
+    DigitType dt = DTDEC;
     char decp[2];
     nb.f = f; nb.n = 0;
     decp[0] = toku_getlocaledecpoint();
@@ -493,21 +489,23 @@ static int read_number(toku_State *T, FILE *f) {
     test2(&nb, "+-"); /* optional sign */
     if (test2(&nb, "00")) { /* leading zero? */
         if (test2(&nb, "xX")) /* have hex prefix? */
-            dtype = DIGHEX; /* numeral as hexadecimal */
-        else { /* either decimal or octal */
-            dtype = DIGOCT;
+            dt = DTHEX; /* numeral as hexadecimal */
+        else if (test2(&nb, "bB")) /* have binary prefix? */
+            dt = DTBIN;
+        else { /* decimal (or octal) */
+            dt = DTDEC;
             count = 1; /* count initial '0' as valid digit */
         }
+        if (count == 0 && nb.c != '_') /* separator is first? */
+            nextchar(&nb); /* force error */
     }
-    count += read_digits(&nb, dtype, 0); /* integral part */
-    if (count == 1 && dtype == DIGOCT) /* one '0' in the integral part? */
-        dtype = DIGDEC; /* adjust back to decimal */
+    count += read_digits(&nb, dt, 0); /* integral part */
     if (test2(&nb, decp)) /* decimal point? */
-        count += read_digits(&nb, dtype, 1); /* read fractional part */
-    if (count > 0 && dtype != DIGOCT) { /* can have an exponent? */
-        if (test2(&nb, (dtype == DIGHEX) ? "pP" : "eE")) { /* exponent? */
+        count += read_digits(&nb, dt, 1); /* read fractional part */
+    if (count > 0 && dt != DTBIN) { /* can have an exponent? */
+        if (test2(&nb, (dt == DTHEX) ? "pP" : "eE")) { /* exponent? */
             test2(&nb, "+-"); /* exponent sign */
-            read_digits(&nb, DIGDEC, 0); /* exponent digits */
+            read_digits(&nb, DTDEC, 0); /* exponent digits */
         }
     }
     ungetc(nb.c, nb.f); /* unread look-ahead char */
@@ -778,15 +776,12 @@ static const tokuL_Entry f_methods[] = {
 };
 
 
-static void create_filehandle_methods(toku_State *T) {
-    tokuL_push_methods(T, TOKU_FILEHANDLE_METHODS, f_methods);
-    toku_pop(T, 1); /* remove methods table */
-}
-
-
 static int f_getidx(toku_State *T) {
     tocstream(T);
-    toku_get_method(T, -2);
+    tokuL_get_metafield(T, 0, "__methods");
+    if (toku_get_field(T, -1) == TOKU_T_NIL)
+        tokuL_error_arg(T, 1, "unknown file method");
+    toku_push_method(T, 0);
     return 1;
 }
 
@@ -801,21 +796,23 @@ static int f_tostring(toku_State *T) {
 }
 
 
-static const tokuL_MetaEntry f_meta[] = {
-    {TOKU_MT_GETIDX, f_getidx},
-    {TOKU_MT_GC, f_gc},
-    {TOKU_MT_CLOSE, f_gc},
-    {TOKU_MT_TOSTRING, f_tostring},
-    {TOKU_MT_NAME, NULL},
-    {-1, NULL},
+static const tokuL_Entry f_meta[] = {
+    {"__getidx", f_getidx},
+    {"__gc", f_gc},
+    {"__close", f_gc},
+    {"__tostring", f_tostring},
+    {"__name", NULL},
+    {NULL, NULL},
 };
 
 
-static void create_filehandle_metalist(toku_State *T) {
-    tokuL_push_metalist(T, TOKU_FILEHANDLE, f_meta);
-    toku_push_literal(T, TOKU_FILEHANDLE);
-    toku_set_index(T, -2, TOKU_MT_NAME); /* set __name */
-    toku_pop(T, 1); /* remove metalist */
+static void create_filehandle_metatable(toku_State *T) {
+    tokuL_new_metatable(T, TOKU_FILEHANDLE); /* metatable for file handles */
+    tokuL_set_funcs(T, f_meta, 0); /* add metamethods to metatable */
+    tokuL_push_libtable(T, f_methods); /* create methods table */
+    tokuL_set_funcs(T, f_methods, 0); /* add file methods to methods table */
+    toku_set_field_str(T, -2, "__methods"); /* metatable.__methods = m. tab. */
+    toku_pop(T, 1); /* remove metatable */
 }
 
 
@@ -838,16 +835,15 @@ static void create_stdfile(toku_State *T, FILE *f, const char *k,
     p->closef = &io_noclose;
     if (k != NULL) {
         toku_push(T, -1);
-        toku_set_cfieldstr(T, k); /* add file to ctable */
+        toku_set_cfield_str(T, k); /* add file to ctable */
     }
-    toku_set_fieldstr(T, -2, fname); /* add file to module */
+    toku_set_field_str(T, -2, fname); /* add file to module */
 }
 
 
 TOKUMOD_API int tokuopen_io(toku_State *T) {
     tokuL_push_lib(T, iolib); /* 'io' table */
-    create_filehandle_methods(T);
-    create_filehandle_metalist(T);
+    create_filehandle_metatable(T);
     /* create (and set) default files */
     create_stdfile(T, stdin, IO_INPUT, "stdin");
     create_stdfile(T, stdout, IO_OUTPUT, "stdout");

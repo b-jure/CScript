@@ -266,7 +266,7 @@ static void markobject_(GState *gs, GCObject *o) {
         case TOKU_VCLASS: {
             OClass *cls = gco2cls(o);
             markobjectN(gs, cls->sclass);
-            markobjectN(gs, cls->metalist);
+            markobjectN(gs, cls->metatable);
             markobjectN(gs, cls->methods);
             markblack(cls); /* nothing else to mark */
             break;
@@ -274,8 +274,7 @@ static void markobject_(GState *gs, GCObject *o) {
         case TOKU_VUSERDATA: {
             UserData *ud = gco2u(o);
             if (ud->nuv == 0) { /* no user values? */
-                markobjectN(gs, ud->metalist);
-                markobjectN(gs, ud->methods);
+                markobjectN(gs, ud->metatable);
                 markblack(ud); /* nothing else to mark */
                 break;
             }
@@ -357,8 +356,7 @@ static t_umem markcsclosure(GState *gs, TClosure *cl) {
 
 
 static t_umem markuserdata(GState *gs, UserData *ud) {
-    markobjectN(gs, ud->metalist);
-    markobjectN(gs, ud->methods);
+    markobjectN(gs, ud->metatable);
     for (int i = 0; i < ud->nuv; i++)
         markvalue(gs, &ud->uv[i].val);
     return 1 + ud->nuv; /* user values + userdata */
@@ -653,18 +651,18 @@ static void pgc(toku_State *T, void *userdata) {
 /* call a finalizer "__gc" */
 static void callgc(toku_State *T) {
     TValue v;
-    const TValue *fmm;
+    const TValue *tm;
     GState *gs = G(T);
     toku_assert(!gs->gcemergency);
     setgcoval(T, &v, gettobefin(gs));
-    fmm = tokuMM_get(T, &v, TOKU_MT_GC);
-    if (!ttisnil(fmm)) { /* is there a finalizer? */
+    tm = tokuTM_objget(T, &v, TM_GC);
+    if (!notm(tm)) { /* is there a finalizer? */
         int status;
         int old_allowhook = T->allowhook;
         int old_gcstop = gs->gcstop;
         gs->gcstop |= GCSTP; /* avoid GC steps */
         T->allowhook = 0; /* stop debug hooks during GC metamethod */
-        setobj2s(T, T->sp.p++, fmm); /* push finalizer... */
+        setobj2s(T, T->sp.p++, tm); /* push finalizer... */
         setobj2s(T, T->sp.p++, &v); /* ...and its argument */
         T->cf->status |= CFST_FIN; /* will run a finalizer */
         status = tokuPR_call(T, pgc, NULL, savestack(T,T->sp.p-2), T->errfunc);
@@ -690,18 +688,16 @@ static int runNfinalizers(toku_State *T, int n) {
 
 
 /*
-** Check if object has a finalizer and move it into 'fin'
-** list but only if it wasn't moved already indicated by
-** 'FINBIT' being set, additionally don't move it in case
-** state is closing.
+** Check if object has a finalizer and move it into 'fin' list but
+** only if it wasn't moved already indicated by 'FINBIT' being set,
+** additionally don't move it in case state is closing.
 */
-void tokuG_checkfin(toku_State *T, GCObject *o, List *ml) {
+void tokuG_checkfin(toku_State *T, GCObject *o, Table *mt) {
     GCObject **pp;
     GState *gs = G(T);
-    if (!ml ||                          /* no metalist... */
-        isfin(o) ||                     /* or object is already marked... */
-        ttisnil(&ml->arr[TOKU_MT_GC]) ||    /* or it has no finalizer... */
-        (gs->gcstop & GCSTPCLS))        /* ...or state is closing? */
+    if (isfin(o) ||                     /* or object is already marked... */
+        gfasttm(gs, mt, TM_GC) == NULL ||   /* or it has no finalizer... */
+        (gs->gcstop & GCSTPCLS))                /* ...or state is closing? */
         return; /* nothing to be done */
     /* otherwise move 'o' to 'fin' list */
     if (issweepstate(gs)) {
@@ -1000,7 +996,7 @@ void tokuG_fullinc(toku_State *T, int isemergency) {
 static void whitelist(GState *gs, GCObject *l) {
     int white = tokuG_white(gs);
     for (; l != NULL; l = l->next)
-        l->mark = cast_sbyte((l->mark & ~maskgcbits) | white);
+        l->mark = cast_byte((l->mark & ~maskgcbits) | white);
 }
 
 

@@ -468,7 +468,7 @@ static const char *getobjname(const Proto *p, int lastpc, int sp,
 
 static const char *funcnamefromcode(toku_State *T, const Proto *p, int pc,
                                     const char **name) {
-    int mm;
+    TM event;
     Instruction *i = &p->code[pc];
     switch (*i) {
         case OP_CALL:
@@ -479,28 +479,28 @@ static const char *funcnamefromcode(toku_State *T, const Proto *p, int pc,
         }
         case OP_GETPROPERTY: case OP_GETINDEX:
         case OP_GETINDEXSTR: case OP_GETINDEXINT: {
-            mm = TOKU_MT_GETIDX;
+            event = TM_GETIDX;
             break;
         }
         case OP_SETPROPERTY: case OP_SETINDEX:
         case OP_SETINDEXSTR: case OP_SETINDEXINT: {
-            mm = TOKU_MT_SETIDX;
+            event = TM_SETIDX;
             break;
         }
         case OP_MBIN: {
-            mm = GET_ARG_S(i, 0) & 0x7f;
+            event = GET_ARG_S(i, 0) & 0x7f;
             break;
         }
-        case OP_LT: case OP_LTI: case OP_GTI: mm = TOKU_MT_LT; break;
-        case OP_LE: case OP_LEI: case OP_GEI: mm = TOKU_MT_LE; break;
-        case OP_CLOSE: case OP_RETURN: mm = TOKU_MT_CLOSE; break;
-        case OP_UNM: mm = TOKU_MT_UNM; break;
-        case OP_BNOT: mm = TOKU_MT_BNOT; break;
-        case OP_CONCAT: mm = TOKU_MT_CONCAT; break;
-        case OP_EQ: mm = TOKU_MT_EQ; break;
+        case OP_LT: case OP_LTI: case OP_GTI: event = TM_LT; break;
+        case OP_LE: case OP_LEI: case OP_GEI: event = TM_LE; break;
+        case OP_CLOSE: case OP_RETURN: event = TM_CLOSE; break;
+        case OP_UNM: event = TM_UNM; break;
+        case OP_BNOT: event = TM_BNOT; break;
+        case OP_CONCAT: event = TM_CONCAT; break;
+        case OP_EQ: event = TM_EQ; break;
         default: return NULL;
     }
-    *name = metaname(T, mm);
+    *name = eventname(T, event) + 2;
     return "metamethod";
 }
 
@@ -834,7 +834,7 @@ static const char *varinfo(toku_State *T, const TValue *o) {
 */
 static t_noret typeerror(toku_State *T, const TValue *o, const char *op,
                                                        const char *extra) {
-    const char *t = tokuMM_objtypename(T, o);
+    const char *t = tokuTM_objtypename(T, o);
     tokuD_runerror(T, "attempt to %s a %s value%s", op, t, extra);
 }
 
@@ -883,17 +883,16 @@ static t_noret classerror(toku_State *T, const char *op) {
 
 
 t_noret tokuD_binoperror(toku_State *T, const TValue *v1,
-                                    const TValue *v2, int mm) {
-    switch (mm) {
-        case TOKU_MT_BAND: case TOKU_MT_BOR: case TOKU_MT_BXOR:
-        case TOKU_MT_BSHL: case TOKU_MT_BSHR: case TOKU_MT_BNOT: {
+                         const TValue *v2, TM event) {
+    switch (event) {
+        case TM_BAND: case TM_BOR: case TM_BXOR:
+        case TM_BSHL: case TM_BSHR: case TM_BNOT: {
             if (ttisnum(v1) && ttisnum(v2))
                 tokuD_tointerror(T, v1, v2);
             else
                 tokuD_opinterror(T, v1, v2, "perform bitwise operation on");
-            break;
+            break; /* to avoid warnings */
         }
-        /* to avoid warnings *//* fall through */
         default:
             tokuD_opinterror(T, v1, v2, "perform arithmetic on");
     }
@@ -904,8 +903,8 @@ t_noret tokuD_ordererror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
         classerror(T, "compare");
     else {
-        const char *t1 = tokuMM_objtypename(T, v1);
-        const char *t2 = tokuMM_objtypename(T, v2);
+        const char *t1 = tokuTM_objtypename(T, v1);
+        const char *t2 = tokuTM_objtypename(T, v2);
         if (strcmp(t1, t2) == 0)
             tokuD_runerror(T, "attempt to compare two %s values", t1);
         else
@@ -916,7 +915,7 @@ t_noret tokuD_ordererror(toku_State *T, const TValue *v1, const TValue *v2) {
 
 t_noret tokuD_concaterror(toku_State *T, const TValue *v1, const TValue *v2) {
     if (differentclasses(v1, v2))
-        classerror(T, metaname(T, TOKU_MT_CONCAT));
+        classerror(T, eventname(T, TM_CONCAT) + 2);
     else {
         if (ttisstring(v1)) v1 = v2;
         tokuD_typeerror(T, v1, "concatenate");
@@ -943,7 +942,7 @@ t_noret tokuD_callerror(toku_State *T, const TValue *o) {
 */
 t_noret tokuD_listerror(toku_State *T, const TValue *o, const char *what,
                                                     const char *msg) {
-    const char *t = tokuMM_objtypename(T, o);
+    const char *t = tokuTM_objtypename(T, o);
     const char *e = varinfo(T, o);
     tokuD_runerror(T, "list %s %s value%s is %s", what, t, e, msg);
 }

@@ -69,7 +69,7 @@ local fn eqclone(a,b) {
             if a == b return false;
             local tmp1,tmp2 = getsuper(a),getsuper(b);
             if !eqclone(tmp1,tmp2) return false;
-            tmp1,tmp2 = getmetalist(a),getmetalist(b);
+            tmp1,tmp2 = getmetatable(a),getmetatable(b);
             if !eqclone(tmp1,tmp2) return false;
             tmp1,tmp2 = getmethods(a),getmethods(b);
             return eqclone(tmp1,tmp2);

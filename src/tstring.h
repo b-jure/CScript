@@ -34,19 +34,18 @@
          (s)->extra <= NUM_KEYWORDS)
 
 
-/* value of 'extra' for first metamethod name */
-#define FIRSTMM     (NUM_KEYWORDS + 1)
+/* value of 'extra' for first tag method name */
+#define FIRST_TM        (NUM_KEYWORDS + 1)
 
 
 /* test whether a string is a metamethod tag */
 #define ismetatag(s) \
-        ((s)->tt_ == TOKU_VSHRSTR && FIRSTMM <= (s)->extra && \
-         (s)->extra < FIRSTMM + TOKU_MT_NUM)
+        ((s)->tt_ == TOKU_VSHRSTR && FIRST_TM <= (s)->extra && \
+         (s)->extra < FIRST_TM + TM_NUM)
 
 
 /* equality for short strings, which are always internalized */
 #define eqshrstr(a,b)	check_exp((a)->tt_ == TOKU_VSHRSTR, (a) == (b))
-
 
 
 TOKUI_FUNC int tokuS_eqlngstr(const OString *s1, const OString *s2);

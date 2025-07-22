@@ -104,10 +104,10 @@ void *tokuM_malloc_(toku_State *T, size_t size, int tag) {
 
 
 /* minimum size of array memory block */
-#define MINSIZEARRAY    4
+#define MINASIZE    4
 
 void *tokuM_growarr_(toku_State *T, void *block, int *sizep, int len,
-                   int elemsize, int nelems, int limit, const char *what) {
+                     int elemsize, int nelems, int limit, const char *what) {
     int size = *sizep;
     toku_assert(0 <= nelems && 0 < elemsize && what);
 checkspace:
@@ -115,17 +115,16 @@ checkspace:
         toku_assert(size <= limit);
         return block; /* done; return the current block */
     } else { /* otherwise grow */
-        if (t_unlikely(size >= limit / 2)) { /* cannot double it? */
-            if (t_unlikely(size >= limit)) /* limit reached? */
+        if (t_unlikely(limit/2 <= size)) { /* cannot double it? */
+            if (t_unlikely(limit <= size)) /* limit reached? */
                 tokuD_runerror(T, "too many %s (limit is %d)", what, limit);
             size = limit;
         } else {
             size *= 2;
-            if (size < MINSIZEARRAY)
-                size = MINSIZEARRAY;
+            size = (MINASIZE <= size) ? size : MINASIZE;
         }
         block = tokuM_saferealloc(T, block, cast_sizet(*sizep) * elemsize,
-                                          cast_sizet(size) * elemsize);
+                                            cast_sizet(size) * elemsize);
         *sizep = size;
         goto checkspace;
     }
@@ -133,7 +132,7 @@ checkspace:
 
 
 void *tokuM_shrinkarr_(toku_State *T, void *ptr, int *sizep, int nfinal,
-                     int elemsize) {
+                       int elemsize) {
     size_t osz = cast_sizet((*sizep) * elemsize);
     size_t nsz = cast_sizet(nfinal * elemsize);
     toku_assert(nsz <= osz);

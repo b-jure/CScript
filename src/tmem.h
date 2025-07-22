@@ -12,29 +12,42 @@
 
 
 /* memory error */
-#define tokuM_error(C)      tokuPR_throw(C, TOKU_STATUS_EMEM)
+#define tokuM_error(T)      tokuPR_throw(T, TOKU_STATUS_EMEM)
 
 
-#define tokuM_new(C,t)          tokuM_malloc_(C, sizeof(t), 0)
-#define tokuM_newarray(C,s,t)   tokuM_malloc_(C, (s)*sizeof(t), 0)
-#define tokuM_newobj(C,tag,sz)  tokuM_malloc_(C, (sz), (tag))
+/*
+** Computes the minimum between 'n' and 'TOKU_MAXSIZET/sizeof(t)', so that
+** the result is not larger than 'n' and cannot overflow a 'size_t'
+** when multiplied by the size of type 't'. (Assumes that 'n' is an
+** 'int' and that 'int' is not larger than 'size_t'.)
+*/
+#define tokuM_limitN(n,t)  \
+    ((cast_sizet(n) <= TOKU_MAXSIZET/sizeof(t)) ? (n) :  \
+        cast_int((TOKU_MAXSIZET/sizeof(t))))
 
-#define tokuM_free(C,p)         tokuM_free_(C, p, sizeof(*(p)))
-#define tokuM_freemem(C,p,sz)   tokuM_free_((C), (p), (sz))
-#define tokuM_freearray(C,p,n)  tokuM_free_((C), (p), (n)*sizeof(*(p)))
+
+#define tokuM_new(T,t)          tokuM_malloc_(T, sizeof(t), 0)
+#define tokuM_newarray(T,s,t)   tokuM_malloc_(T, (s)*sizeof(t), 0)
+#define tokuM_newobj(T,tag,sz)  tokuM_malloc_(T, (sz), (tag))
+
+#define tokuM_free(T,p)         tokuM_free_(T, p, sizeof(*(p)))
+#define tokuM_freemem(T,p,sz)   tokuM_free_((T), (p), (sz))
+#define tokuM_freearray(T,p,n)  tokuM_free_((T), (p), (n)*sizeof(*(p)))
 
 
-#define tokuM_reallocarray(C,p,os,ns,t) \
-        ((p) = tokuM_realloc_(C, p, (os)*sizeof(t), (ns)*sizeof(t)))
+#define tokuM_reallocarray(T,p,os,ns,t) \
+        cast(t *, tokuM_realloc_(T, p, cast_sizet(os)*sizeof(t), \
+                                       cast_sizet(ns)*sizeof(t)))
 
-#define tokuM_ensurearray(C,p,s,n,e,l,w,t) \
-        ((p) = tokuM_growarr_(C, p, &(s), n, sizeof(t), e, l, w))
+#define tokuM_ensurearray(T,p,size,nelems,space,limit,err,t) \
+        ((p) = cast(t *, tokuM_growarr_(T, p, &(size), nelems, sizeof(t), \
+                                        space, tokuM_limitN(limit,t), err)))
 
-#define tokuM_growarray(C,p,s,n,l,w,t) \
-        tokuM_ensurearray((C), (p), (s), (n), 1, (l), (w), t)
+#define tokuM_growarray(T,p,size,nelems,limit,err,t) \
+        tokuM_ensurearray(T, p, size, nelems, 1, limit, err, t)
 
-#define tokuM_shrinkarray(C,p,s,f,t) \
-        ((p) = tokuM_shrinkarr_(C, p, &(s), f, sizeof(t)))
+#define tokuM_shrinkarray(T,p,size,f,t) \
+        ((p) = cast(t *, tokuM_shrinkarr_(T, p, &(size), f, sizeof(t))))
 
 
 TOKUI_FUNC void *tokuM_malloc_(toku_State *T, t_umem size, int tag);

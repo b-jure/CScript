@@ -162,7 +162,7 @@ toku_Number tokuV_modf(toku_State *T, toku_Number x, toku_Number y) {
 void tokuV_binarithm(toku_State *T, const TValue *v1,
                                 const TValue *v2, SPtr res, int op) {
     if (!tokuO_arithmraw(T, v1, v2, s2v(res), op))
-        tokuMM_trybin(T, v1, v2, res, (op - TOKU_OP_ADD) + TOKU_MT_ADD);
+        tokuTM_trybin(T, v1, v2, res, (op - TOKU_OP_ADD) + TM_ADD);
 }
 
 
@@ -174,7 +174,7 @@ void tokuV_unarithm(toku_State *T, const TValue *v, SPtr res, int op) {
     TValue aux;
     setival(&aux, 0);
     if (!tokuO_arithmraw(T, v, &aux, s2v(T->sp.p - 1), op))
-        tokuMM_tryunary(T, v, res, (op - TOKU_OP_UNM) + TOKU_MT_UNM);
+        tokuTM_tryunary(T, v, res, (op - TOKU_OP_UNM) + TM_UNM);
 }
 
 
@@ -228,7 +228,7 @@ t_sinline int LEother(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return (tokuS_cmp(strval(v1), strval(v2)) <= 0);
     else
-        return tokuMM_order(T, v1, v2, TOKU_MT_LE);
+        return tokuTM_order(T, v1, v2, TM_LE);
 }
 
 
@@ -290,7 +290,7 @@ t_sinline int LTother(toku_State *T, const TValue *v1, const TValue *v2) {
     if (ttisstring(v1) && ttisstring(v2))
         return tokuS_cmp(strval(v1), strval(v2)) < 0;
     else
-        return tokuMM_order(T, v1, v2, TOKU_MT_LT);
+        return tokuTM_order(T, v1, v2, TM_LT);
 }
 
 
@@ -308,7 +308,7 @@ int tokuV_orderlt(toku_State *T, const TValue *v1, const TValue *v2) {
 */
 int tokuV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
     toku_Integer i1, i2;
-    const TValue *fmm;
+    const TValue *tm;
     int swap = 0;
     if (ttypetag(v1) != ttypetag(v2)) {
         if (ttype(v1) != ttype(v2) || ttype(v1) != TOKU_T_NUMBER)
@@ -324,39 +324,40 @@ int tokuV_ordereq(toku_State *T, const TValue *v1, const TValue *v2) {
         case TOKU_VLIGHTUSERDATA: return pval(v1) == pval(v2);
         case TOKU_VSHRSTR: return eqshrstr(strval(v1), strval(v2));
         case TOKU_VLNGSTR: return tokuS_eqlngstr(strval(v1), strval(v2));
-        case TOKU_VIMETHOD: return tokuMM_eqim(imval(v1), imval(v2));
-        case TOKU_VUMETHOD: return tokuMM_equm(umval(v1), umval(v2));
+        case TOKU_VIMETHOD: return tokuTM_eqim(imval(v1), imval(v2));
+        case TOKU_VUMETHOD: return tokuTM_equm(umval(v1), umval(v2));
         case TOKU_VUSERDATA: {
-            if  (T == NULL || (ttisnil(fmm = tokuMM_get(T, v1, TOKU_MT_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = tokuMM_get(T, v2, TOKU_MT_EQ))))
+            Table *mt1 = udval(v1)->metatable;
+            Table *mt2 = udval(v2)->metatable;
+            if  (T == NULL || (!(tm = fasttm(T, mt1, TM_EQ)) &&
+                    (swap = 1) && !(tm = fasttm(T, mt2, TM_EQ))))
                 return udval(v1) == udval(v2);
+            if (swap) t_cswap(v1, v2);
             break;
         }
         case TOKU_VINSTANCE: {
+            Table *mt1 = insval(v1)->oclass->metatable;
             if (T == NULL || (insval(v1)->oclass != insval(v2)->oclass) ||
-                    (ttisnil(fmm = tokuMM_get(T, v1, TOKU_MT_EQ)) &&
-                    (swap = 1) && ttisnil(fmm = tokuMM_get(T, v2, TOKU_MT_EQ))))
+                    !(tm = fasttm(T, mt1, TM_EQ)))
                 return insval(v1) == insval(v2);
             break;
         }
         default: return gcoval(v1) == gcoval(v2);
     }
-    toku_assert(!ttisnil(fmm));
-    if (swap) t_cswap(v1, v2);
-    tokuMM_callbinres(T, fmm, v1, v2, T->sp.p);
+    tokuTM_callbinres(T, tm, v1, v2, T->sp.p);
     return !t_isfalse(s2v(T->sp.p));
 }
 
 
 /* generic set */
 #define tokuV_setgen(T,o,k,v,f) \
-    { const TValue *fmm = tokuMM_get(T, o, TOKU_MT_SETIDX); \
-      if (ttisnil(fmm)) { f(T, o, k, v); } \
-      else { tokuMM_callset(T, fmm, o, k, v); }}
+    { const TValue *tm = tokuTM_objget(T, o, TM_SETIDX); \
+      if (notm(tm)) { f(T, o, k, v); } \
+      else { tokuTM_callset(T, tm, o, k, v); }}
 
 
 void tokuV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
-                                                 const TValue *v) {
+                                                     const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
@@ -371,7 +372,7 @@ void tokuV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
         case TOKU_VINSTANCE: {
             t = insval(o)->fields;
         set_table:
-            tokuV_settable(T, t, strval(k), v, tokuH_setstr);
+            tokuV_settableTM(T, t, strval(k), v, tokuH_setstr);
             break;
         }
         default: {
@@ -383,13 +384,13 @@ void tokuV_rawsetstr(toku_State *T, const TValue *o, const TValue *k,
 
 
 void tokuV_setstr(toku_State *T, const TValue *o, const TValue *k,
-                                              const TValue *v) {
+                                                  const TValue *v) {
     tokuV_setgen(T, o, k, v, tokuV_rawsetstr);
 }
 
 
 void tokuV_rawsetint(toku_State *T, const TValue *o, const TValue *k,
-                                                 const TValue *v) {
+                                                     const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
@@ -417,13 +418,13 @@ void tokuV_rawsetint(toku_State *T, const TValue *o, const TValue *k,
 
 
 void tokuV_setint(toku_State *T, const TValue *o, const TValue *k,
-                                              const TValue *v) {
+                                                  const TValue *v) {
     tokuV_setgen(T, o, k, v, tokuV_rawsetint);
 }
 
 
 void tokuV_rawset(toku_State *T, const TValue *o, const TValue *k,
-                                              const TValue *v) {
+                                                  const TValue *v) {
     Table *t;
     switch (ttypetag(o)) {
         case TOKU_VLIST: {
@@ -438,7 +439,7 @@ void tokuV_rawset(toku_State *T, const TValue *o, const TValue *k,
         case TOKU_VINSTANCE: {
             t = insval(o)->fields;
         set_table:
-            tokuV_settable(T, t, k, v, tokuH_set);
+            tokuV_settableTM(T, t, k, v, tokuH_set);
             break;
         }
         default: {
@@ -449,36 +450,37 @@ void tokuV_rawset(toku_State *T, const TValue *o, const TValue *k,
 }
 
 
-void tokuV_set(toku_State *T, const TValue *o, const TValue *k, const TValue *v) {
+void tokuV_set(toku_State *T, const TValue *o, const TValue *k,
+                                               const TValue *v) {
     tokuV_setgen(T, o, k, v, tokuV_rawset);
 }
 
 
-/* bind method to instance and set it at 'res' */
-#define bindmethod(T,in,fn,res) \
-        setimval2s(T, res, tokuMM_newinsmethod(T, in, fn))
+/* bind method to instance */
+#define bindmethod(T,inst,method,res) \
+        setimval2s(T, res, tokuTM_newinsmethod(T, inst, method))
 
 
 /* generic get */
 #define tokuV_getgen(T,o,k,res,f) \
-    { const TValue *fmm = tokuMM_get(T, o, TOKU_MT_GETIDX); \
-      if (ttisnil(fmm)) { f(T, o, k, res); } \
-      else { tokuMM_callgetres(T, fmm, o, k, res); }}
+    { const TValue *tm = tokuTM_objget(T, o, TM_GETIDX); \
+      if (ttisnil(tm)) { f(T, o, k, res); } \
+      else { tokuTM_callgetres(T, tm, o, k, res); }}
 
 
-t_sinline void finishTget(toku_State *T, const TValue *slot, SPtr res) {
-    if (!ttisnil(slot)) {
-        setobj2s(T, res, slot);
+t_sinline void finishTget(toku_State *T, t_ubyte tag, TValue *val, SPtr res) {
+    if (!tagisempty(tag)) {
+        setobj2s(T, res, val);
     } else
         setnilval(s2v(res));
 }
 
 
-t_sinline void trybindmethod(toku_State *T, const TValue *slot, Instance *in,
-                                                              SPtr res) {
-    if (!isempty(slot)) { /* have method? */
+t_sinline void trybindmethod(toku_State *T, TValue *slot, t_ubyte tag,
+                                            Instance *inst, SPtr res) {
+    if (!tagisempty(tag)) { /* have method? */
         setobj2s(T, res, slot);
-        bindmethod(T, in, slot, res);
+        bindmethod(T, inst, slot, res);
     } else
         setnilval(s2v(res));
 }
@@ -491,18 +493,21 @@ void tokuV_rawgetstr(toku_State *T, const TValue *o, const TValue *k, SPtr res) 
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(T, tokuH_getstr(tval(o), strval(k)), res);
+            TValue value;
+            t_ubyte tag = tokuH_getstr(tval(o), strval(k), &value);
+            finishTget(T, tag, &value, res);
             break;
         }
         case TOKU_VINSTANCE: {
-            Instance *in = insval(o);
-            const TValue *slot = tokuH_getstr(in->fields, strval(k));
-            if (isempty(slot) && in->oclass->methods) {
+            Instance *inst = insval(o);
+            TValue slot;
+            t_ubyte tag = tokuH_getstr(inst->fields, strval(k), &slot);
+            if (tagisempty(tag) && inst->oclass->methods) {
                 /* try methods table */
-                slot = tokuH_getstr(in->oclass->methods, strval(k));
-                trybindmethod(T, slot, in, res);
+                tag = tokuH_getstr(inst->oclass->methods, strval(k), &slot);
+                trybindmethod(T, &slot, tag, inst, res);
             } else
-                setobj2s(T, res, slot);
+                setobj2s(T, res, &slot);
             break;
         }
         default: {
@@ -526,18 +531,21 @@ void tokuV_rawgetint(toku_State *T, const TValue *o, const TValue *k, SPtr res) 
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(T, tokuH_getint(tval(o), ival(k)), res);
+            TValue value;
+            t_ubyte tag = tokuH_getint(tval(o), ival(k), &value);
+            finishTget(T, tag, &value, res);
             break;
         }
         case TOKU_VINSTANCE: {
-            Instance *in = insval(o);
-            const TValue *slot = tokuH_getint(in->fields, ival(k));
-            if (isempty(slot) && in->oclass->methods) {
+            Instance *inst = insval(o);
+            TValue value;
+            t_ubyte tag = tokuH_getint(inst->fields, ival(k), &value);
+            if (tagisempty(tag) && inst->oclass->methods) {
                 /* try methods table */
-                slot = tokuH_getint(in->oclass->methods, ival(k));
-                trybindmethod(T, slot, in, res);
+                tag = tokuH_getint(inst->oclass->methods, ival(k), &value);
+                trybindmethod(T, &value, tag, inst, res);
             } else
-                setobj2s(T, res, slot);
+                setobj2s(T, res, &value);
             break;
         }
         default: {
@@ -560,18 +568,21 @@ void tokuV_rawget(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
             break;
         }
         case TOKU_VTABLE: {
-            finishTget(T, tokuH_get(tval(o), k), res);
+            TValue value;
+            t_ubyte tag = tokuH_get(tval(o), k, &value);
+            finishTget(T, tag, &value, res);
             break;
         }
         case TOKU_VINSTANCE: {
-            Instance *in = insval(o);
-            const TValue *slot = tokuH_get(in->fields, k);
-            if (isempty(slot) && in->oclass->methods) {
+            Instance *inst = insval(o);
+            TValue value;
+            t_ubyte tag = tokuH_get(inst->fields, k, &value);
+            if (tagisempty(tag) && inst->oclass->methods) {
                 /* try methods table */
-                slot = tokuH_get(in->oclass->methods, k);
-                trybindmethod(T, slot, in, res);
+                tag = tokuH_get(inst->oclass->methods, k, &value);
+                trybindmethod(T, &value, tag, inst, res);
             } else
-                setobj2s(T, res, slot);
+                setobj2s(T, res, &value);
             break;
         }
         default: {
@@ -587,14 +598,17 @@ void tokuV_get(toku_State *T, const TValue *o, const TValue *k, SPtr res) {
 }
 
 
-#define getsuper(T,in,scl,k,res,fget) { \
+#define getsuper(T,inst,scl,k,res,fget) { \
     if (t_unlikely(scl == NULL)) \
         tokuD_runerror(T, "class instance has no superclass"); \
     if ((scl)->methods) { \
-        const TValue *f = fget((scl)->methods, k); \
-        if (!isempty(f)) { bindmethod(T, in, f, res); } \
-      } else \
-         setnilval(s2v(res)); }
+        TValue method; \
+        t_ubyte tag = fget((scl)->methods, k, &method); \
+        if (!tagisempty(tag)) { \
+            bindmethod(T, inst, &method, res); \
+        } \
+    } else \
+        setnilval(s2v(res)); }
 
 
 /*
@@ -733,8 +747,8 @@ t_sinline void auxinsertf(toku_State *T, SPtr func, const TValue *f) {
 t_sinline SPtr trymetacall(toku_State *T, SPtr func) {
     const TValue *f;
     checkstackGCp(T, 1, func); /* space for func */
-    f = tokuMM_get(T, s2v(func), TOKU_MT_CALL); /* (after previous GC) */
-    if (t_unlikely(ttisnil(f))) /* missing __call? (after GC) */
+    f = tokuTM_objget(T, s2v(func), TM_CALL); /* (after previous GC) */
+    if (t_unlikely(notm(f))) /* missing __call? */
         tokuD_callerror(T, s2v(func));
     auxinsertf(T, func, f);
     return func;
@@ -769,16 +783,18 @@ retry:
             return cf; /* new call frame */
         }
         case TOKU_VCLASS: { /* Class object */
-            const TValue *fmm;
-            Instance *ins = tokuMM_newinstance(T, classval(s2v(func)));
-            tokuG_checkfin(T, obj2gco(ins), ins->oclass->metalist);
+            const TValue *tm;
+            OClass *cls = classval(s2v(func));
+            Table *mt = cls->metatable;
+            Instance *ins = tokuTM_newinstance(T, cls);
+            tokuG_checkfin(T, obj2gco(ins), mt);
             setinsval2s(T, func, ins); /* replace class with its instance */
-            fmm = tokuMM_get(T, s2v(func), TOKU_MT_INIT);
-            if (!ttisnil(fmm)) { /* have __init ? */
-                checkstackGCp(T, 1, func); /* space for fmm */
-                fmm = tokuMM_get(T, s2v(func), TOKU_MT_INIT); /* (after GC) */
-                if (t_likely(!ttisnil(fmm))) { /* have __init (after GC)? */
-                    auxinsertf(T, func, fmm); /* insert it into stack... */
+            tm = fasttm(T, mt, TM_INIT);
+            if (!notm(tm)) { /* have __init ? */
+                checkstackGCp(T, 1, func); /* space for 'tm' */
+                tm = fasttm(T, ins->oclass->metatable, TM_INIT); /* (after GC) */
+                if (t_likely(!notm(tm))) { /* have __init (after GC)? */
+                    auxinsertf(T, func, tm); /* insert it into stack... */
                     goto retry; /* ...and try calling it */
                 } else goto noinit; /* no __init (after GC) */
             } else {
@@ -853,7 +869,7 @@ void tokuV_concat(toku_State *T, int total) {
         SPtr top = T->sp.p;
         int n = 2; /* number of elements (minimum 2) */
         if (!(ttisstring(s2v(top - 2)) && ttisstring(s2v(top - 1))))
-            tokuMM_tryconcat(T);
+            tokuTM_tryconcat(T); /* at least one operand is not a string */
         else if (isemptystr(s2v(top - 1))) /* second operand is empty string? */
             ; /* result already in the first operand */
         else if (isemptystr(s2v(top - 2))) { /* first operand is empty string? */
@@ -893,20 +909,21 @@ t_sinline OClass *checksuper(toku_State *T, const TValue *scl) {
 }
 
 
-void tokuV_inherit(toku_State *T, OClass *cls, OClass *scl) {
-    if (scl->methods) { /* superclass has methods? */
-        if (!cls->methods) /* class needs a method table? */
-            cls->methods = tokuH_new(T);
-        tokuH_copykeys(T, cls->methods, scl->methods);
-    }
-    if (scl->metalist) { /* superclass has metalist entries? */
-        if (!cls->metalist) /* class needs a metalist? */
-            cls->metalist = tokuA_new(T);
-        tokuA_ensure(T, cls->metalist, scl->metalist->len);
-        for (int i = 0; i < scl->metalist->len; i++)
-            setobj(T, &cls->metalist->arr[i], &scl->metalist->arr[i]);
-    }
-    cls->sclass = scl; /* set the superclass */
+t_sinline Table *copytable(toku_State *T, Table *dest, Table *src) {
+    toku_assert(src != NULL);
+    if (!dest) dest = tokuH_new(T);
+    tokuH_copy(T, dest, src);
+    invalidateTMcache(dest);
+    return dest;
+}
+
+
+static void doinherit(toku_State *T, OClass *cls, OClass *supcls) {
+    if (supcls->methods) /* superclass has methods? */
+        cls->methods = copytable(T, cls->methods, supcls->methods);
+    if (supcls->metatable)
+        cls->metatable = copytable(T, cls->metatable, supcls->metatable);
+    cls->sclass = supcls; /* set the superclass */
 }
 
 
@@ -914,15 +931,16 @@ void tokuV_inherit(toku_State *T, OClass *cls, OClass *scl) {
 
 
 t_sinline void pushclass(toku_State *T, int b) {
-    OClass *cls = tokuMM_newclass(T);
+    OClass *cls = tokuTM_newclass(T);
     setclsval2s(T, T->sp.p++, cls);
-    if (b & 0x80) { /* have metamethod entries? */
-        toku_assert(cls->metalist == NULL);
-        cls->metalist = tokuA_new(T);
+    if (b & 0x80) { /* have metatable entries? */
+        cls->metatable = tokuH_new(T);
         b &= 0x7F; /* remove flag */
     }
-    if (b > 0) /* have methods? */
-        cls->methods = tokuH_newsz(T, log2size1(b));
+    if (b > 0) { /* have methods? */
+        cls->methods = tokuH_new(T);
+        tokuH_resize(T, cls->methods, log2size1(b));
+    }
 }
 
 
@@ -1086,7 +1104,7 @@ t_sinline void pushtable(toku_State *T, int b) {
     lk = K(fetch_l()); \
     if (t_likely(tointeger(v, &i1) && tointeger(lk, &i2))) { \
         setival(v, op(i1, i2)); \
-    } else tokuD_binoperror(T, v, lk, TOKU_MT_BAND); }
+    } else tokuD_binoperror(T, v, lk, TM_BAND); }
 
 
 /* bitwise operations with immediate operand */
@@ -1101,7 +1119,7 @@ t_sinline void pushtable(toku_State *T, int b) {
         setival(v, op(i, imm)); \
     } else { \
         TValue vimm; setival(&vimm, imm); \
-        tokuD_binoperror(T, v, &vimm, TOKU_MT_BAND); \
+        tokuD_binoperror(T, v, &vimm, TM_BAND); \
     }}
 
 
@@ -1314,9 +1332,9 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_SUPER) {
-                OClass *scl = insval(peek(0))->oclass->sclass;
-                toku_assert(scl != NULL);
-                setclsval2s(T, sp - 1, scl);
+                OClass *supcls = insval(peek(0))->oclass->sclass;
+                toku_assert(supcls != NULL);
+                setclsval2s(T, sp - 1, supcls);
                 vm_break;
             }
             vm_case(OP_LOAD) {
@@ -1414,21 +1432,19 @@ returning: /* trap already set */
                 savestate(T);
                 key = K(fetch_l());
                 toku_assert(t && ttisstring(key));
-                tokuV_settable(T, t, strval(key), f, tokuH_setstr);
+                tokuV_settableTM(T, t, strval(key), f, tokuH_setstr);
                 sp--;
                 vm_break;
             }
             vm_case(OP_SETMT) {
-                TValue *o = peek(1); /* class */
-                TValue *f = peek(0); /* func */
-                List *ml = classval(o)->metalist;
-                int mt; /* metalist index */
+                Table *mt = classval(peek(1))->metatable;
+                TValue *val = peek(0); /* func */
+                TM ev;
                 savestate(T);
-                toku_assert(ml != NULL);
-                mt = fetch_s();
-                toku_assert(cast_uint(mt) < TOKU_MT_NUM);
-                tokuA_ensureindex(T, ml, mt);
-                tokuA_fastset(T, ml, mt, f); /* set the entry */
+                toku_assert(mt != NULL);
+                ev = fetch_s();
+                toku_assert(cast_uint(ev) < TM_NUM);
+                tokuV_settableTM(T, mt, eventstring(T, ev), val, tokuH_setstr);
                 sp--;
                 vm_break;
             }
@@ -1441,7 +1457,7 @@ returning: /* trap already set */
                 TValue *v2 = peek(0);
                 savestate(T);
                 /* operands are already swapped */
-                Protect(tokuMM_trybin(T, v1, v2, sp-2, fetch_s()));
+                Protect(tokuTM_trybin(T, v1, v2, sp-2, fetch_s()));
                 sp--;
                 vm_break;
             }
@@ -1686,7 +1702,7 @@ returning: /* trap already set */
                     setfval(v, t_numunm(T, n));
                 } else {
                     savestate(T);
-                    Protect(tokuMM_tryunary(T, v, sp-1, TOKU_MT_UNM));
+                    Protect(tokuTM_tryunary(T, v, sp-1, TM_UNM));
                 }
                 vm_break;
             }
@@ -1697,7 +1713,7 @@ returning: /* trap already set */
                     setival(v, intop(^, ~t_castS2U(0), i));
                 } else {
                     savestate(T);
-                    Protect(tokuMM_tryunary(T, v, sp-1, TOKU_MT_BNOT));
+                    Protect(tokuTM_tryunary(T, v, sp-1, TM_BNOT));
                 }
                 vm_break;
             }
@@ -1910,41 +1926,41 @@ returning: /* trap already set */
                 vm_break;
             }
             vm_case(OP_GETSUP) {
-                Instance *in = insval(peek(0));
-                OClass *scl = in->oclass->sclass;
+                Instance *inst = insval(peek(0));
+                OClass *supcls = inst->oclass->sclass;
                 TValue *sk;
                 savestate(T);
                 sk = K(fetch_l());
-                getsuper(T, in, scl, strval(sk), sp - 1, tokuH_getstr);
+                getsuper(T, inst, supcls, strval(sk), sp - 1, tokuH_getstr);
                 vm_break;
             }
             vm_case(OP_GETSUPIDX) {
-                Instance *in = insval(peek(1));
-                OClass *scl = in->oclass->sclass;
+                Instance *inst = insval(peek(1));
+                OClass *supcls = inst->oclass->sclass;
                 TValue *idx = peek(0);
                 savestate(T);
-                getsuper(T, in, scl, idx, sp - 2, tokuH_get);
+                getsuper(T, inst, supcls, idx, sp - 2, tokuH_get);
                 sp--;
                 vm_break;
             }
             vm_case(OP_GETSUPIDXSTR) {
-                Instance *in = insval(peek(0));
-                OClass *scl = in->oclass->sclass;
+                Instance *inst = insval(peek(0));
+                OClass *supcls = inst->oclass->sclass;
                 TValue *sk;
                 savestate(T);
                 sk = K(fetch_l());
-                getsuper(T, in, scl, strval(sk), sp - 1, tokuH_getstr);
+                getsuper(T, inst, supcls, strval(sk), sp - 1, tokuH_getstr);
                 vm_break;
             }
             vm_case(OP_INHERIT) {
                 TValue *o1 = peek(1); /* superclass */
                 TValue *o2 = peek(0); /* class */
                 OClass *cls = classval(o2);
-                OClass *scl;
+                OClass *supcls;
                 savestate(T);
                 toku_assert(!tokuV_raweq(o1, o2));
-                scl = checksuper(T, o1);
-                tokuV_inherit(T, cls, scl);
+                supcls = checksuper(T, o1);
+                doinherit(T, cls, supcls);
                 checkGC(T);
                 vm_break;
             }

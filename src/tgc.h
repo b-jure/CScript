@@ -123,44 +123,44 @@
 ** Macro 'condchangemem' is used only for heavy tests (forcing a full
 ** GC cycle on every opportunity).
 */
-#define tokuG_condGC(C,pre,pos) \
-    { pre; if (G(C)->gcdebt > 0) { tokuG_step(C); pos; } \
-      condchangemem(C,pre,pot); }
+#define tokuG_condGC(T,pre,pos) \
+    { pre; if (G(T)->gcdebt > 0) { tokuG_step(T); pos; } \
+      condchangemem(T,pre,pot,0); }
 
 
 /* 'tokuG_condGC' but 'pre'/'pos' are empty */
-#define tokuG_checkGC(C)          tokuG_condGC(C,(void)0,(void)0)
+#define tokuG_checkGC(T)          tokuG_condGC(T,(void)0,(void)0)
 
 /* }==================================================================== */
 
 
 
 /* {====================================================================
-** Write barriers
+** GC barrier
 ** ===================================================================== */
 
 /*
 ** Same at 'tokuG_barrier_' but ensures that it is only called when 'r'
 ** (root) is a black object and 'o' is white.
 */
-#define tokuG_objbarrier(C,r,o) \
-        (isblack(r) && iswhite(o) ? tokuG_barrier_(C, obj2gco(r), obj2gco(o)) \
+#define tokuG_objbarrier(T,r,o) \
+        (isblack(r) && iswhite(o) ? tokuG_barrier_(T, obj2gco(r), obj2gco(o)) \
                                   : (void)(0))
 
-/* wrapper around 'tokuG_objbarrier' that check if 'v' is object */
-#define tokuG_barrier(C,r,v) \
-        (iscollectable(v) ? tokuG_objbarrier(C, r, gcoval(v)) : (void)(0))
+/* wrapper around 'tokuG_objbarrier' that checks if 'v' is object */
+#define tokuG_barrier(T,r,v) \
+        (iscollectable(v) ? tokuG_objbarrier(T, r, gcoval(v)) : (void)(0))
 
 /*
-** Same as 'tokuG_barrierback_' but ensures that it is only
-** called when 'r' (root) is a black object and 'o' is white.
+** Same as 'tokuG_barrierback_' but ensures that it is only called
+** when 'r' (root) is a black object and 'o' is white.
 */
-#define tokuG_objbarrierback(C,r,o) \
-        (isblack(r) && iswhite(o) ? tokuG_barrierback_(C, r) : (void)(0))
+#define tokuG_objbarrierback(T,r,o) \
+        (isblack(r) && iswhite(o) ? tokuG_barrierback_(T, r) : (void)(0))
 
 /* wrapper around 'tokuG_objbarrierback' that checks if 'v' is object */
-#define tokuG_barrierback(C,r,v) \
-        (iscollectable(v) ? tokuG_objbarrierback(C,r,gcoval(v)) : (void)(0))
+#define tokuG_barrierback(T,r,v) \
+        (iscollectable(v) ? tokuG_objbarrierback(T,r,gcoval(v)) : (void)(0))
 
 /* }==================================================================== */
 
@@ -183,7 +183,7 @@ TOKUI_FUNC void tokuG_step(toku_State *T);
 TOKUI_FUNC void tokuG_fullinc(toku_State *T, int isemergency);
 TOKUI_FUNC void tokuG_rununtilstate(toku_State *T, int statemask);
 TOKUI_FUNC void tokuG_freeallobjects(toku_State *T);
-TOKUI_FUNC void tokuG_checkfin(toku_State *T, GCObject *o, List *metalist);
+TOKUI_FUNC void tokuG_checkfin(toku_State *T, GCObject *o, Table *metatable);
 TOKUI_FUNC void tokuG_fix(toku_State *T, GCObject *o);
 TOKUI_FUNC void tokuG_barrier_(toku_State *T, GCObject *r, GCObject *o);
 TOKUI_FUNC void tokuG_barrierback_(toku_State *T, GCObject *r);

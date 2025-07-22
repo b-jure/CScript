@@ -79,7 +79,7 @@ local fn GC1() {
     local finish = false;
     local ml = [];
     ml[__MT.gc] = fn () { finish = true; };
-    u = setmetalist(class {}, ml);
+    u = setmetatable(class {}, ml);
     b = [34];
     loop {
         u = [];
@@ -88,7 +88,7 @@ local fn GC1() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false; local i = 0;
-    u = setmetalist(class {}, ml);
+    u = setmetatable(class {}, ml);
     loop {
         i = i + 1;
         u = tostr(i) .. tostr(i);
@@ -97,7 +97,7 @@ local fn GC1() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false;
-    u = setmetalist(class {}, ml);
+    u = setmetatable(class {}, ml);
     loop {
         local i;
         u = fn () { return i; };
@@ -111,7 +111,7 @@ local fn GC2() {
     local finish = false;
     local ml = [];
     ml[__MT.gc] = fn () { finish = true; };
-    u = [setmetalist(class {}, ml)];
+    u = [setmetatable(class {}, ml)];
     local b = [34];
     loop {
         u = [[]];
@@ -120,7 +120,7 @@ local fn GC2() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false; local i = 0;
-    u = [setmetalist(class {}, ml)];
+    u = [setmetatable(class {}, ml)];
     loop {
         i = i + 1;
         u = [tostr(i) .. tostr(i)];
@@ -129,7 +129,7 @@ local fn GC2() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false;
-    u = [setmetalist(class {}, ml)];
+    u = [setmetatable(class {}, ml)];
     loop {
         local i;
         u = [fn () { return i; }];
@@ -288,18 +288,18 @@ if !__port {
 
 
 { /// create an object to be collected when state is closed
-    local setmetalist,assert,typeof,print,getmetalist =
-          setmetalist,assert,typeof,print,getmetalist;
+    local setmetatable,assert,typeof,print,getmetatable =
+          setmetatable,assert,typeof,print,getmetatable;
     local ml = [];
     ml[__MT.gc] = fn (o) {
-        assert(getmetalist(self) == ml);
+        assert(getmetatable(self) == ml);
         /// create new objects during GC
         local a = "xuxu"..tostr(10+3).."test", {};
         ___Glob = o; /// ressurrect object
-        setmetalist(class {}, ml)(); /// new one with the same metalist
+        setmetatable(class {}, ml)(); /// new one with the same metatable
         print(">>> closing state " .. "<<<\n");
     };
-    local u = setmetalist(class {}, ml);
+    local u = setmetatable(class {}, ml);
     u();
     ___Glob = [u]; /// avoid object being collected before program end
 }
@@ -310,7 +310,7 @@ assert(gc("isrunning"));
     local res = true;
     local ml = [];
     ml[__MT.gc] = fn(o) { print("Collecting object", o); res = gc(); };
-    setmetalist(class {}, ml)();
+    setmetatable(class {}, ml)();
     gc();
     assert(!res);
 }

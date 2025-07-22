@@ -217,7 +217,7 @@ checkmessage([=[x = print .. "a";]=], "concatenate");
 checkmessage([=[x = "a" .. false;]=], "concatenate");
 checkmessage([=[x = {} .. tostr(2);]=], "concatenate");
 
-checkmessage("getmetalist(io.stdin)[__MT.gc]();", "no value");
+checkmessage("getmetatable(io.stdin)[__MT.gc]();", "no value");
 
 checkmessage([=[
 local Var;
@@ -231,7 +231,7 @@ checkmessage("string.substr(\"a\", {});", "#2");
 checkmessage("string.substr({});", "#1");
 
 checkmessage("list.sort([1,2,3], list.sort);", "'list.sort'");
-checkmessage("reg.gsub(\"s\", \"s\", setmetalist);", "'setmetalist'");
+checkmessage("reg.gsub(\"s\", \"s\", setmetatable);", "'setmetatable'");
 
 __G.aaa = nil;
 

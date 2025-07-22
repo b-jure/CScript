@@ -228,7 +228,7 @@ void tokuA_get(toku_State *T, List *l, const TValue *k, TValue *out) {
 
 /* returns reference to the value at index 'i' */
 const TValue *tokuA_getival(toku_State *T, List *l, int i) {
-    toku_assert(i >= 0);
+    toku_assert(0 <= i);
     if (i < l->len)
         return &l->arr[i];
     else

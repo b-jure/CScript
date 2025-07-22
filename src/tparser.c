@@ -32,7 +32,7 @@
 ** (Used for internal debugging.)
 */
 #if defined(TOKUI_DISASSEMBLE_BYTECODE)
-#include "strace.h"
+#include "ttrace.h"
 #define unasmfunc(T,p)      tokuTR_disassemble(T, p)
 #else
 #define unasmfunc(T,p)      /* no-op */
@@ -40,7 +40,10 @@
 
 
 /* check if 'tok' matches current token */
-#define check(lx, tok)      ((lx)->t.tk == (tok))
+#define check(lx,tok)       ((lx)->t.tk == (tok))
+
+/* idem, but check for either of the two tokens */
+#define check2(lx,tok1,tok2)    ((lx)->t.tk == (tok1) || (lx)->t.tk == (tok2))
 
 
 /* macros for controlling recursion depth */
@@ -176,6 +179,13 @@ static t_noret expecterror(Lexer *lx, int tk) {
 }
 
 
+static t_noret expecterror2(Lexer *lx, int tk1, int tk2) {
+    const char *err = tokuS_pushfstring(lx->T, "expected %s or %s",
+                            tokuY_tok2str(lx, tk1), tokuY_tok2str(lx, tk2));
+    tokuY_syntaxerror(lx, err);
+}
+
+
 static t_noret limiterror(FunctionState *fs, const char *what, int limit) {
     toku_State *T = fs->lx->T;
     int linenum = fs->p->defline;
@@ -207,9 +217,23 @@ static void expect(Lexer *lx, int tk) {
 }
 
 
+/* idem, except this checks for either of the two tokens */
+static void expect2(Lexer *lx, int tk1, int tk2) {
+    if (t_unlikely(!check(lx, tk1) && !check(lx, tk2)))
+        expecterror2(lx, tk1, tk2);
+}
+
+
 /* same as 'expect' but this also advances the scanner */
 static void expectnext(Lexer *lx, int tk) {
     expect(lx, tk);
+    tokuY_scan(lx);
+}
+
+
+/* idem, except this expects either of the two tokens */
+static void expectnext2(Lexer *lx, int tk1, int tk2) {
+    expect2(lx, tk1, tk2);
     tokuY_scan(lx);
 }
 
@@ -548,6 +572,7 @@ static void scopemarkclose(FunctionState *fs) {
 
 
 static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
+    toku_State *T = lx->T;
     Proto *p = fs->p;
     toku_assert(p != NULL);
     fs->prev = lx->fs;
@@ -556,16 +581,19 @@ static void open_func(Lexer *lx, FunctionState *fs, Scope *s) {
     fs->prevline = p->defline;
     fs->firstlocal = lx->ps->actlocals.len;
     p->source = lx->src;
-    tokuG_objbarrier(lx->T, p, p->source);
+    tokuG_objbarrier(T, p, p->source);
     p->maxstack = 2; /* stack slots 0/1 are always valid */
+    fs->kcache = tokuH_new(T); /* create table for function */
+    settval2s(T, T->sp.p, fs->kcache); /* anchor it */
+    tokuT_incsp(T);
     enterscope(fs, s, 0); /* start top-level scope */
 }
 
 
 static void close_func(Lexer *lx) {
     FunctionState *fs = lx->fs;
-    Proto *p = fs->p;
     toku_State *T = lx->T;
+    Proto *p = fs->p;
     toku_assert(fs->scope && !fs->scope->prev);
     leavescope(fs); toku_assert(!fs->scope); /* end final scope */
     if (!stmIsReturn(fs)) /* function missing final return? */
@@ -577,13 +605,14 @@ static void close_func(Lexer *lx) {
     tokuM_shrinkarray(T, p->code, p->sizecode, currPC, Instruction);
     tokuM_shrinkarray(T, p->lineinfo, p->sizelineinfo, currPC, t_byte);
     tokuM_shrinkarray(T, p->abslineinfo, p->sizeabslineinfo, fs->nabslineinfo,
-                       AbsLineInfo);
+                         AbsLineInfo);
     tokuM_shrinkarray(T, p->instpc, p->sizeinstpc, fs->ninstpc, int);
     tokuM_shrinkarray(T, p->locals, p->sizelocals, fs->nlocals, LVarInfo);
     tokuM_shrinkarray(T, p->upvals, p->sizeupvals, fs->nupvals, UpValInfo);
     lx->fs = fs->prev; /* go back to enclosing function (if any) */
+    T->sp.p--; /* pop kcache table */
     tokuG_checkGC(T); /* try to collect garbage memory */
-    unasmfunc(fs->lx->T, fs->p);
+    unasmfunc(T, fs->p);
 }
 
 
@@ -1033,8 +1062,8 @@ static void method(Lexer *lx) {
 
 
 static void metafield(Lexer *lx, t_ubyte *amt) {
-    int linenum = lx->line;
     FunctionState *fs = lx->fs;
+    int linenum = lx->line;
     OString *mtname;
     ExpInfo e;
     int mt;
@@ -1062,7 +1091,7 @@ static void metafield(Lexer *lx, t_ubyte *amt) {
 
 static int classbody(Lexer *lx, int *havemt) {
     int nmethods = 0;
-    t_ubyte amt[TOKU_MT_NUM] = {0};
+    t_ubyte amt[TM_NUM] = {0};
     while (!check(lx, '}') && !check(lx, TK_EOS)) {
         if (!check(lx, TK_FN)) {
             metafield(lx, amt);
@@ -1087,11 +1116,11 @@ static void klass(Lexer *lx, ExpInfo *e) {
     tokuC_reserveslots(fs, 1); /* space for class */
     if (match(lx, TK_INHERITS)) { /* class object inherits? */
         int cls = fs->sp - 1;
-        ExpInfo v;
-        dottedname(lx, &v);             /* get superclass... */
-        tokuC_exp2stack(fs, &v);          /* put it on stack... */
-        tokuC_load(fs, cls);              /* load class... */
-        tokuC_emitI(fs, OP_INHERIT);      /* ...and do the inherit */
+        ExpInfo v = INIT_EXP;
+        expr(lx, &v);                   /* get superclass... */
+        tokuC_exp2stack(fs, &v);        /* put it on stack... */
+        tokuC_load(fs, cls);            /* load class... */
+        tokuC_emitI(fs, OP_INHERIT);    /* ...and do the inherit */
         cs.super = 1; /* true; have superclass */
     }
     linenum = lx->line;
@@ -1099,7 +1128,7 @@ static void klass(Lexer *lx, ExpInfo *e) {
     nm = classbody(lx, &havemt);
     if (nm > 0) { /* have methods? */
         int nb = tokuO_ceillog2(nm + (nm == 1));
-        nb |= havemt * 0x80; /* flag for creating metalist */
+        nb |= havemt * 0x80; /* flag for creating metatable */
         SET_ARG_S(&fs->p->code[pc], 0, nb);
     } else if (havemt)
         SET_ARG_S(&fs->p->code[pc], 0, 0x80);
@@ -1227,7 +1256,7 @@ static Binopr getbinopr(int token) {
 static const struct {
     t_ubyte left;
     t_ubyte right;
-} priority[] = { /* ORDER OPR */
+} priority[] = { /* "ORDER OP" */
     /* binary operators priority */
     {12, 12}, {12, 12},                         /* '+' '-' */
     {13, 13}, {13, 13}, {13, 13}, {13, 13},     /* '*' '/' '//' '%' */
@@ -1567,7 +1596,6 @@ static void localstm(Lexer *lx) {
     adjustassign(lx, nvars, nexps, &e);
     adjustlocals(lx, nvars);
     checkclose(fs, toclose);
-    expectnext(lx, ';');
 }
 
 
@@ -2200,14 +2228,12 @@ static void foreachstm(Lexer *lx) {
 
 /* 'for' loop initializer */
 void forinitializer(Lexer *lx) {
-    if (!match(lx, ';')) { /* have for loop initializer? */
-        if (match(lx, TK_LOCAL)) { /* 'local' statement? */
+    if (!match(lx, ',') && !match(lx, ';')) { /* have for loop initializer? */
+        if (match(lx, TK_LOCAL)) /* 'local' statement? */
             localstm(lx);
-            /* statements end with ';' */
-        } else { /* otherwise expression statement */
+        else /* otherwise expression statement */
             expstm(lx);
-            expectnext(lx, ';');
-        }
+        expectnext2(lx, ',', ';');
     }
 }
 
@@ -2215,11 +2241,11 @@ void forinitializer(Lexer *lx) {
 /* 'for' loop condition */
 int forcondition(Lexer *lx, ExpInfo *e) {
     int linenum = lx->line;
-    if (!match(lx, ';')) { /* have condition? */
+    if (!match(lx, ';') && !match(lx, ',')) { /* have condition? */
         expr(lx, e);                /* get it... */
         codeconstexp(lx->fs, e);    /* ...and put it on stack */
         linenum = lx->line; /* update line */
-        expectnext(lx, ';');
+        expectnext2(lx, ',', ';');
     } else /* otherwise no condition (infinite loop) */
         initexp(e, EXP_TRUE, 0);
     return linenum;
@@ -2235,7 +2261,7 @@ void forlastclause(Lexer *lx, FuncContext *ctxbefore, ExpInfo *cond,
     toku_assert(*pcClause == NOJMP);
     if (inf) /* infinite loop? */
         loadcontext(fs, ctxbefore); /* remove condition */
-    if (check(lx, ')') || check(lx, ';')) /* no end clause? */
+    if (check(lx, ')') || check2(lx, ',', ';')) /* no end clause? */
         return; /* done (converted to a 'while' or 'loop') */
     else {
         bodyjmp = tokuC_jmp(fs, OP_JMP); /* insert jump in-between */
@@ -2277,8 +2303,8 @@ static void forstm(Lexer *lx) {
     forlastclause(lx, &cb.ctxbefore, &cb.e, cb.condline, &cb.pcClause);
     if (opt) /* have optional ')' ? */
         expectmatch(lx, ')', '(', linenum);
-    else /* otherwise must terminate last clause with ';' */
-        expectnext(lx, ';');
+    else /* otherwise must terminate last clause with separator */
+        expectnext2(lx, ',', ';');
     condbody(lx, &cb); /* forbody */
     leaveloop(fs); /* leave loop scope */
     leavescope(fs); /* leave initializer scope */
@@ -2395,7 +2421,7 @@ static void stm_(Lexer *lx) {
             break;
         }
     }
-    if (tk != TK_RETURN && tk != TK_CONTINUE && tk != TK_BREAK)
+    if (!((tk == TK_RETURN) | (tk == TK_CONTINUE) | (tk == TK_BREAK)))
         lx->fs->lastisend = 0; /* clear flag */
 }
 
@@ -2413,8 +2439,10 @@ static void decl(Lexer *lx) {
                 localfn(lx);
             else if (match(lx, TK_CLASS))
                 localclass(lx);
-            else
+            else {
                 localstm(lx);
+                expectnext(lx, ';');
+            }
             lx->fs->lastisend = 0; /* clear flag */
             break;
         }

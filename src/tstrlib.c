@@ -238,20 +238,20 @@ static int s_repeat(toku_State *T) {
     const char *sep = tokuL_opt_lstring(T, 2, "", &lsep);
     if (t_unlikely(n <= 0))
         toku_push_literal(T, "");
-    else if (l+lsep < l || l+lsep > STR_TOKU_MAXSIZE/n)
+    else if (l + lsep < l || TOKU_MAXSIZE / cast_sizet(n) < l + lsep)
         tokuL_error(T, "resulting string too large");
     else {
         tokuL_Buffer b;
-        size_t totalsize = (size_t)n*l + (size_t)(n-1)*lsep;
+        size_t totalsize = (cast_sizet(n) * (l + lsep)) - lsep;
         char *p = tokuL_buff_initsz(T, &b, totalsize);
         while (n-- > 1) {
-            memcpy(p, s, l*sizeof(char)); p += l;
+            memcpy(p, s, l * sizeof(char)); p += l;
             if (lsep > 0) { /* branch costs less than empty 'memcpy' copium */
-                memcpy(p, sep, lsep*sizeof(char));
+                memcpy(p, sep, lsep * sizeof(char));
                 p += lsep;
             }
         }
-        memcpy(p, s, l*sizeof(char)); /* last copy without separator */
+        memcpy(p, s, l * sizeof(char)); /* last copy without separator */
         tokuL_buff_endsz(&b, totalsize);
     }
     return 1; /* return final string */
@@ -1046,27 +1046,27 @@ static const tokuL_Entry strlib[] = {
 static void set_string_bytes(toku_State *T) {
     /* letter bytes */
     toku_push_string(T, TOKU_BYTES_UPPERCASE);
-    toku_set_fieldstr(T, -2, "ascii_uppercase");
+    toku_set_field_str(T, -2, "ascii_uppercase");
     toku_push_string(T, TOKU_BYTES_LOWERCASE);
-    toku_set_fieldstr(T, -2, "ascii_lowercase");
+    toku_set_field_str(T, -2, "ascii_lowercase");
     toku_push_string(T, TOKU_BYTES_LETTERS);
-    toku_set_fieldstr(T, -2, "ascii_letters");
+    toku_set_field_str(T, -2, "ascii_letters");
     /* digit bytes */
     toku_push_string(T, TOKU_BYTES_OCTDIGITS);
-    toku_set_fieldstr(T, -2, "octdigits");
+    toku_set_field_str(T, -2, "octdigits");
     toku_push_string(T, TOKU_BYTES_DIGITS);
-    toku_set_fieldstr(T, -2, "digits");
+    toku_set_field_str(T, -2, "digits");
     toku_push_string(T, TOKU_BYTES_HEXDIGITS);
-    toku_set_fieldstr(T, -2, "hexdigits");
+    toku_set_field_str(T, -2, "hexdigits");
     /* punctuation bytes */
     toku_push_string(T, TOKU_BYTES_PUNCTUATION);
-    toku_set_fieldstr(T, -2, "punctuation");
+    toku_set_field_str(T, -2, "punctuation");
     /* whitespace bytes */
     toku_push_string(T, TOKU_BYTES_WHITESPACE);
-    toku_set_fieldstr(T, -2, "whitespace");
+    toku_set_field_str(T, -2, "whitespace");
     /* printable bytes */
     toku_push_string(T, TOKU_BYTES_PRINTABLE);
-    toku_set_fieldstr(T, -2, "printable");
+    toku_set_field_str(T, -2, "printable");
 }
 
 

@@ -30,7 +30,7 @@ typedef struct {
 } BuffReader;
 
 
-TOKUI_FUNC void tokuR_init(toku_State* C, BuffReader* br, toku_Reader freader,
+TOKUI_FUNC void tokuR_init(toku_State* T, BuffReader* br, toku_Reader freader,
                            void* userdata);
 TOKUI_FUNC int tokuR_fill(BuffReader* br);
 TOKUI_FUNC size_t tokuR_readn(BuffReader* br, size_t n);
@@ -45,11 +45,11 @@ TOKUI_FUNC size_t tokuR_readn(BuffReader* br, size_t n);
 #define tokuR_buffreset(b)      ((b)->len = 0)
 #define tokuR_buffpopn(b,n)     ((b)->len -= cast_sizet(n))
 
-#define tokuR_buffresize(C,b,s) \
-    { (b)->str = tokuM_saferealloc(C, (b)->str, (b)->size, s); \
+#define tokuR_buffresize(T,b,s) \
+    { (b)->str = tokuM_saferealloc(T, (b)->str, (b)->size, s); \
       (b)->size = s; }
 
-#define tokuR_freebuffer(C,b)   tokuR_buffresize(C, b, 0)
+#define tokuR_freebuffer(T,b)   tokuR_buffresize(T, b, 0)
 
 
 /* string buffer for lexer */

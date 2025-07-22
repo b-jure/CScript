@@ -279,9 +279,17 @@ static void traceSize(int size) {
 
 
 static void unasmNewObject(const Proto *p, Instruction *pc) {
+    int size;
     prefix(p, pc);
     traceOp(*pc);
-    traceSize(GET_ARG_S(pc, 0));
+    size = GET_ARG_S(pc, 0);
+    traceSize((*pc == OP_NEWCLASS) ? size & 0x7f : size);
+    if (*pc == OP_NEWCLASS) {
+        if (size & 0x80)
+            traceTrue();
+        else
+            traceFalse();
+    }
     posfix();
 }
 
@@ -372,7 +380,7 @@ static void unasmCall(const Proto *p, Instruction *pc) {
 
 
 static void traceMetaName(toku_State *T, int mm) {
-    posfix_spaces(printf("%s", getstr(G(T)->mtnames[mm])));
+    posfix_spaces(printf("%s", getstr(G(T)->tmnames[mm])));
 }
 
 
@@ -604,7 +612,7 @@ static void printFunc(const Proto *p) {
 ** Disassemble all of the bytecode in 'p->code'.
 ** This function provides more detailed human readable information
 ** compared to 'tokuTR_trace' when tracing OpCode and its arguments.
-** > ORDER OP (in case of changes to bytecode) <
+** > "ORDER OP" (in case of changes to bytecode) <
 */
 void tokuTR_disassemble(toku_State *T, const Proto *p) {
     printFunc(p);

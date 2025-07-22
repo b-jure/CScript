@@ -22,7 +22,7 @@ return {
     "basic/rawget.toku",
     "basic/rawset.toku",
     "basic/runfile.toku",
-    "basic/setmetalist_getmetalist.toku",
+    "basic/setmetatable_getmetatable.toku",
     "basic/setmethods.toku",
     "basic/tonum.toku",
     "basic/tostr.toku",

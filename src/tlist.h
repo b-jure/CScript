@@ -18,7 +18,7 @@
 
 
 /* value of 'extra' for first list field name */
-#define FIRSTLF     (NUM_KEYWORDS + TOKU_MT_NUM + 1)
+#define FIRSTLF     (NUM_KEYWORDS + TM_NUM + 1)
 
 
 /* indices into 'C->gs->listfields' */

@@ -36,3 +36,22 @@ assert(typeof(table.config.myconfig) == "instance");
 x, y = table.config.myconfig.cords();
 assert(x == 69);
 assert(y == 420);
+
+{
+    class Vec2 {
+        __init = |x, y| {
+            self.x = (x or 0);
+            self.y = (y or 0);
+            print("Return " .. tostr(self));
+            return self;
+        };
+        __add = |rhs| {
+            return getclass(self)(self.x + rhs.x, self.y + rhs.y);
+        };
+        __name = "Vec2";
+    };
+    local class x inherits Vec2 {} /* inherits all metafields */
+    local vec = x(2, 3) + x(3, 3);
+    assert(vec.x == 5 and vec.y == 6);
+    assert(string.find(tostr(vec), "Vec2"));
+}

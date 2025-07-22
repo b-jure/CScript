@@ -39,14 +39,17 @@ typedef unsigned long   t_ulong;
 #define TOKU_MAXINT     INT_MAX
 
 
+/* maximum value for 'size_t' */
+#define TOKU_MAXSIZET	((size_t)(~(size_t)0))
+
+
 /*
 ** Maximum size visible for Tokudae.
 ** It must be less than what is representable by 'toku_Integer'.
 */
 #define TOKU_MAXSIZE \
         (sizeof(size_t) < sizeof(toku_Integer) \
-            ? (SIZE_MAX) \
-            : (size_t)(TOKU_INTEGER_MAX))
+            ? TOKU_MAXSIZET : cast_sizet(TOKU_INTEGER_MAX))
 
 
 /* convert pointer 'p' to 'unsigned int' */
@@ -75,10 +78,10 @@ typedef unsigned long   t_ulong;
 
 /* C API assertions */
 #if !defined(tokui_checkapi)
-#define tokui_checkapi(C,e)       ((void)C, toku_assert(e))
+#define tokui_checkapi(T,e)       ((void)T, toku_assert(e))
 #endif
 
-#define api_check(C,e,err)      tokui_checkapi(C,(e) && err)
+#define api_check(T,e,err)      tokui_checkapi(T,(e) && err)
 
 
 
@@ -145,18 +148,6 @@ typedef t_ubyte Instruction;
 
 
 /*
-** Initial size for the string table (must be power of 2).
-** The Tokudae core alone registers ~50 strings (reserved words +
-** metamethod keys + a few others). Libraries would typically add
-** a few dozens more.
-*/
-#if !defined(TOKUI_MINSTRTABSIZE)
-#define TOKUI_MINSTRTABSIZE     128
-#endif
-
-
-
-/*
 ** Size of cache for strings in the API. 'N' is the number of
 ** sets (better be a prime) and "M" is the size of each set (M == 1
 ** makes a direct cache.)
@@ -195,8 +186,8 @@ typedef t_ubyte Instruction;
 ** Tokudae core (C API).
 */
 #if !defined(toku_lock)
-#define toku_lock(C)            ((void)0)
-#define toku_unlock(C)          ((void)0)
+#define toku_lock(T)            ((void)0)
+#define toku_unlock(T)          ((void)0)
 #endif
 
 
@@ -206,19 +197,19 @@ typedef t_ubyte Instruction;
 ** thread is created/deleted and/or state is opened/closed.
 */
 #if !defined(tokui_userstateopen)
-#define tokui_userstateopen(C)        ((void)(C))
+#define tokui_userstateopen(T)        ((void)(T))
 #endif
 
 #if !defined(tokui_userstateclose)
-#define tokui_userstateclose(C)       ((void)(C))
+#define tokui_userstateclose(T)       ((void)(T))
 #endif
 
 #if !defined(tokui_userstatethread)
-#define tokui_userstatethread(C,C1)   ((void)(C))
+#define tokui_userstatethread(T,C1)   ((void)(T))
 #endif
 
 #if !defined(tokui_userstatefree)
-#define tokui_userstatefree(C,C1)     ((void)(C))
+#define tokui_userstatefree(T,C1)     ((void)(T))
 #endif
 
 
@@ -242,7 +233,7 @@ typedef t_ubyte Instruction;
 #define cast_num(e)         cast(toku_Number,(e))
 #define cast_ubyte(e)       cast(t_ubyte,(e))
 #define cast_ubytep(e)      cast(t_ubyte *,(e))
-#define cast_sbyte(e)       cast(t_byte,(e))
+#define cast_byte(e)        cast(t_byte,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(t_uint,(e))
 #define cast_umem(e)        cast(t_umem,(e))
@@ -268,25 +259,25 @@ typedef t_ubyte Instruction;
 #if !defined(t_nummod)
 
 /* modulo 'a - floor(a/b)*b' */
-#define t_nummod(C,a,b,m) \
-        { (void)(C); (m) = t_mathop(fmod)(a, b); \
+#define t_nummod(T,a,b,m) \
+        { (void)(T); (m) = t_mathop(fmod)(a, b); \
           if (((m) > 0) ? (b) < 0 : ((m) < 0 && (b) > 0)) (m) += (b); }
 
-#define t_numdiv(C, a, b)       ((void)(C), (a)/(b))
+#define t_numdiv(T, a, b)       ((void)(T), (a)/(b))
 
-#define t_numidiv(C, a, b)      ((void)(C), t_floor(t_numdiv(C,a,b)))
+#define t_numidiv(T, a, b)      ((void)(T), t_floor(t_numdiv(T,a,b)))
 
-#define t_numpow(C, a, b) \
-        ((void)(C), (b) == 2 ? (a)*(a) : t_mathop(pow)(a, b))
+#define t_numpow(T, a, b) \
+        ((void)(T), (b) == 2 ? (a)*(a) : t_mathop(pow)(a, b))
 
 #endif
 
 
 #if !defined(t_numadd)
-#define t_numadd(C, a, b)       ((void)(C), (a) + (b))
-#define t_numsub(C, a, b)       ((void)(C), (a) - (b))
-#define t_nummul(C, a, b)       (void)(C), ((a) * (b))
-#define t_numunm(C, a)          ((void)(C), -(a))
+#define t_numadd(T, a, b)       ((void)(T), (a) + (b))
+#define t_numsub(T, a, b)       ((void)(T), (a) - (b))
+#define t_nummul(T, a, b)       (void)(T), ((a) * (b))
+#define t_numunm(T, a)          ((void)(T), -(a))
 #endif
 
 
@@ -309,19 +300,26 @@ typedef t_ubyte Instruction;
 ** Macro to control inclusion of some hard tests on stack reallocation.
 */
 #if !defined(TOKUI_HARDSTACKTESTS)
-#define condmovestack(C,pre,pos)    ((void)0)
+#define condmovestack(T,pre,pos)    ((void)0)
 #else
 /* realloc stack keeping its size */
-#define condmovestack(C,pre,pos)  \
-    { int sz_ = stacksize(C); pre; tokuT_reallocstack((C), sz_, 0); pos; }
+#define condmovestack(T,pre,pos)  \
+    { int sz_ = stacksize(T); pre; tokuT_reallocstack((T), sz_, 0); pos; }
 #endif
 
 
+/*
+** Does one step of collection when debt becomes zero. 'pre'/'pos'
+** allows some adjustments to be done only when needed. macro
+** 'condchangemem' is used only for heavy tests (forcing a full
+** GC cycle on every opportunity)
+*/
+
 #if !defined(TOKUI_HARDMEMTESTS)
-#define condchangemem(C,pre,pos)    ((void)0)
+#define condchangemem(T,pre,pos,emg)	((void)0)
 #else
-#define condchangemem(C,pre,pos)  \
-    { if (gcrunning(G(C))) { pre; tokuG_fullinc(C, 0); pos; } }
+#define condchangemem(T,pre,pos,emg)  \
+	{ if (gcrunning(G(T))) { pre; tokuG_fullinc(T, emg); pos; } }
 #endif
 
 
