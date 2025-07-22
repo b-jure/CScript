@@ -333,7 +333,7 @@ void tokuC_fixline(FunctionState *fs, int line) {
 static void emitbyte(FunctionState *fs, int code) {
     Proto *p = fs->p;
     tokuM_growarray(fs->lx->T, p->code, p->sizecode, currPC, TOKU_MAXINT,
-                  "instructions", Instruction);
+                    "instructions", Instruction);
     p->code[currPC++] = cast_ubyte(code);
 }
 
@@ -341,7 +341,7 @@ static void emitbyte(FunctionState *fs, int code) {
 static void emit3bytes(FunctionState *fs, int code) {
     Proto *p = fs->p;
     tokuM_ensurearray(fs->lx->T, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
-                    "instructions", Instruction);
+                      "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
     currPC += SIZE_ARG_L;
 }
@@ -350,7 +350,7 @@ static void emit3bytes(FunctionState *fs, int code) {
 static void addinstpc(FunctionState *fs) {
     Proto *p = fs->p;
     tokuM_growarray(fs->lx->T, p->instpc, p->sizeinstpc, fs->ninstpc, TOKU_MAXINT,
-                  "instructions", int);
+                    "instructions", int);
     fs->prevpc = p->instpc[fs->ninstpc++] = currPC;
 }
 
@@ -697,7 +697,6 @@ static void string2K(FunctionState *fs, ExpInfo *e) {
     e->u.info = stringK(fs, e->u.str);
     e->et = EXP_K;
 }
-
 
 
 /*

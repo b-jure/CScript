@@ -27,12 +27,10 @@
 
         <h1>1 &ndash; <a name="1">Introduction</a></h1>
         <p>
-        Tokudae is a lightweight embeddable scripting language.
-        C in Tokudae refers to the C programming language as it mimics its
-        syntax (as much as possible).
+        <a href="https://en.wikipedia.org/wiki/Guam_flying_fox">Tokudae</a>
+        is a lightweight fully embeddable scripting language.
         It's syntax supports various types of programming styles and it does
-        not enforce any type/style upon the user (it has all the tools and the
-        user chooses the tool for the job).
+        not enforce any type/style upon the user.
         <br/><br/>
         Tokudae is dynamically typed, it runs by interpreting bytecode with
         a stack-based virtual machine, and it's memory is automatically
@@ -70,7 +68,7 @@
 
         <h2>2.1 &ndash; <a name="2.1">Values and Types</a></h2>
         <p>
-        Tokudae is a dynamically types language.
+        Tokudae is a dynamically typed language.
         This means that variables do not have types; only values do.
         There are no type definitions in the language instead all values
         carry their own type.
@@ -79,10 +77,11 @@
         can be stored in variables (as is expected), passed as arguments
         to other functions and returned as results.
         <br/><br/>
-        There are eleven basic types in Tokudae:
+        There are thirteen basic types in Tokudae:
         <em>nil</em>, <em>boolean</em>, <em>number</em>, <em>string</em>, 
-        <em>function</em>, <em>userdata</em>, <em>thread</em>, <em>table</em>, 
-        <em>list</em>, <em>class</em> and <em>instance</em>.
+        <em>function</em>, <em>userdata</em>, <em>light userdata</em>,
+        <em>thread</em>, <em>table</em>, <em>list</em>, <em>class</em>,
+        <em>bound method</em> and <em>instance</em>.
         <br/><br/>
         <!-- nil -->
         The type <em>nil</em> has one single value, <b>nil</b>, and is
@@ -138,14 +137,12 @@
         The type <em>function</em> can be a function written in Tokudae or
         C, both of which can be manipulated and called.
         <br/><br/>
-        <!-- userdata -->
-        The type <em>userdata</em> is provided to allow arbitrary C&nbsp;data
-        to be stored in a variable.
-        A userdata value represents a block of raw memory.
-        There are two kinds of userdata:
-        <em>full userdata</em>, which is an object with a block of memory
-        managed by Tokudae, and <em>light userdata</em>,
-        which is simply a C&nbsp;pointer value.
+        <!-- userdata and light userdata -->
+        The types <em>userdata</em> and <em>light userdata</em> are provided
+        to allow arbitrary C&nbsp;data to be stored in a variable.
+        Full/Light userdata value represents a block of raw memory.
+        <em>full userdata</em> is an object with a block of memory managed
+        by Tokudae, and <em>light userdata</em>, is simply a C&nbsp;pointer value.
         Userdata has no predefined operations in Tokudae except assignment
         and identity test (<code>==</code>).
         By using <em>metalists</em>, the programmer can define operations

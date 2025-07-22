@@ -771,10 +771,14 @@ static const char *strtoint(const char *s, int base, toku_Integer *pn, int *of) 
         sign -= 2*(c == '-');
         c = *s++;
     }
-    if (c == '0' && (base == 8 || base == 16)) {
+    /* skip optional prefix (if any) */
+    if (c == '0' && (base == 2 || base == 8 || base == 16)) {
         c = *s++; /* skip 0 */
-        if ((c|32) == 'x') { /* hexadecimal prefix? */
-            if (base != 16) return NULL; /* octal numeral with x|X */
+        if ((c|32) == 'b') { /* binary prefix? */
+            if (base != 2) return NULL;
+            c = *s++; /* skip 'b|B' */
+        } else if ((c|32) == 'x') { /* hexadecimal prefix? */
+            if (base != 16) return NULL;
             c = *s++; /* skip x|X */
         }
     }
@@ -788,10 +792,7 @@ static const char *strtoint(const char *s, int base, toku_Integer *pn, int *of) 
              base*n <= TOKU_UNSIGNED_MAX-val[c]);
     if (val[c] < base) {
         while (val[c] < base) c=*s++;
-        if (sign > 0)
-            n = lim-1;
-        else
-            n = lim;
+        n = lim - (sign > 0);
         *of = sign;
     } else if (n >= lim) {
         if (sign > 0) {
@@ -809,8 +810,9 @@ static const char *strtoint(const char *s, int base, toku_Integer *pn, int *of) 
 }
 
 
+// TODO: update docs
 static int b_tonum(toku_State *T) {
-    int overflow = 0;
+    int of = 0; /* overflow flag */
     if (toku_is_noneornil(T, 1)) { /* no base? */
         if (toku_type(T, 0) == TOKU_T_NUMBER) { /* number ? */
             toku_setntop(T, 1); /* set it as top */
@@ -818,7 +820,7 @@ static int b_tonum(toku_State *T) {
         } else { /* must be string */
             size_t l;
             const char *s = toku_to_lstring(T, 0, &l);
-            if (s != NULL && toku_stringtonumber(T, s, &overflow) == l + 1)
+            if (s != NULL && toku_stringtonumber(T, s, &of) == l + 1)
                 goto done;
             /* else not a number */
             tokuL_check_any(T, 0); /* (but there must be some parameter) */
@@ -829,11 +831,11 @@ static int b_tonum(toku_State *T) {
         const char *s = tokuL_check_lstring(T, 0, &l); /* numeral to convert */
         toku_Integer n;
         tokuL_check_arg(T, 2 <= i && i <= 36, 1, "base out of range [2,36]");
-        if (strtoint(s, i, &n, &overflow) == s + l) { /* conversion ok? */
+        if (strtoint(s, i, &n, &of) == s + l) { /* conversion ok? */
             toku_push_integer(T, n); /* push the conversion number */
-done:
-            if (overflow) {
-                toku_push_integer(T, overflow);
+        done:
+            if (of) {
+                toku_push_integer(T, of);
                 return 2; /* return number + over(under)flow flag (-1|1) */
             }
             return 1; /* return only number */ 

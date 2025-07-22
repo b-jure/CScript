@@ -77,6 +77,8 @@ syn match tokudaeCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\|\\[
 syn match tokudaeNumber /\<\%(0\|[1-9][[:digit:]_]*\)\>/
 " hexadecimal integers
 syn match tokudaeNumber /\<0x\x[[:xdigit:]_]*\>/
+" binary integers
+syn match tokudaeNumber /\<0[bB][0-1][0-1_]*\>/
 " octal integers
 syn match tokudaeOctal /\<0\o[0-7_]*\>/ contains=tokudaeOctalZero
 " flag the first zero of an octal number as something special
@@ -168,6 +170,7 @@ syn match tokudaeSymbolOperator />=\ze\%([^=,]\|\n\)/
 syn match tokudaeSymbolOperator /\.\.\ze\%([^\.=,]\|\n\)/
 syn match tokudaeSymbolOperator /\.\.\.\ze\%([^\.=,]\|\n\)/
 syn match tokudaeSymbolOperator /,/
+syn match tokudaeSymbolOperator /?\ze\%([^?=]\|\n\)/
 " compound assignments
 syn match tokudaeSymbolOperator /+=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
 syn match tokudaeSymbolOperator /-=\ze\%([^,=+&%|\/><\*\.-]\|\n\)/

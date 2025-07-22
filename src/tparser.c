@@ -170,7 +170,8 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
 
 
 static t_noret expecterror(Lexer *lx, int tk) {
-    const char *err = tokuS_pushfstring(lx->T, "expected %s", tokuY_tok2str(lx, tk));
+    const char *err = tokuS_pushfstring(lx->T, "expected %s",
+                                                tokuY_tok2str(lx, tk));
     tokuY_syntaxerror(lx, err);
 }
 

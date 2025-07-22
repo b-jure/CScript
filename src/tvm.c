@@ -1747,11 +1747,11 @@ returning: /* trap already set */
                 tokuF_newtbcvar(T, STK(fetch_l()));
                 vm_break;
             }
-            vm_case(OP_CHECK) { /* TODO: change the name of this opcode */
+            vm_case(OP_CHECK) {
                 SPtr first;
                 savestate(T);
                 first = STK(fetch_l());
-                toku_assert(first < sp); /* at least one result is ensured */
+                toku_assert(first < sp); /* have at least one result */
                 setobjs2s(T, sp++, first); /* push first result */
                 vm_break;
             }

@@ -54,15 +54,20 @@ res, of = tonum("-63abzg42zzzzzzzzzz5555zzzzzzzzzzzzzzzzzzzzzzzz", 36);
 assert(res and of == -1);
 
 /*
-** Assert below depends on the types Tokudae was compiled with.
-** For now Tokudae can be compiled only with 'long long int' for
-** integers and 'double' for floats.
+** Asserts below depends on the types Tokudae was compiled with.
+** Currently Tokudae can be compiled only with 64 bit integers and floats.
 */
-res, of = tonum("0x7fffffffffffffff", 16);
-assert(res and of == nil);
-res, of = tonum("-0x8000000000000000", 16);
-assert(res and of == nil);
-res, of = tonum("0x8000000000000001", 16);
-assert(res == 0x7fffffffffffffff and of == 1);
-res, of = tonum("-0x8000000000000001", 16);
-assert(res == 0x7fffffffffffffff+1 and of == -1);
+if !__port {
+    res, of = tonum("0x7fffffffffffffff", 16);
+    assert(res == 0x7fffffffffffffff and of == nil);
+    res, of = tonum("-0x8000000000000000", 16);
+    assert(res == -0x8000000000000000 and of == nil);
+    res, of = tonum("0x8000000000000001", 16);
+    assert(res == 0x7fffffffffffffff and of == 1);
+    res, of = tonum("-0x8000000000000001", 16);
+    assert(res == 0x7fffffffffffffff+1 and of == -1);
+    res, of = tonum("0b1111111111111111111111111111111111111111111111111111111111111111");
+    assert(res == 0b1111111111111111111111111111111111111111111111111111111111111111 and !of);
+    res, of = tonum("0b0111111111111111111111111111111111111111111111111111111111111111",2);
+    assert(res == 0b0111111111111111111111111111111111111111111111111111111111111111 and !of);
+}

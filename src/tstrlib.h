@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "tokudae.h"
+#include "tokudaelimits.h"
 
 
 /* macro to 'unsign' a character */

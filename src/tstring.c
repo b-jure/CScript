@@ -274,13 +274,13 @@ int tokuS_cmp(const OString *s1, const OString *s2) {
 /* convert hex character into digit */
 t_sinline int hexvalue(int c) {
     if (c > '9') /* hex digit? */ 
-        return (ctolower(c) - 'a') + 10;
+        return (ttolower(c) - 'a') + 10;
     else  /* decimal digit */
         return c - '0';
 }
 
 int tokuS_hexvalue(int c) {
-    toku_assert(cisxdigit(c));
+    toku_assert(tisxdigit(c));
     return hexvalue(c);
 }
 
@@ -314,20 +314,24 @@ static const char *str2int(const char *s, toku_Integer *i) {
     int base, c, empty;
     empty = 1;
     c = *s++;
-    while (cisspace(c)) c = *s++; /* skip leading spaces */
+    while (tisspace(c)) c = *s++; /* skip leading spaces */
     if (c == '-' || c == '+') { /* have sign? */
         sign -= 2*(c == '-'); /* adjust sign value */
         c = *s++;
     }
     /* handle prefix to get base (if any) */
-    if (c == '0' && ctolower(*s) == 'x') { /* hexadecimal? */
-        s++; /* skip x|X */
-        base = 16;
+    if (c == '0') {
+        if (ttolower(*s) == 'x') { /* hexadecimal? */
+            s++; /* skip x|X */
+            base = 16;
+        } else if (ttolower(*s) == 'b') { /* binary? */
+            s++; /* skip b|B */
+            base = 2;
+        } else { /* otherwise octal */
+            base = 8;
+            empty = 0; /* have '0' */
+        }
         c = *s++; /* get first digit */
-    } else if (c == '0') { /* octal? */
-        base = 8;
-        c = *s++; /* get first digit */
-        empty = 0; /* have '0' */
     } else /* otherwise it must be decimal */
         base = 10; /* c already has first digit */
     empty = !(val[c] < base) && empty;
@@ -360,13 +364,13 @@ static const char *str2int(const char *s, toku_Integer *i) {
     if (empty || /* empty numeral... */
         val[c] < base || /* ...or 'TOKU_UNSIGNED_MAX' overflown, */
         (y >= lim && /* ...or numeral is bigger or equal than 'lim', */
-         ((sign > 0 && base != 16) || /* ...and is positive and not hex, */
+         ((sign > 0 && base != 16 && base != 2) || /* ...and positive x|b, */
           (y > lim && /* ...or the 'lim' is overflown' */
-          /* ...and is not hex and less than max unsigned int */
-          !(base == 16 && y <= TOKU_UNSIGNED_MAX))))) {
+          /* ...and is not hex or binary and not out of bounds */
+          !((base == 16 || base == 2) && y <= TOKU_UNSIGNED_MAX))))) {
         return NULL; /* over(under)flow (do not accept it as integer) */
     } else {
-        while (cisspace(c)) c = *s++; /* skip trailing spaces */
+        while (tisspace(c)) c = *s++; /* skip trailing spaces */
         if (empty || c != '\0') return NULL; /* conversion failed? */
         *i = t_castU2S(sign * y);
         return s - 1;
@@ -380,7 +384,7 @@ static const char *str2int(const char *s, toku_Integer *i) {
 #endif
 
 
-static const char *lot_str2flt(const char *s, toku_Number *res, int *pf) {
+static const char *loc_str2flt(const char *s, toku_Number *res, int *pf) {
     char *eptr = NULL; /* to avoid warnings */
     toku_assert(pf != NULL);
     *pf = 0;
@@ -397,13 +401,13 @@ static const char *lot_str2flt(const char *s, toku_Number *res, int *pf) {
             *pf = -1; /* underflow (very large negative exponent) */
         }
     }
-    while (cisspace(*eptr)) eptr++; /* skip trailing spaces */
+    while (tisspace(*eptr)) eptr++; /* skip trailing spaces */
     return (*eptr == '\0') ? eptr : NULL;
 }
 
 
 static const char *str2flt(const char *s, toku_Number *res, int *pf) {
-    const char *endptr = lot_str2flt(s, res, pf);
+    const char *endptr = loc_str2flt(s, res, pf);
     if (endptr == NULL) { /* failed? may be a different locale */
         char buff[T_MAXNUMERAL + 1];
         const char *pdot = strchr(s, '.');
@@ -411,7 +415,7 @@ static const char *str2flt(const char *s, toku_Number *res, int *pf) {
             return NULL; /* no dot or string too long; fail */
         strcpy(buff, s);
         buff[pdot - s] = toku_getlocaledecpoint(); /* correct decimal point */
-        endptr = lot_str2flt(buff, res, pf);
+        endptr = loc_str2flt(buff, res, pf);
         if (endptr != NULL)
             endptr = s + (endptr - buff); /* make relative to 's' */
     }

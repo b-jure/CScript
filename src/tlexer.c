@@ -54,6 +54,7 @@ typedef enum DigType {
     DigDec,
     DigHex,
     DigOct,
+    DigBin,
 } DigType;
 
 
@@ -120,7 +121,7 @@ const char *tokuY_tok2str(Lexer *lx, int t) {
             return tokuS_pushfstring(lx->T, "'%s'", str);
         return str;
     } else {
-        if (cisprint(t))
+        if (tisprint(t))
             return tokuS_pushfstring(lx->T, "'%c'", t);
         else
             return tokuS_pushfstring(lx->T, "'<\\%d>'", t);
@@ -243,7 +244,7 @@ static void checkcond(Lexer *lx, int cond, const char *msg) {
 
 static int expect_hexdig(Lexer *lx){
     save_and_advance(lx);
-    checkcond(lx, cisxdigit(lx->c), "hexadecimal digit expected");
+    checkcond(lx, tisxdigit(lx->c), "hexadecimal digit expected");
     return tokuS_hexvalue(lx->c);
 }
 
@@ -274,7 +275,7 @@ static unsigned long read_utf8esc(Lexer *lx, int *strict) {
         checkcond(lx, lx->c == '{', "missing '{'");
     r = expect_hexdig(lx); /* must have at least one digit */
     /* Read up to 7 hexadecimal digits (last digit is reserved for UTF-8) */
-    while (cast_void(save_and_advance(lx)), cisxdigit(lx->c)) {
+    while (cast_void(save_and_advance(lx)), tisxdigit(lx->c)) {
         i++;
         checkcond(lx, r <= (0x7FFFFFFFu >> 4), "UTF-8 value too large");
         r = (r << 4) + tokuS_hexvalue(lx->c);
@@ -356,8 +357,8 @@ static void utf8esc(Lexer *lx) {
 static int read_decesc(Lexer *lx) {
     int i;
     int r = 0;
-    for (i = 0; i < 3 && cisdigit(lx->c); i++) {
-        r = 10 * r + ctodigit(lx->c);
+    for (i = 0; i < 3 && tisdigit(lx->c); i++) {
+        r = 10 * r + ttodigit(lx->c);
         save_and_advance(lx);
     }
     checkcond(lx, r <= UCHAR_MAX, "decimal escape too large");
@@ -456,7 +457,7 @@ static void read_string(Lexer *lx, Literal *k) {
                     }
                     case TOKUEOF: goto no_save; /* raise err on next iteration */
                     default: {
-                        checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
+                        checkcond(lx, tisdigit(lx->c), "invalid escape sequence");
                         c = read_decesc(lx); /* '\ddd' */
                         goto only_save;
                     }
@@ -511,9 +512,7 @@ repeat:
                     c = lx->c; break;
                 case TOKUEOF: goto repeat;
                 default: { /* error */
-                    printf("iNOTOK\n");
-                    checkcond(lx, cisdigit(lx->c), "invalid escape sequence");
-                    printf("OK\n");
+                    checkcond(lx, tisdigit(lx->c), "invalid escape sequence");
                     c = read_decesc(lx); /* '\ddd' */
                     goto only_save;
                 }
@@ -587,9 +586,10 @@ static int read_digits(Lexer *lx, DigType dt, int frac) {
         if (!frac && check_next(lx, '_')) /* separator? */
             continue; /* skip */
         switch (dt) { /* otherwise get the digit */
-            case DigDec: if (!cisdigit(lx->c)) return digits; break;
-            case DigHex: if (!cisxdigit(lx->c)) return digits; break;
-            case DigOct: if (!cisodigit(lx->c)) return digits; break;
+            case DigDec: if (!tisdigit(lx->c)) return digits; break;
+            case DigHex: if (!tisxdigit(lx->c)) return digits; break;
+            case DigOct: if (!tisodigit(lx->c)) return digits; break;
+            case DigBin: if (!tisbdigit(lx->c)) return digits; break;
             default: toku_assert(0); break; /* invalid 'dt' */
         }
         save_and_advance(lx);
@@ -607,9 +607,9 @@ static int read_exponent(Lexer *lx) {
         while (lx->c == '_' || lx->c == '0')
             advance(lx); /* skip separators and leading zeros */
     }
-    if (cisalpha(lx->c)) /* exponent touching a letter? */
+    if (tisalpha(lx->c)) /* exponent touching a letter? */
         save_and_advance(lx); /* force an error */
-    else if (cisdigit(lx->c)) /* got at least one non-zero digit? */
+    else if (tisdigit(lx->c)) /* got at least one non-zero digit? */
         return read_digits(lx, DigDec, 0);
     else if (t_unlikely(!gotzero)) /* no digits? */
         lexerror(lx, "at least one exponent digit expected", TK_FLT);
@@ -618,6 +618,42 @@ static int read_exponent(Lexer *lx) {
         return 1; /* (one zero) */
     }
     return 0;
+}
+
+
+/* read base 16 (hexadecimal) numeral */
+static int read_hexnum(Lexer *lx, Literal *k) {
+    int ndigs = 0;
+    int gotexp, gotrad;
+    if (tisxdigit(lx->c)) /* can't have separator before first digit */
+        ndigs = read_digits(lx, DigHex, 0);
+    if ((gotrad = lx->c == '.')) {
+        save_and_advance(lx);
+        if (t_unlikely(!read_digits(lx, DigHex, 1) && !ndigs))
+            lexerror(lx,"hexadecimal constant expects at least one digit", TK_FLT);
+    } else if (!ndigs)
+        lexerror(lx, "invalid suffix 'x|X' on integer constant", TK_FLT);
+    if ((gotexp = check_next2(lx, "pP"))) { /* have exponent? */
+        if (read_exponent(lx) == 0) /* error? */
+            goto convert;
+    }
+    if (t_unlikely(gotrad && !gotexp))
+        lexerror(lx, "hexadecimal float constant is missing exponent 'p|P'", TK_FLT);
+    if (tisalpha(lx->c)) /* numeral touching a letter? */
+        save_and_advance(lx); /* force an error */
+convert:
+    return lexstr2num(lx, k);
+}
+
+
+// TODO:add docs, Tokudae now supports binary integer constants
+static int read_binnum(Lexer *lx, Literal *k) {
+    if (t_unlikely(!tisbdigit(lx->c)))
+        lexerror(lx, "invalid suffix 'b|B' on integer constant", TK_INT);
+    read_digits(lx, DigBin, 0);
+    if (t_unlikely(tisalpha(lx->c))) /* binary numeral touching a letter? */
+        save_and_advance(lx); /* force an error */
+    return lexstr2num(lx, k);
 }
 
 
@@ -635,32 +671,7 @@ static int read_decnum(Lexer *lx, Literal *k, int c) {
         if (read_exponent(lx) == 0) /* error? */
             goto convert;
     }
-    if (cisalpha(lx->c)) /* numeral touching a letter? */
-        save_and_advance(lx); /* force an error */
-convert:
-    return lexstr2num(lx, k);
-}
-
-
-/* read base 16 (hexadecimal) numeral */
-static int read_hexnum(Lexer *lx, Literal *k) {
-    int ndigs = 0;
-    int gotexp, gotrad;
-    if (cisxdigit(lx->c)) /* can't have separator before first digit */
-        ndigs = read_digits(lx, DigHex, 0);
-    if ((gotrad = lx->c == '.')) {
-        save_and_advance(lx);
-        if (t_unlikely(!read_digits(lx, DigHex, 1) && !ndigs))
-            lexerror(lx,"hexadecimal constant expects at least one digit", TK_FLT);
-    } else if (!ndigs)
-        lexerror(lx, "invalid suffix 'x|X' on integer constant", TK_FLT);
-    if ((gotexp = check_next2(lx, "pP"))) { /* have exponent? */
-        if (read_exponent(lx) == 0) /* error? */
-            goto convert;
-    }
-    if (t_unlikely(gotrad && !gotexp))
-        lexerror(lx, "hexadecimal float constant is missing exponent 'p|P'", TK_FLT);
-    if (cisalpha(lx->c)) /* numeral touching a letter? */
+    if (tisalpha(lx->c)) /* numeral touching a letter? */
         save_and_advance(lx); /* force an error */
 convert:
     return lexstr2num(lx, k);
@@ -670,9 +681,9 @@ convert:
 /* read base 8 (octal) numeral */
 static int read_octnum(Lexer *lx, Literal *k) {
     int digits = read_digits(lx, DigOct, 0);
-    if (digits == 0 || cisdigit(lx->c)) /* no digits or has decimal digit? */
+    if (digits == 0 || tisdigit(lx->c)) /* no digits or has decimal digit? */
         return read_decnum(lx, k, lx->c); /* try as decimal numeral */
-    else if (cisalpha(lx->c)) /* octal numeral touching a letter? */
+    else if (tisalpha(lx->c)) /* octal numeral touching a letter? */
         save_and_advance(lx); /* force an error */
     return lexstr2num(lx, k);
 }
@@ -684,7 +695,9 @@ static int read_numeral(Lexer *lx, Literal *k) {
     save_and_advance(lx);
     if (c == '0' && check_next2(lx, "xX"))
         return read_hexnum(lx, k);
-    else if (c == '0' && cisdigit(lx->c))
+    else if (c == '0' && check_next2(lx, "bB"))
+        return read_binnum(lx, k);
+    else if (c == '0' && tisdigit(lx->c))
         return read_octnum(lx, k);
     else
         return read_decnum(lx, k, c);
@@ -792,7 +805,7 @@ static int scan(Lexer *lx, Literal *k) {
                     else
                         return TK_CONCAT;
                 }
-                if (!cisdigit(lx->c)) 
+                if (!tisdigit(lx->c)) 
                     return '.';
                 else
                     return read_decnum(lx, k, '.');
@@ -801,14 +814,14 @@ static int scan(Lexer *lx, Literal *k) {
                 return TK_EOS;
             }
             default: {
-                if (!cisalpha(lx->c) && lx->c != '_') {
+                if (!tisalpha(lx->c) && lx->c != '_') {
                     int c = lx->c;
                     advance(lx);
                     return c;
                 } else {
                     do {
                         save_and_advance(lx);
-                    } while (cisalnum(lx->c) || lx->c == '_');
+                    } while (tisalnum(lx->c) || lx->c == '_');
                     k->str = tokuY_newstring(lx, tokuR_buff(lx->buff),
                                                tokuR_bufflen(lx->buff));
                     if (isreserved(k->str)) { /* reserved keywword? */
