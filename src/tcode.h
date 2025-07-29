@@ -154,6 +154,7 @@ OP_NEWCLASS,/*     S          'create and load new class of size 1<<(S-1)'  */
 OP_NEWTABLE,/*     S          'create and load new table of size 1<<(S-1)'  */
 OP_METHOD,/*       L V1 V2    'define method V2 for class V1 under key K{L}'*/
 OP_SETMT,/*        S V1 V2    'V1->metatable[g->tmnames[S]] = V2'           */
+OP_SETMTSTR,/*     L V1 V2    'V1->metatable[K{L}] = V2'                    */
 
 OP_MBIN,/*         V1 V2 S    'V1 S V2'  (S is binop)                       */
 
@@ -368,7 +369,8 @@ TOKUI_FUNC void tokuC_adjuststack(FunctionState *fs, int left);
 TOKUI_FUNC int tokuC_return(FunctionState *fs, int first, int nreturns);
 TOKUI_FUNC void tokuC_check(FunctionState *fs, int first, int linenum);
 TOKUI_FUNC void tokuC_methodset(FunctionState *fs, ExpInfo *e);
-TOKUI_FUNC void tokuC_mtset(FunctionState *fs, int mt);
+TOKUI_FUNC void tokuC_mtset(FunctionState *fs, int mt, int line);
+TOKUI_FUNC void tokuC_mtstrset(FunctionState *fs, OString *field, int line);
 TOKUI_FUNC int tokuC_storevar(FunctionState *fs, ExpInfo *var, int left);
 TOKUI_FUNC void tokuC_setlistsize(FunctionState *fs, int pc, int lsz);
 TOKUI_FUNC void tokuC_setlist(FunctionState *fs, int base, int nelems,

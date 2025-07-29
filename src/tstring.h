@@ -34,13 +34,12 @@
          (s)->extra <= NUM_KEYWORDS)
 
 
-/* value of 'extra' for first tag method name */
+/* value of 'extra' for first tag event name */
 #define FIRST_TM        (NUM_KEYWORDS + 1)
 
 
-/* test whether a string is a metamethod tag */
 #define ismetatag(s) \
-        ((s)->tt_ == TOKU_VSHRSTR && FIRST_TM <= (s)->extra && \
+        (strisshr(s) && FIRST_TM <= (s)->extra && \
          (s)->extra < FIRST_TM + TM_NUM)
 
 

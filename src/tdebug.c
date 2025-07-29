@@ -468,7 +468,7 @@ static const char *getobjname(const Proto *p, int lastpc, int sp,
 
 static const char *funcnamefromcode(toku_State *T, const Proto *p, int pc,
                                     const char **name) {
-    TM event;
+    int event;
     Instruction *i = &p->code[pc];
     switch (*i) {
         case OP_CALL:

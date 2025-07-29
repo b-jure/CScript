@@ -3,9 +3,11 @@ class X {
         self.x = 69;
         return self;
     };
+    whateva1 = 69;
     __add = fn(other) {
         return self.x + other.x;
     };
+    whateva2 = 420;
 }
 local t = { x = 1; };
 local x = X();
@@ -13,8 +15,10 @@ local mtX = getmetatable(X);
 assert(mtX);
 assert(mtX.__init);
 assert(mtX.__init(t) == t);
+assert(mtX.whateva1 == 69);
 assert(mtX.__add);
 assert(mtX.__add(t, t) == 138);
+assert(mtX.whateva2 == 420);
 
 
 class Y {
@@ -27,6 +31,8 @@ mtY.__init = |self, extra| {
 };
 mtY.__add = fn(self, other) { return self.x + other.x; };
 mtY.__sub = fn(self, other) { return self.x - other.x; };
+mtY.whateva1 = "69";
+mtY.whateva2 = "420";
 setmetatable(Y, mtY);
 local y1 = Y();
 assert(y1.x and y1.x == 34);
@@ -35,6 +41,8 @@ assert(y2.x and y2.x == 35);
 assert(y1 + y2 == 69);
 assert(y1 - y2 == -1);
 assert(y2 - y1 == 1);
+assert(getmetatable(Y).whateva1 == "69");
+assert(getmetatable(Y).whateva2 == "420");
 assert(getmetatable(Y));
 setmetatable(Y, nil);
 assert(!getmetatable(Y));

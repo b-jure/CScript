@@ -1162,10 +1162,9 @@ local fn rmoldprog(restore) {
 
 handle_cli_args();
 
-if showinfo { /* only show enabled/disabled options? */
+if showinfo /* only show enabled/disabled options? */
     display_run_information();
-    return; /* done */
-} else if __opts.rebuild { /* rebuild standalone interpreter? */
+else if __opts.rebuild { /* rebuild standalone interpreter? */
     loginfo("rebuilding Takudae standalone interpreter...");
     report(true, "can't create executable backup",
            execute(fmt("%s %s %s %s", cp, prog, oldprog, dev_null1)));

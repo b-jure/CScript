@@ -38,6 +38,7 @@ static const void *const jmptable[NUM_OPCODES] = { /* "ORDER OP" */
     &&L_OP_NEWTABLE,
     &&L_OP_METHOD,
     &&L_OP_SETMT,
+    &&L_OP_SETMTSTR,
     &&L_OP_MBIN,
     &&L_OP_ADDK,
     &&L_OP_SUBK,

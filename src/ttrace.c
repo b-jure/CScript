@@ -669,7 +669,8 @@ void tokuTR_disassemble(toku_State *T, const Proto *p) {
             case OP_IDIVK: case OP_MODK: case OP_POWK: case OP_BSHLK:
             case OP_BSHRK: case OP_BANDK: case OP_BORK: case OP_BXORK:
             case OP_CONSTL: case OP_GETPROPERTY: case OP_GETINDEXSTR:
-            case OP_METHOD: case OP_GETSUP: case OP_GETSUPIDXSTR: {
+            case OP_METHOD: case OP_GETSUP: case OP_GETSUPIDXSTR:
+            case OP_SETMTSTR: {
                 unasmKL(p, pc);
                 break;
             }

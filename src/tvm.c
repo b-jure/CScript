@@ -1461,7 +1461,7 @@ returning: /* trap already set */
             }
             vm_case(OP_SETMT) {
                 Table *mt = classval(peek(1))->metatable;
-                TValue *v = peek(0); /* func */
+                TValue *v = peek(0);
                 OString *key;
                 int hres;
                 TM ev;
@@ -1470,7 +1470,6 @@ returning: /* trap already set */
                 ev = fetch_s();
                 key = eventstring(T, ev);
                 toku_assert(cast_uint(ev) < TM_NUM);
-                // TODO: new opcode to store non-event metatable entries
                 tokuV_fastset(mt, key, v, hres, tokuH_psetstr);
                 if (hres == HOK)
                     tokuV_finishfastset(T, mt, v);
@@ -1478,6 +1477,25 @@ returning: /* trap already set */
                     TValue os;
                     setstrval(T, &os, key);
                     tokuH_finishset(T, mt, &os, v, hres);
+                    tokuG_barrierback(T, obj2gco(mt), v);
+                    invalidateTMcache(mt);
+                }
+                sp--;
+                vm_break;
+            }
+            vm_case(OP_SETMTSTR) {
+                Table *mt = classval(peek(1))->metatable;
+                TValue *v = peek(0);
+                TValue *key;
+                int hres;
+                savestate(T);
+                toku_assert(mt != NULL);
+                key = K(fetch_l());
+                tokuV_fastset(mt, strval(key), v, hres, tokuH_psetstr);
+                if (hres == HOK)
+                    tokuV_finishfastset(T, mt, v);
+                else {
+                    tokuH_finishset(T, mt, key, v, hres);
                     tokuG_barrierback(T, obj2gco(mt), v);
                     invalidateTMcache(mt);
                 }

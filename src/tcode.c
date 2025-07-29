@@ -91,6 +91,7 @@ TOKUI_DEF const OpProperties tokuC_opproperties[NUM_OPCODES] = {
     { FormatIS, 1, 0, 0 }, /* OP_NEWTABLE */
     { FormatIL, 0, 1, 0 }, /* OP_METHOD */
     { FormatIS, 0, 1, 0 }, /* OP_SETMT */
+    { FormatIS, 0, 1, 0 }, /* OP_SETMTSTR */
     { FormatIS, 0, 0, 0 }, /* OP_MBIN */
     { FormatIL, 0, 0, 1 }, /* OP_ADDK */
     { FormatIL, 0, 0, 1 }, /* OP_SUBK */
@@ -197,15 +198,15 @@ TOKUI_DEF const t_ubyte tokuC_opsize[FormatN] = { /* "ORDER OPFMT" */
 TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* "ORDER OP" */
 "TRUE", "FALSE", "SUPER", "NIL", "POP", "LOAD", "CONST", "CONSTL",
 "CONSTI", "CONSTIL", "CONSTF", "CONSTFL", "VARARGPREP", "VARARG",
-"CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMT", "MBIN", "ADDK",
-"SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK", "BSHRK", "BANDK",
-"BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI", "MODI", "POWI",
-"BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB", "MUL", "DIV", "IDIV",
-"MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR", "CONCAT", "EQK", "EQI",
-"LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE", "EQPRESERVE", "UNM", "BNOT",
-"NOT", "JMP", "JMPS", "TEST", "TESTPOP", "CALL", "CLOSE",
-"TBC", "CHECK", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL", "SETLIST",
-"SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
+"CLOSURE", "NEWLIST", "NEWCLASS", "NEWTABLE", "METHOD", "SETMT", "SETMTSTR",
+"MBIN", "ADDK", "SUBK", "MULK", "DIVK", "IDIVK", "MODK", "POWK", "BSHLK",
+"BSHRK", "BANDK", "BORK", "BXORK", "ADDI", "SUBI", "MULI", "DIVI", "IDIVI",
+"MODI", "POWI", "BSHLI", "BSHRI", "BANDI", "BORI", "BXORI", "ADD", "SUB",
+"MUL", "DIV", "IDIV", "MOD", "POW", "BSHL", "BSHR", "BAND", "BOR", "BXOR",
+"CONCAT", "EQK", "EQI", "LTI", "LEI", "GTI", "GEI", "EQ", "LT", "LE",
+"EQPRESERVE", "UNM", "BNOT", "NOT", "JMP", "JMPS", "TEST", "TESTPOP", "CALL",
+"CLOSE", "TBC", "CHECK", "GETLOCAL", "SETLOCAL", "GETUVAL", "SETUVAL",
+"SETLIST", "SETPROPERTY", "GETPROPERTY", "GETINDEX", "SETINDEX", "GETINDEXSTR",
 "SETINDEXSTR", "GETINDEXINT", "GETINDEXINTL", "SETINDEXINT", "SETINDEXINTL",
 "GETSUP", "GETSUPIDX", "GETSUPIDXSTR", "INHERIT", "FORPREP", "FORCALL",
 "FORLOOP", "RETURN",
@@ -701,9 +702,17 @@ void tokuC_methodset(FunctionState *fs, ExpInfo *e) {
 }
 
 
-void tokuC_mtset(FunctionState *fs, int mt) {
+void tokuC_mtset(FunctionState *fs, int mt, int line) {
     toku_assert(0 <= mt && mt < TM_NUM);
     tokuC_emitIS(fs, OP_SETMT, mt);
+    tokuC_fixline(fs, line);
+    freeslots(fs, 1);
+}
+
+
+void tokuC_mtstrset(FunctionState *fs, OString *field, int line) {
+    tokuC_emitIL(fs, OP_SETMTSTR, stringK(fs, field));
+    tokuC_fixline(fs, line);
     freeslots(fs, 1);
 }
 

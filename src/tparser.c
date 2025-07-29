@@ -1060,46 +1060,64 @@ static void method(Lexer *lx) {
 }
 
 
-static void metafield(Lexer *lx, t_ubyte *amt) {
+static void checkmftable(Lexer *lx, Table *t, OString *metafield) {
+    toku_State *T = lx->T;
+    TValue aux;
+    if (t_unlikely(!tagisempty(tokuH_getstr(t, metafield, &aux)))) {
+        const char *msg = tokuS_pushfstring(T,
+                "redefinition of '%s' metafield", getstr(metafield));
+        tokuP_semerror(lx, msg);
+    }
+    setbtval(&aux);
+    tokuH_setstr(T, t, metafield, &aux); /* mftable[metafield] = true */
+}
+
+
+static void metafield(Lexer *lx, Table *t) {
     FunctionState *fs = lx->fs;
     int linenum = lx->line;
-    OString *mtname;
+    int funcline;
+    OString *metafield;
     ExpInfo e;
-    int mt;
+    int event = -1;
     expname(lx, &e);
-    mtname = e.u.str;
-    if (t_unlikely(!ismetatag(mtname)))
-        tokuP_semerror(lx, "invalid metafield name");
-    mt = mtname->extra - NUM_KEYWORDS - 1;
-    if (t_unlikely(amt[mt]))
-        tokuP_semerror(lx, "metafield redefinition");
-    amt[mt] = 1; /* mark as defined */
+    metafield = e.u.str;
+    if (ismetatag(metafield)) /* is TM event? */
+        event = metafield->extra - NUM_KEYWORDS - 1;
+    checkmftable(lx, t, metafield);
     expectnext(lx, '=');
+    funcline = lx->line;
     if (match(lx, TK_FN) || check(lx, '|')) {
-        int linenum = lx->line;
         int del = lx->t.tk;
-        funcbody(lx, &e, 1, linenum, del);
+        if (del == '|') funcline = lx->line;
+        funcbody(lx, &e, 1, funcline, del);
     } else
         expr(lx, &e);
     tokuC_exp2stack(fs, &e);
     expectnext(lx, ';');
-    tokuC_mtset(fs, mt);
-    tokuC_fixline(fs, linenum);
+    if (0 <= event)
+        tokuC_mtset(fs, event, linenum);
+    else
+        tokuC_mtstrset(fs, metafield, linenum);
 }
 
 
 static int classbody(Lexer *lx, int *havemt) {
+    toku_State *T = lx->T;
+    Table *t = tokuH_new(T); /* metafield table */
     int nmethods = 0;
-    t_ubyte amt[TM_NUM] = {0};
+    settval2s(T, T->sp.p, t); /* anchor it */
+    tokuT_incsp(T);
     while (!check(lx, '}') && !check(lx, TK_EOS)) {
         if (!check(lx, TK_FN)) {
-            metafield(lx, amt);
+            metafield(lx, t);
             *havemt = 1;
         } else {
             method(lx);
             nmethods++;
         }
     }
+    T->sp.p--; /* remove metafield table */
     return nmethods;
 }
 
@@ -1129,7 +1147,7 @@ static void klass(Lexer *lx, ExpInfo *e) {
         int nb = tokuO_ceillog2(nm + (nm == 1));
         nb |= havemt * 0x80; /* flag for creating metatable */
         SET_ARG_S(&fs->p->code[pc], 0, nb);
-    } else if (havemt)
+    } else if (havemt) /* have metatable? */
         SET_ARG_S(&fs->p->code[pc], 0, 0x80);
     expectmatch(lx, '}', '{', linenum);
     if (cs.super) /* have superclass? */
