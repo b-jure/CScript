@@ -65,6 +65,7 @@ TOKUI_FUNC t_noret tokuD_concaterror(toku_State *T, const TValue *v1,
                                      const TValue *v2);
 TOKUI_FUNC t_noret tokuD_listerror(toku_State *T, const TValue *o,
                                    const char *what, const char *msg);
+TOKUI_FUNC t_noret tokuD_listfielderror(toku_State *T, const TValue *field);
 TOKUI_FUNC t_noret tokuD_errormsg(toku_State *T);
 TOKUI_FUNC void tokuD_hook(toku_State *T, int event, int line,
                                           int ftransfer, int ntransfer);

@@ -1197,7 +1197,7 @@ void tokuC_getdotted(FunctionState *fs, ExpInfo *v, ExpInfo *key, int super) {
 */
 void tokuC_indexed(FunctionState *fs, ExpInfo *var, ExpInfo *key, int super) {
     int strK = 0;
-    toku_assert(onstack(var)); /* 'var' must be finalized (on stack) */
+    toku_assert(onstack(var));
     tokuC_exp2val(fs, key);
     if (key->et == EXP_STRING) {
         string2K(fs, key); /* make constant */

@@ -73,10 +73,10 @@ syn match tokudaeCharacter /'\([^\\']\|\\[\\abtnvfr'"]\|\\x[[:xdigit:]]\{2}\|\\[
 "-----------------}
 
 "-Numbers---------{
-" decimal integers
+" decimal integersX]
 syn match tokudaeNumber /\<[0-9][[:digit:]_]*\>/
 " hexadecimal integers
-syn match tokudaeNumber /\<0x\x[[:xdigit:]_]*\>/
+syn match tokudaeNumber /\<0[xX]\x[[:xdigit:]_]*\>/
 " binary integers
 syn match tokudaeNumber /\<0[bB][0-1][0-1_]*\>/
 " octal integers
@@ -140,6 +140,9 @@ syn keyword tokudaeClass class inherits
 syn keyword tokudaeSuper super
 "-----------------}
 
+" Keep this here, before the operator binary OR operator
+syn match tokudaeClosurePipe containedin=tokudaeClosure /|/
+
 "-Operators-------{
 syn keyword tokudaeOperator and or
 syn match tokudaeSymbolOperator />\ze\%([^>=,]\|\n\)/
@@ -189,15 +192,15 @@ syn match tokudaeSymbolOperator /--\ze\%([^,=+&%|\/><\*\.-]\|\n\)/
 syn match tokudaeFunctionCall /\k\+\_s*(\@=/
 syn match tokudaeSemicolon /;/
 syn match tokudaeAttribute /<\_s*\%(close\|final\)\_s*>/
-syn match tokudaeClosure /|\_s*|/
-syn region tokudaeClosure transparent matchgroup=tokudaeStatement start=/|\ze\_s*\h\+\_s*\%(,\_s*\h\+\_s*\)*/ end=/|/
+syn match tokudaeClosure transparent /|\_s*|/ skipwhite contains=tokudaeClosurePipe
+syn match tokudaeClosure transparent /|\_s*\h\w*\_s*\%(,\_s*\h\w*\_s*\)*|/ skipwhite contains=tokudaeClosurePipe
 "-----------------}
 
 "-Metamethods-----{
 syn keyword tokudaeMetaTag __getidx __setidx __gc __close __call __init
 syn keyword tokudaeMetaTag __concat __mod __pow __add __sub __mul __div
 syn keyword tokudaeMetaTag __shl __shr __band __bor __bxor __unm __bnot
-syn keyword tokudaeMetaTag __eq __lt __le __name __metatable
+syn keyword tokudaeMetaTag __eq __lt __le __name
 "-----------------}
 
 "-Basic library---{{
@@ -207,34 +210,6 @@ syn keyword tokudaeFunc ipairs pcall xpcall print printf warn len rawequal
 syn keyword tokudaeFunc rawget rawset getargs tonum tostr typeof getclass
 syn keyword tokudaeFunc clone unwrapmethod getsuper range
 syn keyword tokudaeFunc __POSIX __WINDOWS __G __ENV __VERSION
-" metatag table keys
-syn match tokudaeFunc /\<__MT>\ze[^\.]/
-syn match tokudaeFunc /\<__MT\.getidx\>/
-syn match tokudaeFunc /\<__MT\.setidx\>/
-syn match tokudaeFunc /\<__MT\.gc\>/
-syn match tokudaeFunc /\<__MT\.close\>/
-syn match tokudaeFunc /\<__MT\.call\>/
-syn match tokudaeFunc /\<__MT\.init\>/
-syn match tokudaeFunc /\<__MT\.concat\>/
-syn match tokudaeFunc /\<__MT\.mod\>/
-syn match tokudaeFunc /\<__MT\.pow\>/
-syn match tokudaeFunc /\<__MT\.add\>/
-syn match tokudaeFunc /\<__MT\.sub\>/
-syn match tokudaeFunc /\<__MT\.mul\>/
-syn match tokudaeFunc /\<__MT\.div\>/
-syn match tokudaeFunc /\<__MT\.shl\>/
-syn match tokudaeFunc /\<__MT\.shr\>/
-syn match tokudaeFunc /\<__MT\.band\>/
-syn match tokudaeFunc /\<__MT\.bor\>/
-syn match tokudaeFunc /\<__MT\.bxor\>/
-syn match tokudaeFunc /\<__MT\.unm\>/
-syn match tokudaeFunc /\<__MT\.bnot\>/
-syn match tokudaeFunc /\<__MT\.eq\>/
-syn match tokudaeFunc /\<__MT\.lt\>/
-syn match tokudaeFunc /\<__MT\.le\>/
-syn match tokudaeFunc /\<__MT\.name\>/
-syn match tokudaeFunc /\<__MT\.metatable\>/
-syn match tokudaeFunc /\<__MT\.tostring\>/
 "-Package library-}{
 syn keyword tokudaeFunc import
 syn match tokudaeFunc /\<package\.loadlib\>/
@@ -378,7 +353,7 @@ syn match tokudaeFunc /\<utf8\.codes\>/
 syn match tokudaeFunc /\<utf8\.charpattern\>/
 "-----------------}}
 
-hi def link tokudaeClosure              tokudaeStatement 
+hi def link tokudaeClosurePipe          tokudaeStatement 
 hi def link tokudaeAttribute            StorageClass
 hi def link tokudaeSemicolon            tokudaeStatement
 hi def link tokudaeIdentifier           NONE

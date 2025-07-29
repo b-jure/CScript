@@ -23,27 +23,17 @@
 #define tokuV_raweq(v1_,v2_)    tokuV_ordereq(NULL, v1_, v2_)
 
 
-/* set table slot or list index, check GC barrier and do 'pos' */
-#define tokuV_setbarrier_pos(T,o,key,val,f,pos) \
-    { f(T, o, key, val); tokuG_barrierback(T, obj2gco(o), val); pos; }
+#define tokuV_setlist(T,l,key,val,f) \
+        { f(T, l, key, val); tokuG_barrierback(T, gcoval(o), val); }
 
 
-/* set object index and check GC barrier */
-#define tokuV_setbarrier(T,o,key,val,f) \
-        tokuV_setbarrier_pos(T, o, key, val, f, (void)0)
+#define tokuV_fastset(t,k,val,hres,f)   (hres = f(t, k, val))
 
 
-/* set list and check GC barrier */
-#define tokuV_setlist(T,l,key,val,f)    tokuV_setbarrier(T, l, key, val, f)
-
-
-/* set table and check GC barrier */
-#define tokuV_settable(T,t,key,val,f)   tokuV_setbarrier(T, t, key, val, f)
-
-
-/* set table, check GC barrier and invalidate table TM cache */
-#define tokuV_settableTM(T,t,key,val,f) \
-        tokuV_setbarrier_pos(T, t, key, val, f, invalidateTMcache(t))
+/*
+** Finish a fast set operation (when fast set succeeds).
+*/
+#define tokuV_finishfastset(T,t,v)      tokuG_barrierback(T, obj2gco(t), v)
 
 
 TOKUI_FUNC void tokuV_call(toku_State *T, SPtr fn, int nreturns);

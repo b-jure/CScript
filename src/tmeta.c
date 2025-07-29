@@ -127,12 +127,12 @@ const TValue *tokuTM_objget(toku_State *T, const TValue *v, TM event) {
         case TOKU_VUSERDATA: mt = udval(v)->metatable; break;
         default: mt = NULL; break;
     }
-    return (mt ? tokuH_getshortstr(mt, G(T)->tmnames[event]) : &G(T)->nil);
+    return (mt ? tokuH_Hgetshortstr(mt, G(T)->tmnames[event]) : &G(T)->nil);
 }
 
 
 const TValue *tokuTM_get(Table *events, TM event, OString *ename) {
-    const TValue *tm = tokuH_getshortstr(events, ename);
+    const TValue *tm = tokuH_Hgetshortstr(events, ename);
     toku_assert(event <= TM_NUM);
     if (notm(tm)) { /* no tag method? */
         events->flags |= cast_byte(1u<<event); /* cache this fact */

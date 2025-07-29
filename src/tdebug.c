@@ -941,10 +941,16 @@ t_noret tokuD_callerror(toku_State *T, const TValue *o) {
 ** Raise generic list-related error.
 */
 t_noret tokuD_listerror(toku_State *T, const TValue *o, const char *what,
-                                                    const char *msg) {
+                                                        const char *msg) {
     const char *t = tokuTM_objtypename(T, o);
     const char *e = varinfo(T, o);
-    tokuD_runerror(T, "list %s %s value%s is %s", what, t, e, msg);
+    tokuD_runerror(T, "list %s, a %s value%s, is %s", what, t, e, msg);
+}
+
+
+t_noret tokuD_listfielderror(toku_State *T, const TValue *field) {
+    const char *e = varinfo(T, field);
+    tokuD_runerror(T, "unknown list field '%s'%s", getstr(strval(field)), e);
 }
 
 

@@ -1,0 +1,40 @@
+class X {
+    __init = || {
+        self.x = 69;
+        return self;
+    };
+    __add = fn(other) {
+        return self.x + other.x;
+    };
+}
+local t = { x = 1; };
+local x = X();
+local mtX = getmetatable(X);
+assert(mtX);
+assert(mtX.__init);
+assert(mtX.__init(t) == t);
+assert(mtX.__add);
+assert(mtX.__add(t, t) == 138);
+
+
+class Y {
+    __init = ||{ return self; };
+}
+local mtY = {};
+mtY.__init = |self, extra| {
+    self.x = 34 + (extra or 0);
+    return self;
+};
+mtY.__add = fn(self, other) { return self.x + other.x; };
+mtY.__sub = fn(self, other) { return self.x - other.x; };
+setmetatable(Y, mtY);
+local y1 = Y();
+assert(y1.x and y1.x == 34);
+local y2 = Y(1);
+assert(y2.x and y2.x == 35);
+assert(y1 + y2 == 69);
+assert(y1 - y2 == -1);
+assert(y2 - y1 == 1);
+assert(getmetatable(Y));
+setmetatable(Y, nil);
+assert(!getmetatable(Y));

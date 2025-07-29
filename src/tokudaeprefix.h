@@ -34,5 +34,6 @@
 
 /// TODO: remove
 #include <stdio.h>
+#include "ttrace.h"
 
 #endif

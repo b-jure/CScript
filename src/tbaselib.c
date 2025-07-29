@@ -998,7 +998,6 @@ static const tokuL_Entry basic_funcs[] = {
     {"__POSIX", NULL},
     {"__WINDOWS", NULL},
     /* table for meta indices */
-    {"__MT", NULL},
     {NULL, NULL},
 };
 

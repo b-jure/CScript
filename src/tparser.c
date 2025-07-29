@@ -105,6 +105,8 @@ typedef struct LoopState {
 /* 
 ** Snapshot of function state.
 ** (Used primarily for optimizations, e.g., trimming dead code.)
+** Does not snapshot or load the 'nk' as it might interfere with
+** the 'kcache'.
 */
 typedef struct FuncContext {
     int ps_actlocals;
@@ -114,7 +116,6 @@ typedef struct FuncContext {
     int sp;
     int nactlocals;
     int np;
-    int nk;
     int pc;
     int nabslineinfo;
     int nlocals;
@@ -136,7 +137,6 @@ static void storecontext(FunctionState *fs, FuncContext *ctx) {
     ctx->sp = fs->sp;
     ctx->nactlocals = fs->nactlocals;
     ctx->np = fs->np;
-    ctx->nk = fs->nk;
     ctx->pc = currPC;
     ctx->nabslineinfo = fs->nabslineinfo;
     ctx->nlocals = fs->nlocals;
@@ -158,7 +158,6 @@ static void loadcontext(FunctionState *fs, FuncContext *ctx) {
     fs->sp = ctx->sp;
     fs->nactlocals = ctx->nactlocals;
     fs->np = ctx->np;
-    fs->nk = ctx->nk;
     currPC = ctx->pc;
     fs->nabslineinfo = ctx->nabslineinfo;
     fs->nlocals = ctx->nlocals;

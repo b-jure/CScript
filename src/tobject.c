@@ -27,7 +27,7 @@ int tokuO_ceillog2 (t_uint x) {
     };
     int l = 0;
     x--;
-    while (x >= 256) { l += 8; x >>= 8; }
+    while (256 <= x) { l += 8; x >>= 8; }
     return l + log_2[x];
 }
 

@@ -167,7 +167,10 @@ assert(os.remove(fname));
 
 local f = assert(io.open(fname, "w"));
 /* test number termination */
-f.write("-12.3-	-0xffff+  .3|5.E-3X  +234e+13E 0xDEADBEEFDEADBEEFx\n0x1.13Ap+3e");
+f.write([=[
+-12.3-	-0xffff+  .3|5.E-3X  +234e+13E 0xDEADBEEFDEADBEEFx
+0x1.13Ap+3e
+0b001__10 0b__]=]);
 /* very long number */
 f.write("1234");
 for (local i = 1; i < 1001; i = i + 1)
@@ -190,12 +193,16 @@ assert(f.read(1) == "E");
 assert(f.read("n") == 0Xdeadbeefdeadbeef);
 assert(f.read(2) == "x\n");
 assert(f.read("n") == 0x1.13aP3);
-assert(f.read(1) == "e");
+assert(f.read(2) == "e\n");
+assert(f.read("n") == 6);
+assert(!f.read("n"));
+assert(!f.read("n"));
+assert(f.read(1) == "_");
 
 {  /* attempt to read too long number */
     assert(!f.read("n"));   # fails
     local s = f.read("L");  # read rest of line
-    assert(string.find(s, "000000000\n"));  # lots of 0's left
+    assert(reg.find(s, "^000*\n$"));  # lots of 0's left
 }
 
 assert(!f.read("n"));

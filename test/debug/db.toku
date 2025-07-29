@@ -680,7 +680,7 @@ assert(typeof(debug.getctable()) == "table");
 assert(typeof(debug.getclist()) == "list");
 
 
-{ /// test metamethod information
+{ /// test tagmethod information
     local a = (class {})();
     local fn f(self) {
         local info = debug.getinfo(1);
@@ -688,29 +688,16 @@ assert(typeof(debug.getclist()) == "list");
         rawset(self, "op", info.name);
         return info.name;
     }
-    local ml = [];
-    foreach i in range(0, __MT.n) {
-        if (i == __MT.init or i == __MT.metatable)
-            continue;
-        ml[i] = f;
-    }
-    setmetatable(getclass(a), ml);
-    assert(ml[__MT.getidx] == f); assert(ml[__MT.setidx] == f);
-    assert(ml[__MT.gc] == f); assert(ml[__MT.close] == f);
-    assert(ml[__MT.call] == f); assert(ml[__MT.init] == nil);
-    assert(ml[__MT.concat] == f); assert(ml[__MT.add] == f);
-    assert(ml[__MT.sub] == f); assert(ml[__MT.mul] == f);
-    assert(ml[__MT.div] == f); assert(ml[__MT.idiv] == f);
-    assert(ml[__MT.mod] == f); assert(ml[__MT.pow] == f);
-    assert(ml[__MT.shl] == f); assert(ml[__MT.shr] == f);
-    assert(ml[__MT.band] == f); assert(ml[__MT.bor] == f);
-    assert(ml[__MT.bxor] == f); assert(ml[__MT.unm] == f);
-    assert(ml[__MT.bnot] == f); assert(ml[__MT.eq] == f);
-    assert(ml[__MT.lt] == f); assert(ml[__MT.le] == f);
-    assert(ml[__MT.metatable] == nil);
-    assert(__MT.n == ml.len);
+    setmetatable(a, {
+        __getidx = f, __setidx = f, __gc = f, __close = f, __call = f,
+        __init = nil, __concat = f, __add = f, __sub = f, __mul = f,
+        __div = f, __idiv = f, __mod = f, __pow = f, __shl = f, __shr = f,
+        __band = f, __bor = f, __bxor = f, __unm = f, __bnot = f, __eq = f,
+        __lt = f, __le = f
+    });
 
     local b = getclass(a)();
+
     assert(a[3] == "getidx" and a**b == "pow" and a..a == "concat");
     assert(a/a == "div" and a//b == "idiv" and a%a == "mod");
     assert(a+a == "add" and a-a == "sub" and a*a == "mul" and
@@ -724,7 +711,7 @@ assert(typeof(debug.getclist()) == "list");
     assert(~a == "bnot");
 
     /// test __init
-    assert(getmetatable(a))[__MT.init] = fn(self) {
+    assert(getmetatable(a)).__init = |self| {
         local info = debug.getinfo(1);
         assert(info.namewhat == "" and !info.name);
         return self;
@@ -732,7 +719,7 @@ assert(typeof(debug.getclist()) == "list");
     assert(typeof(getclass(a)()) == "instance");
 
     /// test __metatable
-    assert(getmetatable(a))[__MT.metatable] = fn(self) { return nil; };
+    assert(getmetatable(a)).__metatable = |_| { return nil; };
     assert(typeof(getmetatable(a)) == "function");
     local st,err = pcall(setmetatable, a, nil);
     assert(!st and string.find(err, "protected metatable"));
@@ -747,12 +734,12 @@ assert(typeof(debug.getclist()) == "list");
 { /// testing debug info for finalizers
     local name = nil;
     /// create a piece of garbage with a finalizer
-    local l = []; l[__MT.gc] = fn() {
+    local mt = {}; mt.__gc = || {
         local t = debug.getinfo(1);  /// get function information
         assert(t.namewhat == "metamethod");
         name = t.name;
     };
-    setmetatable((class{})(), l); l = nil;
+    setmetatable((class{})(), mt); mt = nil;
     /// repeat until previous finalizer runs (setting 'name')
     loop { local a = {}; if (name) break; }
     assert(name == "__gc");

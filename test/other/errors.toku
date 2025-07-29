@@ -153,7 +153,7 @@ checkmessage([=[
 __G.D = nil;
 
 { /// named objects (field '__name')
-    checkmessage("math.sin(io.input());", "(number expected, instead got FILE*)");
+    checkmessage("math.sin(io.input());", "(number expected, instead got FILE*)", true);
     __G.XX = (class{__name = "My Type";})();
     assert(reg.find(tostr(XX), "^My Type"));
     checkmessage("io.input(XX);", "(FILE* expected, instead got My Type)");
@@ -217,7 +217,7 @@ checkmessage([=[x = print .. "a";]=], "concatenate");
 checkmessage([=[x = "a" .. false;]=], "concatenate");
 checkmessage([=[x = {} .. tostr(2);]=], "concatenate");
 
-checkmessage("getmetatable(io.stdin)[__MT.gc]();", "no value");
+checkmessage("getmetatable(io.stdin).__gc();", "no value");
 
 checkmessage([=[
 local Var;

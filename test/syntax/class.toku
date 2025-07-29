@@ -6,6 +6,10 @@ a.b = class {
     }
 };
 assert(typeof(a.b) == "class");
+local t = getmethods(a.b);
+foreach k,v in pairs(t)
+    print(k,v);
+print("+++++");
 a = class inherits a.b {
     fn myname() {
         return "Sub" .. super.name();
@@ -13,6 +17,9 @@ a = class inherits a.b {
 };
 assert(typeof(a) == "class");
 a = a();
+t = getmethods(a);
+foreach k,v in pairs(t)
+    print(k,v);
 assert(typeof(a) == "instance");
 assert(a.name() == "Class");
 assert(a.myname() == "SubClass");

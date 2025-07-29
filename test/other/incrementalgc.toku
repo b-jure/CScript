@@ -77,9 +77,9 @@ local fn GC1() {
     local u;
     local b;  /// (it is above 'u' in the stack)
     local finish = false;
-    local ml = [];
-    ml[__MT.gc] = fn () { finish = true; };
-    u = setmetatable(class {}, ml);
+    local mt = [];
+    mt = { __gc = || { finish = true; } };
+    u = setmetatable(class {}, mt);
     b = [34];
     loop {
         u = [];
@@ -88,7 +88,7 @@ local fn GC1() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false; local i = 0;
-    u = setmetatable(class {}, ml);
+    u = setmetatable(class {}, mt);
     loop {
         i = i + 1;
         u = tostr(i) .. tostr(i);
@@ -97,7 +97,7 @@ local fn GC1() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false;
-    u = setmetatable(class {}, ml);
+    u = setmetatable(class {}, mt);
     loop {
         local i;
         u = fn () { return i; };
@@ -109,9 +109,8 @@ local fn GC1() {
 local fn GC2() {
     local u;
     local finish = false;
-    local ml = [];
-    ml[__MT.gc] = fn () { finish = true; };
-    u = [setmetatable(class {}, ml)];
+    local mt = { __gc = || { finish = true; } };
+    u = [setmetatable(class {}, mt)];
     local b = [34];
     loop {
         u = [[]];
@@ -120,7 +119,7 @@ local fn GC2() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false; local i = 0;
-    u = [setmetatable(class {}, ml)];
+    u = [setmetatable(class {}, mt)];
     loop {
         i = i + 1;
         u = [tostr(i) .. tostr(i)];
@@ -129,7 +128,7 @@ local fn GC2() {
     assert(b[0] == 34); /// 'u' was collected, but 'b' was not
 
     finish = false;
-    u = [setmetatable(class {}, ml)];
+    u = [setmetatable(class {}, mt)];
     loop {
         local i;
         u = [fn () { return i; }];
@@ -290,16 +289,17 @@ if !__port {
 { /// create an object to be collected when state is closed
     local setmetatable,assert,typeof,print,getmetatable =
           setmetatable,assert,typeof,print,getmetatable;
-    local ml = [];
-    ml[__MT.gc] = fn (o) {
-        assert(getmetatable(self) == ml);
+    local mt = {};
+    mt.__gc = |o| {
+        /// FIX: possible bug, 'o' was previously 'self' and it worked... ?
+        assert(getmetatable(o) == mt);
         /// create new objects during GC
         local a = "xuxu"..tostr(10+3).."test", {};
         ___Glob = o; /// ressurrect object
-        setmetatable(class {}, ml)(); /// new one with the same metatable
+        setmetatable(class {}, mt)(); /// new one with the same metatable
         print(">>> closing state " .. "<<<\n");
     };
-    local u = setmetatable(class {}, ml);
+    local u = setmetatable(class {}, mt);
     u();
     ___Glob = [u]; /// avoid object being collected before program end
 }
@@ -308,9 +308,12 @@ assert(gc("isrunning"));
 
 { /// check that the collector is not reentrant in incremental mode
     local res = true;
-    local ml = [];
-    ml[__MT.gc] = fn(o) { print("Collecting object", o); res = gc(); };
-    setmetatable(class {}, ml)();
+    setmetatable(class {}, {
+        __gc = |o| {
+            print("Collecting object", o);
+            res = gc();
+        }
+    })();
     gc();
     assert(!res);
 }

@@ -741,19 +741,17 @@ TOKU_API int toku_get_raw(toku_State *T, int index) {
 }
 
 
-#define fastget(t,k,slot,f)   (!tagisempty(f(t, k, slot)))
-
-
-t_sinline int getfieldstr(toku_State *T, Table *t, const char *k) {
-    OString *str = tokuS_new(T, k);
+t_sinline int getfieldstr(toku_State *T, Table *t, const char *key) {
+    OString *k = tokuS_new(T, key);
     TValue slot;
-    if (fastget(t, str, &slot, tokuH_getstr)) {
+    t_ubyte tag = tokuH_getstr(t, k, &slot);
+    if (!tagisempty(tag)) {
         setobj2s(T, T->sp.p, &slot);
     } else
         setnilval(s2v(T->sp.p));
     api_inctop(T);
     toku_unlock(T);
-    return ttype(s2v(T->sp.p - 1));
+    return novariant(tag);
 }
 
 
@@ -798,7 +796,7 @@ t_sinline Table *gettable(toku_State *T, int index) {
         case TOKU_VINSTANCE: return insval(o)->fields;
         case TOKU_VTABLE: return tval(o); 
         default:  {
-            api_check(T, 0, "expect instance or table");
+            api_check(T, 0, "instance/table expected");
             return NULL;
         }
     }
@@ -812,7 +810,7 @@ t_sinline int getfield(toku_State *T, t_ubyte tag, TValue *value) {
         setobj2s(T, T->sp.p, value);
     api_inctop(T);
     toku_unlock(T);
-    return ttype(s2v(T->sp.p - 1));
+    return novariant(tag);
 }
 
 
@@ -1092,7 +1090,7 @@ TOKU_API void toku_set(toku_State *T, int obj) {
 }
 
 
-TOKU_API void  toku_set_raw(toku_State *T, int obj) {
+TOKU_API void toku_set_raw(toku_State *T, int obj) {
     TValue *o;
     toku_lock(T);
     api_checknelems(T, 2); /* key and value */
@@ -1103,20 +1101,21 @@ TOKU_API void  toku_set_raw(toku_State *T, int obj) {
 }
 
 
-t_sinline void rawsetstr(toku_State *T, Table *t, const char *str,
+t_sinline void rawsetstr(toku_State *T, Table *t, const char *key,
                                         TValue *value) {
-    OString *s = tokuS_new(T, str);
-    TValue slot;
-    if (fastget(t, s, &slot, tokuH_getstr)) {
-        setobj(T, &slot, value);
+    int hres;
+    OString *k = tokuS_new(T, key);
+    tokuV_fastset(t, k, value, hres, tokuH_psetstr);
+    if (hres == HOK) {
+        tokuV_finishfastset(T, t, value);
+        T->sp.p--; /* remove value */
+    } else {
+        setstrval2s(T, T->sp.p, k); /* anchor it */
+        api_inctop(T);
+        tokuH_finishset(T, t, s2v(T->sp.p - 1), value, hres);
         tokuG_barrierback(T, obj2gco(t), value);
         invalidateTMcache(t);
-        T->sp.p--; /* pop value */
-    } else {
-        setstrval2s(T, T->sp.p, s);
-        api_inctop(T);
-        tokuV_settableTM(T, t, s, value, tokuH_setstr);
-        T->sp.p -= 2; /* pop string key and value */
+        T->sp.p -= 2; /* remove key and value */
     }
     toku_unlock(T);
 }
@@ -1153,21 +1152,25 @@ TOKU_API void toku_set_cindex(toku_State *T, int i) {
 }
 
 
-t_sinline void rawset(toku_State *T, int obj, TValue *key, int n) {
-    Table *t;
-    TValue *value;
-    toku_lock(T);
-    api_checknelems(T, n);
-    t = gettable(T, obj);
-    value = s2v(T->sp.p - 1);
-    tokuV_settableTM(T, t, key, value, tokuH_set);
-    T->sp.p -= n;
-    toku_unlock(T);
-}
-
-
 TOKU_API void toku_set_field(toku_State *T, int obj) {
-    rawset(T, obj, s2v(T->sp.p - 2), 2);
+    int hres;
+    Table *t;
+    TValue *value, *key;
+    toku_lock(T);
+    api_checknelems(T, 2); /* key and value */
+    t = gettable(T, obj);
+    key = s2v(T->sp.p - 2);
+    value = s2v(T->sp.p - 1);
+    tokuV_fastset(t, key, value, hres, tokuH_pset);
+    if (hres == HOK)
+        tokuV_finishfastset(T, t, value);
+    else {
+        tokuH_finishset(T, t, key, value, hres);
+        tokuG_barrierback(T, obj2gco(t), value);
+        invalidateTMcache(t);
+    }
+    T->sp.p -= 2; /* remove key and value */
+    toku_unlock(T);
 }
 
 
@@ -1181,13 +1184,23 @@ TOKU_API void toku_set_field_str(toku_State *T, int index, const char *key) {
 
 
 TOKU_API void toku_set_field_int(toku_State *T, int index, toku_Integer key) {
+    int hres;
     Table *t;
     TValue *value;
     toku_lock(T);
     api_checknelems(T, 1); /* value */
     t = gettable(T, index);
     value = s2v(T->sp.p - 1);
-    tokuV_settable(T, t, key, value, tokuH_setint);
+    tokuV_fastset(t, key, value, hres, tokuH_psetint);
+    if (hres == HOK)
+        tokuV_finishfastset(T, t, value);
+    else {
+        TValue k;
+        setival(&k, key);
+        tokuH_finishset(T, t, &k, value, hres);
+        tokuG_barrierback(T, obj2gco(t), value);
+        invalidateTMcache(t);
+    }
     T->sp.p--; /* remove value */
     toku_unlock(T);
 }
@@ -1654,7 +1667,7 @@ TOKU_API toku_Integer toku_len(toku_State *T, int index) {
         case TOKU_VTABLE: return tokuH_len(tval(o));
         case TOKU_VCLASS: {
             Table *t = classval(o)->methods;
-            return (t ? tokuH_len(classval(o)->methods) : 0);
+            return (t ? tokuH_len(t) : 0);
         }
         case TOKU_VINSTANCE: return tokuH_len(insval(o)->fields);
         default: return 0;

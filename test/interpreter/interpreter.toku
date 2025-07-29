@@ -264,13 +264,8 @@ prepfile([=[
 warn("@allow");
 /// create two objects to be finalized when closing state
 /// the errors in the finalizers must generate warnings
-local ml = [];
-ml[__MT.gc] = fn() { error("XYZ"); };
-u1 = setmetatable((class{})(), ml);
-ml = [];
-ml[__MT.gc] = fn() { error("ZYX"); };
-u2 = setmetatable((class{})(), ml);
-ml = nil;
+u1 = setmetatable((class{})(), {__gc = ||{ error("XYZ"); }});
+u2 = setmetatable((class{})(), {__gc = ||{ error("ZYX"); }});
 ]=]);
 RUN("tokudae -W %s 2> %s", prog, out);
 checkprogout("ZYX)\nXYZ)\n");
@@ -283,25 +278,17 @@ prepfile([=[
 
     print("creating 1");
     /// this finalizer should be called last
-    local ml = [];
-    ml[__MT.gc] = fn() { print(1); };
-    setmetatable((class{})(), ml);
-    ml = []; /// new list
+    setmetatable((class{})(), { __gc = || { print(1); } });
     print("creating 2");
-    ml[__MT.gc] = fn() {
+    setmetatable((class{})(), { __gc = || {
         print("2");
         print("creating 3");
-        local ml = [];
         /// this finalizer should not be called, as object will be
         /// created after 'toku_close' has been called
-        ml[__MT.gc] = fn() { print(3); };
-        setmetatable((class{})(), ml);
-        ml = nil;
+        setmetatable((class{})(), { __gc = || { print(3); } });
         print(gc() or false); /// cannot call collector here
         os.exit(0, true);
-    };
-    setmetatable((class{})(), ml);
-    ml = nil;
+    }});
 ]=]);
 RUN("tokudae -W %s > %s", prog, out);
 checkout([=[
@@ -362,13 +349,12 @@ assert(reg.find(t, prompt .. ".*" .. prompt .. ".*" .. prompt));
 /// non-string prompt
 prompt = [=[
     local C = \"X\";
-    local ml = [];
-    ml[__MT.tostring] = fn() {
-        C = C .. \"X\";
-        return C;
-    };
-    __PROMPT=setmetatable((class{})(), ml);
-    ml = nil;
+    __PROMPT=setmetatable((class{})(), {
+        __tostring = || {
+            C = C .. \"X\";
+            return C;
+        }
+    });
 ]=];
 prepfile([=[ ///
 a = 2;
@@ -383,16 +369,15 @@ assert(reg.find(t, "^.-\nXX[^\nX]*\n?XXX[^\nX]*\n?XXXX\n?$"));
 prepfile([=[
 debug = import("debug");
 m = class {
-    __init = fn() { self.x = 0; return self; };
+    __init = || { self.x = 0; return self; };
 };
 m = m();
-local ml = getmetatable(m);
-ml[__MT.tostring] = fn(x) { return tostr(debug.getinfo(4).currline + x.x); };
-setmetatable(m, ml);
-ml = nil;
+local mt = getmetatable(m);
+mt.__tostring = |x| { return tostr(debug.getinfo(4).currline + x.x); };
+setmetatable(m, mt);
 error(m);
 ]=]);
-NoRun(progname .. ": 10\n", [=[tokudae %s]=], prog);
+NoRun(progname .. ": 9\n", [=[tokudae %s]=], prog);
 
 prepfile("error({});");
 NoRun("error object is a table value", [=[tokudae %s]=], prog);
@@ -448,16 +433,13 @@ NoRun("", "tokudae %s", prog);  /// no message
 
 /// to-be-closed variables in main chunk
 prepfile([=[
-    local ml = [];
-    ml[__MT.close] = fn(_, err) {
-        assert(err == nil);
-        print("Ok");
-    };
-    local x <close> = setmetatable((class{})(), ml);
-    ml = []; /// new list
-    ml[__MT.close] = fn(_, _) { print(120); };
-    local e1 <close> = setmetatable((class{})(), ml);
-    ml = nil;
+    local x <close> = setmetatable((class{})(), {
+        __close = |_, err| { assert(err == nil); print("Ok"); }
+    });
+    
+    local e1 <close> = setmetatable((class{})(), {
+        __close = |_, _| { print(120); }
+    });
     os.exit(true, true);
 ]=]);
 RUN("tokudae %s > %s", prog, out);

@@ -19,10 +19,10 @@
 #include "tlexer.h"
 
 
-static const char *strneg = "negative";
-static const char *stroit = "of invalid type";
-static const char *stridx = "index";
-static const char *strlng = "length";
+static const char *snegative = "negative";
+static const char *soitype = "of invalid type";
+static const char *sindex = "index";
+static const char *slength = "length";
 
 
 List *tokuA_new(toku_State *T) {
@@ -92,9 +92,9 @@ t_sinline void setfield(toku_State *T, List *l, int lf, const TValue *v) {
                     tokuA_ensure(T, l, i);
                     l->len = i;
                 } else /* otherwise negative length */
-                    tokuD_listerror(T, v, strlng, strneg);
+                    tokuD_listerror(T, v, slength, snegative);
             } else
-                tokuD_listerror(T, v, strlng, stroit);
+                tokuD_listerror(T, v, slength, soitype);
             break;
         }
         case LFLAST: { /* set the last element */
@@ -141,7 +141,7 @@ t_sinline void getfield(toku_State *T, List *l, int lf, TValue *out) {
 
 
 t_sinline void trylistfield(toku_State *T, List *l, const TValue *k,
-                                         const TValue *v, TValue *out) {
+                                           const TValue *v, TValue *out) {
     OString *idx = strval(k);
     if (t_likely(islistfield(idx))) { /* valid list field? */
         int lf = idx->extra - FIRSTLF;
@@ -154,7 +154,7 @@ t_sinline void trylistfield(toku_State *T, List *l, const TValue *k,
             getfield(T, l, lf, out);
         }
     } else /* otherwise invalid list field */
-        tokuD_listerror(T, k, stridx, "unknown field");
+        tokuD_listfielderror(T, k);
 }
 
 
@@ -173,13 +173,13 @@ void tokuA_setstr(toku_State *T, List *l, const TValue *k, const TValue *v) {
 void tokuA_setint(toku_State *T, List *l, const FatValue *k, const TValue *v) {
     if (t_likely(0 <= k->i)) { /* index is 0 or positive? */
         if (t_unlikely(TOKU_MAXLISTINDEX < k->i)) /* 'index' too large? */
-            tokuD_listerror(T, k->v, stridx, "too large");
+            tokuD_listerror(T, k->v, sindex, "too large");
         else { /* ok */
             tokuA_ensureindex(T, l, k->i);
             setobj(T, &l->arr[k->i], v);
         }
     } else /* XXX: remove this branch (wrap as unsigned) */
-        tokuD_listerror(T, k->v, stridx, strneg);
+        tokuD_listerror(T, k->v, sindex, snegative);
 }
 
 
@@ -194,7 +194,7 @@ void tokuA_set(toku_State *T, List *l, const TValue *k, const TValue *v) {
     } else if (ttisstring(k)) /* index is string? */
         tokuA_setstr(T, l, k, v);
     else /* otherwise invalid index value */
-        tokuD_listerror(T, k, stridx, stroit);
+        tokuD_listerror(T, k, sindex, soitype);
 }
 
 
@@ -210,7 +210,7 @@ void tokuA_getint(toku_State *T, List *l, const FatValue *k, TValue *out) {
         } else /* otherwise index out of bounds */
             setnilval(out);
     } else /* XXX: remove this branch */
-        tokuD_listerror(T, k->v, stridx, strneg);
+        tokuD_listerror(T, k->v, sindex, snegative);
 }
 
 
@@ -222,7 +222,7 @@ void tokuA_get(toku_State *T, List *l, const TValue *k, TValue *out) {
     } else if (ttisstring(k)) /* index is a string? */
         tokuA_getstr(T, l, k, out);
     else /* otherwise invalid index value */
-        tokuD_listerror(T, k, stridx, stroit);
+        tokuD_listerror(T, k, sindex, soitype);
 }
 
 

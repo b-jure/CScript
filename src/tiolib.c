@@ -496,8 +496,10 @@ static int read_number(toku_State *T, FILE *f) {
             dt = DTDEC;
             count = 1; /* count initial '0' as valid digit */
         }
-        if (count == 0 && nb.c != '_') /* separator is first? */
+        if (count == 0 && nb.c == '_') { /* separator is first? */
             nextchar(&nb); /* force error */
+            goto end; /* stop reading */
+        }
     }
     count += read_digits(&nb, dt, 0); /* integral part */
     if (test2(&nb, decp)) /* decimal point? */
@@ -508,6 +510,7 @@ static int read_number(toku_State *T, FILE *f) {
             read_digits(&nb, DTDEC, 0); /* exponent digits */
         }
     }
+end:
     ungetc(nb.c, nb.f); /* unread look-ahead char */
     t_unlockfile(nb.f);
     nb.buff[nb.n] = '\0'; /* null terminate */
@@ -779,8 +782,9 @@ static const tokuL_Entry f_methods[] = {
 static int f_getidx(toku_State *T) {
     tocstream(T);
     tokuL_get_metafield(T, 0, "__methods");
-    if (toku_get_field(T, -1) == TOKU_T_NIL)
-        tokuL_error_arg(T, 1, "unknown file method");
+    toku_push(T, 1); /* get index value */
+    if (toku_get_field(T, -2) == TOKU_T_NIL)
+        tokuL_error(T, "invalid file index (unknown method)");
     toku_push_method(T, 0);
     return 1;
 }
@@ -801,12 +805,11 @@ static const tokuL_Entry f_meta[] = {
     {"__gc", f_gc},
     {"__close", f_gc},
     {"__tostring", f_tostring},
-    {"__name", NULL},
     {NULL, NULL},
 };
 
 
-static void create_filehandle_metatable(toku_State *T) {
+static void create_metatable(toku_State *T) {
     tokuL_new_metatable(T, TOKU_FILEHANDLE); /* metatable for file handles */
     tokuL_set_funcs(T, f_meta, 0); /* add metamethods to metatable */
     tokuL_push_libtable(T, f_methods); /* create methods table */
@@ -843,7 +846,7 @@ static void create_stdfile(toku_State *T, FILE *f, const char *k,
 
 TOKUMOD_API int tokuopen_io(toku_State *T) {
     tokuL_push_lib(T, iolib); /* 'io' table */
-    create_filehandle_metatable(T);
+    create_metatable(T);
     /* create (and set) default files */
     create_stdfile(T, stdin, IO_INPUT, "stdin");
     create_stdfile(T, stdout, IO_OUTPUT, "stdout");
