@@ -50,10 +50,10 @@ static int db_getclist(toku_State *T) {
 
 
 static int db_getuservalue(toku_State *T) {
-    int n = (int)tokuL_opt_integer(T, 1, 0);
+    toku_Integer n = tokuL_opt_integer(T, 1, 0);
     if (toku_type(T, 0) != TOKU_T_USERDATA)
         tokuL_push_fail(T);
-    else if (toku_get_uservalue(T, 0, n) != TOKU_T_NONE) {
+    else if (toku_get_uservalue(T, 0, cast_ushort(n)) != TOKU_T_NONE) {
         toku_push_bool(T, 1);
         return 2;
     }
@@ -62,11 +62,11 @@ static int db_getuservalue(toku_State *T) {
 
 
 static int db_setuservalue(toku_State *T) {
-    int n = (int)tokuL_opt_integer(T, 2, 0);
+    toku_Integer n = tokuL_opt_integer(T, 2, 0);
     tokuL_check_type(T, 0, TOKU_T_USERDATA);
     tokuL_check_any(T, 1);
     toku_setntop(T, 2);
-    if (!toku_set_uservalue(T, 0, n))
+    if (!toku_set_uservalue(T, 0, cast_ushort(n)))
         tokuL_push_fail(T);
     return 1;
 }

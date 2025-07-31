@@ -337,9 +337,12 @@ static int m_type(toku_State *T) {
 /* convert a 'toku_Unsigned' to a 'Rand64' */
 #define U2R(x)	    cast(Rand64, (x))
 
+/* convert unsigned constant to a 'Rand64' */
+#define UK2R(k)     U2R(t_intatt(k))
+
 
 #if defined(DBL_MIN)
-#define RandF   double
+#define RandF       double
 #endif
 
 
@@ -355,9 +358,9 @@ static int m_type(toku_State *T) {
 
 #define NN          312
 #define MM          156
-#define MATRIX_A    0xB5026F5AA96619E9ULL
-#define UM          0xFFFFFFFF80000000ULL /* most significant 33 bits */
-#define LM          0x7FFFFFFFULL /* least significant 31 bits */
+#define MATRIX_A    UK2R(0xB5026F5AA96619E9U)
+#define UM          UK2R(0xFFFFFFFF80000000U) /* most significant 33 bits */
+#define LM          UK2R(0x7FFFFFFFU) /* least significant 31 bits */
 
 
 /* Mersenne Twister algo-state */
@@ -372,8 +375,9 @@ static void init_ctx_seed(MT19937 *ctx, Rand64 seed) {
     ctx->mt[0] = seed;
     for (ctx->mti=1; ctx->mti<NN; ctx->mti++) 
         ctx->mt[ctx->mti] =
-            (6364136223846793005ULL *
-            (ctx->mt[ctx->mti-1] ^ (ctx->mt[ctx->mti-1] >> 62)) + ctx->mti);
+            UK2R(6364136223846793005U) *
+            (ctx->mt[ctx->mti-1] ^ (ctx->mt[ctx->mti-1] >> 62))
+            + U2R(cast_uint(ctx->mti));
 }
 
 
@@ -384,25 +388,21 @@ static void init_ctx_seed(MT19937 *ctx, Rand64 seed) {
 static void init_ctx_array(MT19937 *ctx, Rand64 key[], Rand64 klen) {
     Rand64 i = 1, j = 0;
     Rand64 k = (NN>klen ? NN : klen);
-    init_ctx_seed(ctx, 19650218ULL);
+    init_ctx_seed(ctx, UK2R(19650218U));
     for (; k; k--) {
-        ctx->mt[i] =
-            (ctx->mt[i] ^
-            ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62)) * 3935559000370003845ULL)) +
-            key[j] + j; /* non linear */
+        ctx->mt[i] = (ctx->mt[i] ^ ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62))
+                     * UK2R(3935559000370003845U))) + key[j] + j; /* non linear */
         i++; j++;
         if (i >= NN) { ctx->mt[0] = ctx->mt[NN-1]; i = 1; }
         if (j >= klen) j = 0;
     }
     for (k=NN-1; k; k--) {
-        ctx->mt[i] =
-            (ctx->mt[i] ^
-            ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62)) * 2862933555777941757ULL)) -
-            i; /* non linear */
+        ctx->mt[i] = (ctx->mt[i] ^ ((ctx->mt[i-1] ^ (ctx->mt[i-1] >> 62))
+                     * UK2R(2862933555777941757U))) - i; /* non linear */
         i++;
         if (i >= NN) { ctx->mt[0] = ctx->mt[NN-1]; i = 1; }
     }
-    ctx->mt[0] = 1ULL << 63; /* MSB is 1; assuring non-zero initial array */ 
+    ctx->mt[0] = UK2R(1U) << 63; /* MSB is 1; assuring non-zero initial array */ 
 }
 
 
@@ -422,20 +422,20 @@ static Rand64 genrand_integer(toku_State *T, MT19937 *ctx) {
             init_ctx_default(T, ctx); /* use default initialization */
         for (i = 0; i < NN-MM; i++) {
             x = (ctx->mt[i]&UM) | (ctx->mt[i+1]&LM);
-            ctx->mt[i] = ctx->mt[i+MM] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
+            ctx->mt[i] = ctx->mt[i+MM] ^ (x>>1) ^ mag01[cast_int(x&UK2R(1U))];
         }
         for (; i < NN-1; i++) {
             x = (ctx->mt[i]&UM) | (ctx->mt[i+1]&LM);
-            ctx->mt[i] = ctx->mt[i+(MM-NN)] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
+            ctx->mt[i] = ctx->mt[i+(MM-NN)] ^ (x>>1) ^ mag01[cast_int(x&UK2R(1U))];
         }
         x = (ctx->mt[NN-1]&UM) | (ctx->mt[0]&LM);
-        ctx->mt[NN-1] = ctx->mt[MM-1] ^ (x>>1) ^ mag01[cast_int(x&1ULL)];
+        ctx->mt[NN-1] = ctx->mt[MM-1] ^ (x>>1) ^ mag01[cast_int(x&UK2R(1U))];
         ctx->mti = 0;
     }
     x = ctx->mt[ctx->mti++];
-    x ^= (x >> 29) & 0x5555555555555555ULL;
-    x ^= (x << 17) & 0x71D67FFFEDA60000ULL;
-    x ^= (x << 37) & 0xFFF7EEE000000000ULL;
+    x ^= (x >> 29) & UK2R(0x5555555555555555U);
+    x ^= (x << 17) & UK2R(0x71D67FFFEDA60000U);
+    x ^= (x << 37) & UK2R(0xFFF7EEE000000000U);
     x ^= (x >> 43);
     return x;
 }
@@ -443,7 +443,8 @@ static Rand64 genrand_integer(toku_State *T, MT19937 *ctx) {
 
 /* generates a random number on (0,1) real-interval */
 static RandF genrand_float(toku_State *T, MT19937 *ctx) {
-    return ((genrand_integer(T, ctx)>>12)+0.5) * (1.0/4503599627370496.0);
+    return (cast(RandF, (genrand_integer(T, ctx)>>12)) + 0.5)
+            * (1.0 / 4503599627370496.0);
 }
 
 
@@ -484,7 +485,7 @@ static int m_srand(toku_State *T) {
             sa.seed[0] = U2R(t_castS2U(n));
             sa.n = 1;
         } else if (t == TOKU_T_LIST) { /* seed with array values? */
-            toku_Unsigned len = toku_len(T, 0);
+            int len = cast_int(toku_len(T, 0));
             int i = toku_find_index(T, 0, 0, 0, len);
             while (i >= 0) {
                 toku_get_index(T, 0, i);

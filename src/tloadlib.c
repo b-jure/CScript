@@ -18,10 +18,10 @@
 #include "tokudaelib.h"
 
 
-/* prefix for open functions in T libraries */
+/* prefix for open functions in C libraries */
 #define TOKU_POF	    "tokuopen_"
 
-/* separator for open functions in T libraries */
+/* separator for open functions in C libraries */
 #define TOKU_OFSEP    "_"
 
 
@@ -32,7 +32,7 @@
 
 /*
 ** Key for full userdata in the Ctable that keeps handles
-** for all loaded T libraries.
+** for all loaded C libraries.
 */
 static const char *const CLIBS = "__CLIBS";
 
@@ -50,7 +50,7 @@ static const char *const CLIBS = "__CLIBS";
 static int csys_unloadlib(toku_State *T, void *lib);
 
 /*
-** Load T library in file 'path'. If 'global', load with all names
+** Load C library in file 'path'. If 'global', load with all names
 ** in the library global.
 ** Returns the library; in case of error, returns NULL plus an error
 ** string in the stack.
@@ -137,7 +137,7 @@ static void setprogdir(toku_State *T) {
         tokuL_error(T, "unable to get ModuleFileName");
     else {
         *lb = '\0'; /* cut name on the last '\\' to get the path */
-        tokuL_gsub(T, toku_to_string(T, -1), toku_EXEC_DIR, buff);
+        tokuL_gsub(T, toku_to_string(T, -1), TOKU_EXEC_DIR, buff);
         toku_remove(T, -2); /* remove original string */
     }
 }
@@ -219,15 +219,15 @@ static int searcher_preload(toku_State *T) {
 
 
 /*
-** Return package T library.
+** Return package C library.
 */
 static void *check_clib(toku_State *T, const char *path) {
     void *plib;
     toku_get_cfield_str(T, CLIBS); /* get clibs userdata */
     toku_get_uservalue(T, -1, 0); /* get list uservalue */
     toku_get_index(T, -1, 0); /* get list query table */
-    toku_get_field_str(T, -1, path); /* get qtable[path] */
-    plib = toku_to_userdata(T, -1); /* plib = qtable[path] */
+    toku_get_field_str(T, -1, path); /* get t[path] */
+    plib = toku_to_userdata(T, -1); /* plib = t[path] */
     toku_pop(T, 4); /* clibs, list, query table and plib */
     return plib;
 }
@@ -239,11 +239,11 @@ static void *check_clib(toku_State *T, const char *path) {
 static void add_libhandle_to_clibs(toku_State *T, const char *path, void *plib) {
     toku_get_cfield_str(T, CLIBS); /* get clibs userdata */
     toku_get_uservalue(T, -1, 0); /* get list uservalue */
-    toku_get_index(T, -1, 0); /* get list[0] (query table) */
+    toku_get_index(T, -1, 0); /* get l[0] (query table) */
     toku_push_lightuserdata(T, plib); /* push lib handle */
     toku_push(T, -1); /* copy of lib handle */
-    toku_set_index(T, -4, toku_len(T, -4)); /* list[len(list)] = plib */
-    toku_set_field_str(T, -2, path); /* qtable[path] = plib */
+    toku_set_index(T, -4, cast_int(toku_len(T, -4))); /* l[len(l)] = plib */
+    toku_set_field_str(T, -2, path); /* t[path] = plib */
     toku_pop(T, 3); /* clibs, list and query table */
 }
 
@@ -253,18 +253,16 @@ static void add_libhandle_to_clibs(toku_State *T, const char *path, void *plib) 
 #define ERRFUNC		2 /* unable to find function */
 
 /*
-** Look for a T function named 'sym' in a dynamically loaded library
-** 'path'.
-** First, check whether the library is already loaded; if not, try
-** to load it.
+** Look for a C function named 'sym' in a dynamically loaded library 'path'.
+** First, check whether the library is already loaded; if not, try to load it.
 ** Then, if 'sym' is '*', return true (as library has been loaded).
-** Otherwise, look for symbol 'sym' in the library and push a
-** T function with that symbol.
+** Otherwise, look for symbol 'sym' in the library and push a C function
+** with that symbol.
 ** Return 0 and 'true' or a function in the stack; in case of
 ** errors, return an error code and an error message in the stack.
 */
 static int look_for_func(toku_State *T, const char *path, const char *sym) {
-    void *reg = check_clib(T, path); /* check loaded T libraries */
+    void *reg = check_clib(T, path); /* check loaded C libraries */
     if (reg == NULL) { /* must load library? */
         reg = csys_load(T, path, *sym == '*'); /* global symbols if 'sym'=='*' */
         if (reg == NULL) return ERRLIB; /* unable to load library */
@@ -344,7 +342,7 @@ static void push_notfound_error(toku_State *T, const char *path) {
 
 
 static const char *search_path(toku_State *T, const char *name, const char *path,
-                              const char *sep, const char *dirsep) {
+                               const char *sep, const char *dirsep) {
     tokuL_Buffer buff;
     char *pathname; /* path with name inserted */
     char *endpathname; /* its end */
@@ -499,11 +497,11 @@ static const tokuL_Entry load_funcs[] = {
 ** handles in clibs list upvalue in reverse order.
 */
 static int gcmm(toku_State *T) {
-    toku_Integer i;
+    int i;
     toku_get_uservalue(T, -1, 0); /* get list upvalue */
     /* get initial lib handle index (reverse) */
-    i = toku_find_index(T, -1, TOKU_FI_REV, 1, toku_len(T, -1));
-    while (i > 0) { /* for each handle (in reverse order) */
+    i = toku_find_index(T, -1, TOKU_FI_REV, 1, cast_int(toku_len(T, -1)));
+    while (0 < i) { /* for each handle (in reverse order) */
         toku_get_index(T, -1, i); /* get handle */
         if (t_unlikely(csys_unloadlib(T, toku_to_userdata(T, -1)) != 0))
             toku_error(T); /* unloading failed; error string is on top */
@@ -518,7 +516,7 @@ static int gcmm(toku_State *T) {
 ** CLIBS is full userdata with one user value.
 ** The upvalues is a list holding table at index 0 used for
 ** querying loaded libraries, while the rest of indices hold
-** loaded T libraries. When created, it is set under key "__CLIBS"
+** loaded C libraries. When created, it is set under key "__CLIBS"
 ** in the ctable.
 */
 static void create_clibs_userdata(toku_State *T) {
@@ -553,7 +551,7 @@ static int load_func(toku_State *T, const char *filename, const char *modname) {
     modname = tokuL_gsub(T, modname, ".", TOKU_OFSEP);
     mark = strchr(modname, *TOKU_IGMARK);
     if (mark) { /* have '-' (ignore mark)? */
-        openfunc = toku_push_lstring(T, modname, mark - modname);
+        openfunc = toku_push_lstring(T, modname, cast_diff2sz(mark - modname));
         openfunc = toku_push_fstring(T, TOKU_POF"%s", openfunc);
     } else /* no ignore mark (will try "tokuopen_modname") */
         openfunc = toku_push_fstring(T, TOKU_POF"%s", modname);
@@ -575,7 +573,7 @@ static int searcher_Croot(toku_State *T) {
     const char *p = strchr(name, '.');
     int res;
     if (p == NULL) return 0; /* is root */
-    toku_push_lstring(T, name, p - name);
+    toku_push_lstring(T, name, cast_diff2sz(p - name));
     filename = find_file(T, toku_to_string(T, -1), "cpath", TOKU_DIRSEP);
     if (filename == NULL) return 1; /* root not found */
     if ((res = load_func(T, filename, name)) != 0) { /* error? */
@@ -653,13 +651,14 @@ static void setpath(toku_State *T, const char *fieldname, const char *envname,
         tokuL_Buffer b;
         tokuL_buff_init(T, &b);
         if (path < dfltmark) { /* is there a prefix before ';;'? */
-            tokuL_buff_push_lstring(&b, path, dfltmark - path); /* add it */
+            tokuL_buff_push_lstring(&b, path, cast_diff2sz(dfltmark - path));
             tokuL_buff_push(&b, *TOKU_PATH_SEP);
         }
         tokuL_buff_push_string(&b, dflt); /* add default */
         if (dfltmark < path + len - 2) { /* is there a suffix after ';;'? */
             tokuL_buff_push(&b, *TOKU_PATH_SEP);
-            tokuL_buff_push_lstring(&b, dfltmark+2, (path+len-2)-dfltmark);
+            tokuL_buff_push_lstring(&b, dfltmark + 2,
+                                        cast_diff2sz((path+len-2) - dfltmark));
         }
         tokuL_buff_end(&b);
     }

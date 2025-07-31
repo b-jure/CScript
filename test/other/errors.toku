@@ -165,6 +165,9 @@ __G.D = nil;
     __G.XX = nil;
 }
 
+/// metafield redefinition
+checkmessage("local class X { xx=1;xx=2; }", "redefinition of 'xx' metafield");
+
 /// global functions
 checkmessage("(io.write or print)({})", "io.write");
 checkmessage("(gc or print)({})", "gc");

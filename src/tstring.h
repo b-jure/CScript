@@ -63,14 +63,14 @@ TOKUI_FUNC const char *tokuS_pushvfstring(toku_State *T, const char *fmt,
                                           va_list ap);
 TOKUI_FUNC const char *tokuS_pushfstring(toku_State *T, const char *fmt, ...);
 TOKUI_FUNC size_t tokuS_tonum(const char *s, TValue *o, int *of);
-TOKUI_FUNC unsigned tokuS_tostringbuff(const TValue *o, char *buff);
+TOKUI_FUNC t_uint tokuS_tostringbuff(const TValue *o, char *buff);
 TOKUI_FUNC void tokuS_tostring(toku_State *T, TValue *obj);
-TOKUI_FUNC int tokuS_hexvalue(int c);
+TOKUI_FUNC t_ubyte tokuS_hexvalue(int c);
 TOKUI_FUNC void tokuS_trimstr(char *restrict out, size_t lout,
                               const char *s, size_t l);
 TOKUI_FUNC void tokuS_chunkid(char *out, const char *source, size_t srclen);
 
 #define UTF8BUFFSZ  8
-TOKUI_FUNC int tokuS_utf8esc(char *buff, t_ulong n);
+TOKUI_FUNC int tokuS_utf8esc(char *buff, t_uint n);
 
 #endif

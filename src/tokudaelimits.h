@@ -44,8 +44,8 @@ typedef unsigned long   t_ulong;
 
 
 /*
-** Maximum size visible for Tokudae.
-** It must be less than what is representable by 'toku_Integer'.
+** Maximum size for strings and userdata visible for Tokudae;
+** should be representable as a toku_Integer and as a size_t.
 */
 #define TOKU_MAXSIZE \
         (sizeof(size_t) < sizeof(toku_Integer) \
@@ -223,31 +223,54 @@ typedef t_ubyte Instruction;
 #endif
 
 
-
-#if !defined(cast)
-
+/* type casts (a macro highlights casts in the code) */
 #define cast(t, e)          ((t)(e))
 
 #define cast_void(e)        cast(void,(e))
 #define cast_voidp(e)       cast(void *,(e))
 #define cast_num(e)         cast(toku_Number,(e))
+#define cast_Integer(e)     cast(toku_Integer,(e))
 #define cast_ubyte(e)       cast(t_ubyte,(e))
 #define cast_ubytep(e)      cast(t_ubyte *,(e))
 #define cast_byte(e)        cast(t_byte,(e))
+#define cast_ushort(e)      cast(t_ushort,(e))
 #define cast_int(e)         cast(int,(e))
 #define cast_uint(e)        cast(t_uint,(e))
 #define cast_umem(e)        cast(t_umem,(e))
 #define cast_mem(e)         cast(t_mem,(e))
 #define cast_charp(e)       cast(char *,(e))
 #define cast_char(e)        cast(char,(e))
-#define cast_uchar(e)       cast(unsigned char,(e))
 #define cast_sizet(e)       cast(size_t,(e))
 
+
+/* cast a signed toku_Integer to toku_Unsigned */
+#if !defined(t_castS2U)
 #define t_castS2U(i)        ((toku_Unsigned)(i))
-
-#define t_castU2S(i)        ((toku_Integer)(i))
-
 #endif
+
+/*
+** Cast a toku_Unsigned to a signed toku_Integer; this cast is
+** not strict ISO C, but two-complement architectures should
+** work fine.
+*/
+#if !defined(t_castU2S)
+#define t_castU2S(i)        ((toku_Integer)(i))
+#endif
+
+/* 
+** Cast a size_t to toku_Integer: These casts are always valid for
+** sizes of Tokudae objects (see TOKU_MAXSIZE).
+*/
+#define cast_sz2S(sz)       ((toku_Integer)(sz))
+
+/* 
+** Casts a ptrdiff_t to size_t when it is known that the minuend
+** comes from the subtrahend (the base).
+*/
+#define cast_diff2sz(df)    ((size_t)(df))
+
+/* cast a ptrdiff_t to toku_Integer */
+#define cast_diff2S(df)     cast_sz2S(cast_diff2sz(df))
 
 
 /* literal length */

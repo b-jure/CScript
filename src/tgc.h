@@ -28,8 +28,11 @@
 /* mask of white bits */
 #define maskwhitebits   bit2mask(WHITEBIT0, WHITEBIT1)
 
+/* mask of black bit */
+#define maskblackbit    bitmask(BLACKBIT)
+
 /* mask of bits used for coloring */
-#define maskcolorbits   (maskwhitebits | bitmask(BLACKBIT))
+#define maskcolorbits   (maskwhitebits | maskblackbit)
 
 /* mask of all GC bits */
 #define maskgcbits      (maskcolorbits | maskwhitebits)
@@ -166,14 +169,14 @@
 
 
 /* get total bytes allocated (by accounting for 'gcdebt') */
-#define gettotalbytes(gs)   cast_umem((gs)->totalbytes + (gs)->gcdebt)
+#define gettotalbytes(gs)   ((gs)->totalbytes + (gs)->gcdebt)
 
 /* 
 ** Some GC parameters are stored divided by 4 to allow a
 ** maximum value of up to 1023 in a 't_ubyte'.
 */
 #define getgcparam(p)       ((p) * 4)
-#define setgcparam(p,v)     ((p) = (v) / 4)
+#define setgcparam(p,v)     ((p) = cast_ubyte((v) / 4))
 
 
 TOKUI_FUNC GCObject *tokuG_new(toku_State *T, size_t size, int tt_);

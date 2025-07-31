@@ -71,7 +71,7 @@ Instance *tokuTM_newinstance(toku_State *T, OClass *cls) {
 }
 
 
-UserData *tokuTM_newuserdata(toku_State *T, size_t size, int nuv) {
+UserData *tokuTM_newuserdata(toku_State *T, size_t size, t_ushort nuv) {
     GCObject *o;
     UserData *ud;
     if (t_unlikely(size > TOKU_MAXSIZE - udmemoffset(nuv)))
@@ -81,7 +81,7 @@ UserData *tokuTM_newuserdata(toku_State *T, size_t size, int nuv) {
     ud->metatable = NULL;
     ud->nuv = nuv;
     ud->size = size;
-    for (int i = 0; i < nuv; i++)
+    for (t_ushort i = 0; i < nuv; i++)
         setnilval(&ud->uv[i].val);
     return ud;
 }
@@ -135,7 +135,7 @@ const TValue *tokuTM_get(Table *events, TM event, OString *ename) {
     const TValue *tm = tokuH_Hgetshortstr(events, ename);
     toku_assert(event <= TM_NUM);
     if (notm(tm)) { /* no tag method? */
-        events->flags |= cast_byte(1u<<event); /* cache this fact */
+        events->flags |= cast_ubyte(1u<<event); /* cache this fact */
         return NULL;
     } else
         return tm;

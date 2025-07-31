@@ -304,13 +304,13 @@ SPtr tokuF_close(toku_State *T, SPtr level, int status) {
 
 /* free function prototype */
 void tokuF_free(toku_State *T, Proto *p) {
-    tokuM_freearray(T, p->p, p->sizep);
-    tokuM_freearray(T, p->k, p->sizek);
-    tokuM_freearray(T, p->code, p->sizecode);
-    tokuM_freearray(T, p->lineinfo, p->sizelineinfo);
-    tokuM_freearray(T, p->abslineinfo, p->sizeabslineinfo);
-    tokuM_freearray(T, p->instpc, p->sizeinstpc);
-    tokuM_freearray(T, p->locals, p->sizelocals);
-    tokuM_freearray(T, p->upvals, p->sizeupvals);
+    tokuM_freearray(T, p->p, cast_uint(p->sizep));
+    tokuM_freearray(T, p->k, cast_uint(p->sizek));
+    tokuM_freearray(T, p->code, cast_uint(p->sizecode));
+    tokuM_freearray(T, p->lineinfo, cast_uint(p->sizelineinfo));
+    tokuM_freearray(T, p->abslineinfo, cast_uint(p->sizeabslineinfo));
+    tokuM_freearray(T, p->instpc, cast_uint(p->sizeinstpc));
+    tokuM_freearray(T, p->locals, cast_uint(p->sizelocals));
+    tokuM_freearray(T, p->upvals, cast_uint(p->sizeupvals));
     tokuM_free(T, p);
 }

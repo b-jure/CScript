@@ -13,7 +13,7 @@
 
 
 /* bit manipulation */
-#define resetbits(x,m)	        ((x) &= ~(m))
+#define resetbits(x,m)	        ((x) &= cast_ubyte(~(m)))
 #define setbits(x,m)		((x) |= (m))
 #define testbits(x,m)		((x) & (m))
 #define togglebits(x,m,t)	((x) ^ (((x) ^ -((t) != 0)) & (m)))

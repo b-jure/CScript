@@ -219,7 +219,7 @@ TOKUI_DEF const char *tokuC_opname[NUM_OPCODES] = { /* "ORDER OP" */
 */
 static t_uint t_abs(int v) {
     int const mask = v >> (sizeof(int)*CHAR_BIT - 1);
-    return (v+mask)^mask;
+    return cast_uint((v+mask)^mask);
 }
 
 
@@ -258,7 +258,7 @@ static void savelineinfo(FunctionState *fs, Proto *p, int line) {
     }
     tokuM_ensurearray(fs->lx->T, p->lineinfo, p->sizelineinfo, pc, opsize,
                     TOKU_MAXINT, "opcodes", t_byte);
-    p->lineinfo[pc] = linedif;
+    p->lineinfo[pc] = cast_byte(linedif);
     while (--opsize) /* fill func args (if any) */
         p->lineinfo[++pc] = ABSLINEINFO; /* set as invalid entry */
     fs->prevline = line; /* last line saved */
@@ -341,7 +341,7 @@ static void emit3bytes(FunctionState *fs, int code) {
     tokuM_ensurearray(fs->lx->T, p->code, p->sizecode, currPC, 3, TOKU_MAXINT,
                       "instructions", Instruction);
     set3bytes(&p->code[currPC], code);
-    currPC += SIZE_ARG_L;
+    currPC += cast_int(SIZE_ARG_L);
 }
 
 
@@ -359,7 +359,7 @@ int tokuC_emitI(FunctionState *fs, Instruction i) {
     addinstpc(fs);
     emitbyte(fs, i);
     savelineinfo(fs, fs->p, fs->lx->lastline);
-    return currPC - SIZE_INSTR;
+    return currPC - cast_int(SIZE_INSTR);
 }
 
 
@@ -367,7 +367,7 @@ int tokuC_emitI(FunctionState *fs, Instruction i) {
 static int emitS(FunctionState *fs, int arg) {
     toku_assert(0 <= arg && arg <= MAX_ARG_S);
     emitbyte(fs, arg);
-    return currPC - SIZE_ARG_S;
+    return currPC - cast_int(SIZE_ARG_S);
 }
 
 
@@ -375,7 +375,7 @@ static int emitS(FunctionState *fs, int arg) {
 static int emitL(FunctionState *fs, int arg) {
     toku_assert(0 <= arg && arg <= MAX_ARG_L);
     emit3bytes(fs, arg);
-    return currPC - SIZE_ARG_L;
+    return currPC - cast_int(SIZE_ARG_L);
 }
 
 
@@ -756,9 +756,9 @@ static int codeK(FunctionState *fs, int idx) {
 ** from 32nd bit to the 8th bit.
 */
 static int imms(int imm) {
-    int x = check_exp(imm < 0 && MIN_ARG_S <= imm, t_abs(imm));
+    t_uint x = check_exp(imm < 0 && MIN_ARG_S <= imm, t_abs(imm));
     toku_assert(!(x & 0x80)); /* 8th bit must be free */
-    return (x|0x80); /* set 8th bit */
+    return cast_int(x|0x80); /* set 8th bit */
 }
 
 
@@ -769,7 +769,7 @@ static int imms(int imm) {
 static int imml(int imm) {
     t_uint x = check_exp(imm < 0 && MIN_ARG_L <= imm, t_abs(imm));
     toku_assert(!(x & 0x800000)); /* 24th bit must be free */
-    return (x|0x800000); /* set 24th bit */
+    return cast_int(x|0x800000); /* set 24th bit */
 }
 
 
@@ -799,7 +799,7 @@ static int isnumIK(ExpInfo *e, int *imm) {
     else if (!(e->et == EXP_FLT && tokuO_n2i(e->u.n, &i, N2IEQ)))
         return 0;
     if (!hasjumps(e) && isIMML(i)) {
-        *imm = (i < 0) ? imml(i) : i;
+        *imm = (i < 0) ? imml(cast_int(i)) : cast_int(i);
         return 1;
     }
     return 0;
@@ -807,7 +807,7 @@ static int isnumIK(ExpInfo *e, int *imm) {
 
 
 static int setindexint(FunctionState *fs, ExpInfo *v, int left) {
-    t_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    int imm = encodeimm(v->u.info);
     if (isIMM(v->u.info))
         return tokuC_emitILS(fs, OP_SETINDEXINT, left, imm);
     else
@@ -867,7 +867,7 @@ int tokuC_storevar(FunctionState *fs, ExpInfo *var, int left) {
 
 
 static int getindexint(FunctionState *fs, ExpInfo *v) {
-    t_uint imm = check_exp(v->et == EXP_INDEXINT, encodeimm(v->u.info));
+    int imm = encodeimm(v->u.info);
     if (isIMM(v->u.info))
         return tokuC_emitIS(fs, OP_GETINDEXINT, imm);
     else
@@ -904,9 +904,9 @@ static int getjump(FunctionState *fs, int pc) {
 /* fix jmp instruction at 'pc' to jump to 'target' */
 static void fixjump(FunctionState *fs, int pc, int target) {
     Instruction *jmp = &fs->p->code[pc];
-    int offset = t_abs(target - (pc + getopSize(*jmp)));
+    t_uint offset = t_abs(target - (pc + getopSize(*jmp)));
     toku_assert(*jmp == OP_JMP || *jmp == OP_JMPS);
-    if (t_unlikely(offset > MAXJMP)) /* jump is too large? */
+    if (t_unlikely(MAXJMP < offset)) /* jump is too large? */
         tokuP_semerror(fs->lx, "control structure too long");
     SET_ARG_L(jmp, 0, offset); /* fix the jump */
     if (fs->lasttarget < target) /* target 'pc' is bigger than previous? */
@@ -1060,9 +1060,9 @@ int tokuC_emitILS(FunctionState *fs, Instruction op, int a, int b) {
 /* code integer as constant or immediate operand */
 static int codeintIK(FunctionState *fs, toku_Integer i) {
     if (isIMM(i))
-        return tokuC_emitIS(fs, OP_CONSTI, encodeimm(i));
+        return tokuC_emitIS(fs, OP_CONSTI, encodeimm(cast_int(i)));
     else if (isIMML(i))
-        return tokuC_emitIL(fs, OP_CONSTIL, encodeimm(i));
+        return tokuC_emitIL(fs, OP_CONSTIL, encodeimm(cast_int(i)));
     else
         return codeK(fs, intK(fs, i));
 }
@@ -1073,9 +1073,9 @@ static int codefltIK(FunctionState *fs, toku_Number n) {
     toku_Integer i;
     if (tokuO_n2i(n, &i, N2IEQ)) { /* try code as immediate? */
         if (isIMM(i))
-            return tokuC_emitIS(fs, OP_CONSTF, encodeimm(i));
+            return tokuC_emitIS(fs, OP_CONSTF, encodeimm(cast_int(i)));
         else if (isIMML(i))
-            return tokuC_emitIL(fs, OP_CONSTFL, encodeimm(i));
+            return tokuC_emitIL(fs, OP_CONSTFL, encodeimm(cast_int(i)));
     } /* else make a constant */
     return codeK(fs, fltK(fs, n));
 }
@@ -1083,7 +1083,7 @@ static int codefltIK(FunctionState *fs, toku_Number n) {
 
 void tokuC_setlistsize(FunctionState *fs, int pc, int lsz) {
     Instruction *inst = &fs->p->code[pc];
-    lsz = (lsz != 0 ? tokuO_ceillog2(lsz) + 1 : 0);
+    lsz = (lsz != 0 ? tokuO_ceillog2(cast_uint(lsz)) + 1 : 0);
     toku_assert(lsz <= MAX_ARG_S);
     SET_ARG_S(inst, 0, lsz); /* set size (log2 - 1) */
 }
@@ -1107,7 +1107,7 @@ void tokuC_setlist(FunctionState *fs, int base, int nelems, int tostore) {
 
 void tokuC_settablesize(FunctionState *fs, int pc, int hsize) {
     Instruction *inst = &fs->p->code[pc];
-    hsize = (hsize != 0 ? tokuO_ceillog2(hsize) + 1 : 0);
+    hsize = (hsize != 0 ? tokuO_ceillog2(cast_uint(hsize)) + 1 : 0);
     toku_assert(hsize <= MAX_ARG_S);
     SET_ARG_S(inst, 0, hsize);
 }
@@ -1339,7 +1339,7 @@ void tokuC_unary(FunctionState *fs, ExpInfo *e, Unopr uopr, int line) {
     tokuC_dischargevars(fs, e);
     switch (uopr) {
         case OPR_UNM: case OPR_BNOT: {
-            if (constfold(fs, e, &dummy, (uopr - OPR_UNM) + TOKU_OP_UNM))
+            if (constfold(fs, e, &dummy, cast_int(uopr - OPR_UNM) + TOKU_OP_UNM))
                 break; /* folded */
             codeunary(fs, e, unop2opcode(uopr), line);
             break;
@@ -1561,7 +1561,7 @@ static void codebinarithm(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 /* code binary instruction variant where second operand is immediate value */
 static void codebinI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                      int line) {
-    int imm = e2->u.i;
+    int imm = cast_int(e2->u.i);
     OpCode op = binop2opcode(opr, OPR_ADD, OP_ADDI);
     toku_assert(e2->et == EXP_INT);
     tokuC_exp2stack(fs, e1);
@@ -1712,7 +1712,7 @@ static int codeaddnegI(FunctionState *fs, ExpInfo *e1, ExpInfo *e2,
 void tokuC_binary(FunctionState *fs, ExpInfo *e1, ExpInfo *e2, Binopr opr,
                                                              int line) {
     int swapped = 0;
-    if (oprisfoldable(opr) && constfold(fs, e1, e2, opr + TOKU_OP_ADD))
+    if (oprisfoldable(opr) && constfold(fs, e1, e2, cast_int(opr + TOKU_OP_ADD)))
         return; /* done (folded) */
     switch (opr) {
         case OPR_ADD: case OPR_MUL:

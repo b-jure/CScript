@@ -616,10 +616,9 @@ TOKU_API void toku_push_lightuserdata(toku_State *T, void *p) {
 }
 
 
-TOKU_API void *toku_push_userdata(toku_State *T, size_t sz, int nuv) {
+TOKU_API void *toku_push_userdata(toku_State *T, size_t sz, t_ushort nuv) {
     UserData *ud;
     toku_lock(T);
-    api_check(T, 0 <= nuv && nuv < USHRT_MAX, "invalid value");
     ud = tokuTM_newuserdata(T, sz, nuv);
     setudval2s(T, T->sp.p, ud);
     api_inctop(T);
@@ -1560,7 +1559,7 @@ TOKU_API int toku_gc(toku_State *T, int option, ...) {
             res = cast_int(getgcparam(gs->gcparams[param]));
             if ((value) >= 0) {
                 if (param == TOKU_GCP_STEPSIZE)
-                    gs->gcparams[param] = value;
+                    gs->gcparams[param] = cast_ubyte(value);
                 else
                     setgcparam(gs->gcparams[param], value);
             }
@@ -1580,7 +1579,7 @@ TOKU_API int toku_gc(toku_State *T, int option, ...) {
             if (stepmul >= 0)
                 setgcparam(gs->gcparams[TOKU_GCP_STEPMUL], stepmul);
             if (stepsize >= 0)
-                gs->gcparams[TOKU_GCP_STEPSIZE] = stepsize;
+                gs->gcparams[TOKU_GCP_STEPSIZE] = cast_ubyte(stepsize);
             tokuG_incmode(T);
             break;
         }
@@ -1658,18 +1657,18 @@ TOKU_API toku_Number toku_version(toku_State *T) {
 }
 
 
-TOKU_API toku_Integer toku_len(toku_State *T, int index) {
+TOKU_API toku_Unsigned toku_len(toku_State *T, int index) {
     const TValue *o = index2value(T, index);
     switch (ttypetag(o)) {
         case TOKU_VSHRSTR: return strval(o)->shrlen;
         case TOKU_VLNGSTR: return strval(o)->u.lnglen;
-        case TOKU_VLIST: return listval(o)->len;
-        case TOKU_VTABLE: return tokuH_len(tval(o));
+        case TOKU_VLIST: return cast_uint(listval(o)->len);
+        case TOKU_VTABLE: return cast_uint(tokuH_len(tval(o)));
         case TOKU_VCLASS: {
             Table *t = classval(o)->methods;
-            return (t ? tokuH_len(t) : 0);
+            return cast_uint(t ? tokuH_len(t) : 0);
         }
-        case TOKU_VINSTANCE: return tokuH_len(insval(o)->fields);
+        case TOKU_VINSTANCE: return cast_uint(tokuH_len(insval(o)->fields));
         default: return 0;
     }
 }
@@ -1747,7 +1746,7 @@ TOKU_API void toku_shrinklist(toku_State *T, int index) {
 
 
 // TODO: add docs
-TOKU_API unsigned toku_numuservalues(toku_State *T, int index) {
+TOKU_API unsigned short toku_numuservalues(toku_State *T, int index) {
     return getuserdata(T, index)->nuv;
 }
 

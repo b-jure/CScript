@@ -20,7 +20,7 @@
 #include "tokudaelimits.h"
 
 
-#define uchar(c)        ((t_ubyte)(c))
+#define uchar(c)    cast_ubyte(c)
 
 
 /*
@@ -45,7 +45,7 @@ static const char *sfind(const char *s, size_t l, const char *p, size_t lp) {
         if (memcmp(aux, p+1, lp) == 0)
             return aux-1; /* found */
         else {
-            l -= aux-s;
+            l -= cast_diff2sz(aux-s);
             s = aux;
         }
     }

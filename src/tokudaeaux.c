@@ -255,7 +255,7 @@ static const char *filereader(toku_State *T, void *data, size_t *szread) {
     LoadFile *fr = (LoadFile *)data;
     (void)T; /* unused */
     if (fr->n > 0) { /* have pre-read characters ? */
-        *szread = fr->n;
+        *szread = cast_uint(fr->n);
         fr->n = 0;
     } else { /* read from a file */
         if (feof(fr->fp)) return NULL;
@@ -912,7 +912,7 @@ TOKULIB_API void tokuL_buff_init(toku_State *T, tokuL_Buffer *B) {
 static size_t newbuffsize(tokuL_Buffer *B, size_t sz) {
     size_t newsize = (B->sz / 2) * 3; /* 1.5x size */
     if (t_unlikely(SIZE_MAX - sz < B->n)) /* would overflow? */
-        return tokuL_error(B->T, "buffer too large");
+        tokuL_error(B->T, "buffer too large");
     if (newsize < B->n + sz)
         newsize = B->n + sz;
     return newsize;
@@ -1016,7 +1016,7 @@ TOKULIB_API void tokuL_buff_push_gsub(tokuL_Buffer *B, const char *s,
     const char *wild;
     size_t l = strlen(p);
     while ((wild = strstr(s, p)) != NULL) { /* find 'p' (pattern) */
-        tokuL_buff_push_lstring(B, s, wild - s); /* push prefix */
+        tokuL_buff_push_lstring(B, s, cast_diff2sz(wild - s)); /* push prefix */
         tokuL_buff_push_string(B, r); /* push 'r' in place of pattern */
         s = wild + l; /* continue after 'p' */
     }

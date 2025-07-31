@@ -412,7 +412,7 @@ static int nextchar(NumBuff *nb) {
         nb->buff[0] = '\0'; /* invalidate result */
         return 0; /* fail */
     } else {
-        nb->buff[nb->n++] = nb->c; /* save current char */
+        nb->buff[nb->n++] = cast_char(nb->c); /* save current char */
         nb->c = t_getc(nb->f); /* read next char */
         return 1;
     }
@@ -540,12 +540,12 @@ static int read_line(toku_State *T, FILE *f, int chop) {
         int i = 0;
         t_lockfile(f); /* no memory errors can happen inside the lock */
         while (i < TOKUL_BUFFERSIZE && (c = t_getc(f)) != EOF && c != '\n')
-            buff[i++] = c;/* read up to end of line or buffer limit */
+            buff[i++] = cast_char(c);/* read up to end of line or buffer limit */
         t_unlockfile(f);
-        tokuL_buffadd(&b, i);
+        tokuL_buffadd(&b, cast_sizet(i));
     } while (c != EOF && c != '\n'); /* repeat until end of line */
     if (!chop && c == '\n') /* want a newline and have one? */
-        tokuL_buff_push(&b, c); /* add ending newline to result */
+        tokuL_buff_push(&b, cast_char(c)); /* add ending newline to result */
     tokuL_buff_end(&b); /* close buffer */
     /* return ok if read something (either a newline or something else) */
     return (c == '\n' || toku_len(T, -1) > 0);
@@ -592,7 +592,7 @@ static int aux_read(toku_State *T, FILE *f, int first) {
         success = 1;
         for (n = first; nargs-- && success; n++) {
             if (toku_type(T, n) == TOKU_T_NUMBER) {
-                size_t l = tokuL_check_integer(T, n);
+                size_t l = t_castS2U(tokuL_check_integer(T, n));
                 success = (l == 0) ? test_eof(T, f) : read_chars(T, f, l);
             } else {
                 size_t lp;
@@ -630,7 +630,7 @@ static int io_read(toku_State *T) {
 /* iterator function for 'lines' */
 static int iter_readline(toku_State *T) {
     CStream *p = (CStream *)toku_to_userdata(T, toku_upvalueindex(0));
-    int n = toku_to_integer(T, toku_upvalueindex(1));
+    int n = cast_int(toku_to_integer(T, toku_upvalueindex(1)));
     int i;
     if (isclosed(p)) /* file is already closed? */
         return tokuL_error(T, "file is already closed");

@@ -79,10 +79,10 @@ static int getbaseline(const Proto *p, int pc, int *basepc) {
         return p->defline + p->lineinfo[0]; /* first instruction line */
     } else {
         /* get an estimate */
-        int i = cast_uint(Ninstuptopc(p, pc)) / MAXIWTHABS - 1;
+        int i = Ninstuptopc(p, pc) / MAXIWTHABS - 1;
         /* estimate must be a lower bound of the correct base */
         toku_assert(i < 0 || /* linedif was too large before MAXIWTHABS? */
-                 (i < p->sizeabslineinfo && p->abslineinfo[i].pc <= pc));
+                   (i < p->sizeabslineinfo && p->abslineinfo[i].pc <= pc));
         while (i + 1 < p->sizeabslineinfo && pc >= p->abslineinfo[i + 1].pc)
             i++; /* low estimate; adjust it */
         *basepc = p->abslineinfo[i].pc;
@@ -1012,7 +1012,7 @@ void tokuD_hook(toku_State *T, int event, int line, int ftransfer, int ntransfer
         T->allowhook = 1; /* hook finished; once again enable hooks */
         cf->top.p = restorestack(T, cf_top);
         T->sp.p = restorestack(T, sp);
-        cf->status &= ~CFST_HOOKED;
+        cf->status &= cast_ubyte(~CFST_HOOKED);
     }
 }
 
@@ -1069,7 +1069,7 @@ int tokuD_tracecall(toku_State *T, int delta) {
 int tokuD_traceexec(toku_State *T, const Instruction *pc, ptrdiff_t stacksize) {
     CallFrame *cf = T->cf;
     const Proto *p = cf_func(cf)->p;
-    t_ubyte mask = T->hookmask;
+    t_ubyte mask = cast_ubyte(T->hookmask);
     int isize, extra, counthook;
     SPtr base;
     if (!(mask & (TOKU_MASK_LINE | TOKU_MASK_COUNT))) { /* no hooks? */

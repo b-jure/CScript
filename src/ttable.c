@@ -275,19 +275,19 @@ static int insertkey(Table *t, const TValue *key, const TValue *value) {
             /* yes; move colliding node into free position */
             while (othern + nodenext(othern) != mp) /* find previous */
                 othern += nodenext(othern);
-            nodenext(othern) = f - othern; /* rechain to point to 'f' */
+            nodenext(othern) = cast_int(f - othern); /* rechain to point to 'f' */
             *f = *mp; /* copy colliding node into free pos. (mp->next also goes) */
             if (nodenext(mp) != 0) {
-                nodenext(f) += mp - f; /* correct 'next' */
+                nodenext(f) += cast_int(mp - f); /* correct 'next' */
                 nodenext(mp) = 0; /* now 'mp' is free */
             }
             setemptyval(nodeval(mp));
         } else { /* colliding node is in its own main position */
             /* new node will go into free position */
             if (nodenext(mp) != 0)
-                nodenext(f) = mp + nodenext(mp) - f; /* chain new position */
+                nodenext(f) = cast_int(mp + nodenext(mp) - f); /* chain new */
             else toku_assert(nodenext(f) == 0);
-            nodenext(mp) = f - mp;
+            nodenext(mp) = cast_int(f - mp);
             mp = f;
         }
     }
@@ -299,7 +299,7 @@ static int insertkey(Table *t, const TValue *key, const TValue *value) {
 
 
 static void rehash(toku_State *T, Table *t) {
-    int nhash = 0;
+    t_uint nhash = 0;
     if (!isdummy(t)) {
         t_uint size = htsize(t);
         toku_assert(tablesize_invariant(t, size));
@@ -362,8 +362,8 @@ static t_uint getindex(toku_State *T, Table *t, const TValue *k) {
     slot = getgeneric(t, k, 1);
     if (t_unlikely(isabstkey(slot)))
         tokuD_runerror(T, "invalid key passed to 'nextfield'"); /* not found */
-    t_uint i = cast(Node *, slot) - htnode(t, 0); /* key index in the array */
-    return i + 1; /* return next slot index */
+     /* return next slot index */
+    return cast_uint(cast(Node *, slot) - htnode(t, 0) + 1);
 }
 
 
@@ -678,15 +678,15 @@ static void exchangehashes(Table *t1, Table *t2) {
     t_ubyte sz = t1->size;
     Node *node = t1->node;
     Node *lastfree = t1->lastfree;
-    int bitdummy1 = t1->flags & BITDUMMY;
+    t_ubyte bitdummy1 = t1->flags & BITDUMMY;
     t1->size = t2->size;
     t1->node = t2->node;
     t1->lastfree = t2->lastfree;
-    t1->flags = cast_byte((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY));
+    t1->flags = cast_ubyte((t1->flags & NOTBITDUMMY) | (t2->flags & BITDUMMY));
     t2->size = sz;
     t2->node = node;
     t2->lastfree = lastfree;
-    t2->flags = cast_byte((t2->flags & NOTBITDUMMY) | bitdummy1);
+    t2->flags = cast_ubyte((t2->flags & NOTBITDUMMY) | bitdummy1);
 }
 
 
@@ -739,7 +739,7 @@ static void newhasharray(toku_State *cr, Table *t, t_uint size) {
             tokuD_runerror(cr, "table overflow");
         size = twoto(nbits);
         t->node = tokuM_newarray(cr, size, Node);
-        t->size = nbits;
+        t->size = cast_ubyte(nbits);
         t->lastfree = htnode(t, size);
         setnodummy(t);
         toku_assert(tablesize_invariant(t, size));

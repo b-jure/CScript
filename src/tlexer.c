@@ -247,16 +247,16 @@ static void checkcond(Lexer *lx, int cond, const char *msg) {
 }
 
 
-static int expect_hexdig(Lexer *lx){
+static t_ubyte expect_hexdig(Lexer *lx){
     save_and_advance(lx);
     checkcond(lx, tisxdigit(lx->c), "hexadecimal digit expected");
     return tokuS_hexvalue(lx->c);
 }
 
 
-static int read_hexesc(Lexer *lx) {
-    int hd = expect_hexdig(lx);
-    hd = (hd << 4) + expect_hexdig(lx);
+static t_ubyte read_hexesc(Lexer *lx) {
+    t_ubyte hd = expect_hexdig(lx);
+    hd = cast_ubyte(hd << 4) + expect_hexdig(lx);
     tokuR_buffpopn(lx->buff, 2); /* remove saved chars from buffer */
     return hd;
 }
@@ -268,8 +268,8 @@ static int read_hexesc(Lexer *lx) {
 ** UTF-8 4 byte sequence. If the escape sequence is strict UTF-8
 ** sequence, then it indicates that to caller through 'strict'.
 */
-static unsigned long read_utf8esc(Lexer *lx, int *strict) {
-    t_ulong r;
+static t_uint read_utf8esc(Lexer *lx, int *strict) {
+    t_uint r;
     int i = 4; /* chars to be removed: '\', 'u', '{', and first digit */
     toku_assert(strict != NULL);
     *strict = 0;
@@ -312,7 +312,7 @@ static t_ubyte const utf8len_[] = {
 #define utf8len(n)      utf8len_[((n) & 0xFF) >> 4]
 
 
-static int check_utf8(Lexer *lx, t_ulong n) {
+static int check_utf8(Lexer *lx, t_uint n) {
     if (!utf8len(n))
         lexerror(lx, "invalid first byte in UTF-8 sequence", 0);
     else if (n <= 0x7F) /* ascii? */
@@ -333,7 +333,7 @@ static int check_utf8(Lexer *lx, t_ulong n) {
 }
 
 
-static void utf8verfied(char *buff, t_ulong n, int len) {
+static void utf8verfied(char *buff, t_uint n, int len) {
     int i = 1; /* number of bytes in the buffer */
     toku_assert(n <= 0x7FFFFFFFu);
     do {
@@ -347,13 +347,13 @@ static void utf8verfied(char *buff, t_ulong n, int len) {
 static void utf8esc(Lexer *lx) {
     char buff[UTF8BUFFSZ];
     int strict;
-    int n = read_utf8esc(lx, &strict);
+    int n = cast_int(read_utf8esc(lx, &strict));
     if (strict) { /* n should already be valid UTF-8? */
-        int temp = n;
-        n = check_utf8(lx, n);
+        t_uint temp = cast_uint(n);
+        n = check_utf8(lx, temp);
         utf8verfied(buff, temp, n);
     } else /* otherwise create non-strict UTF-8 sequence */
-        n = tokuS_utf8esc(buff, n);
+        n = tokuS_utf8esc(buff, cast_uint(n));
     for (; n > 0; n--) /* add 'buff' to string */
         savec(lx, buff[UTF8BUFFSZ - n]);
 }

@@ -45,18 +45,18 @@
 #define GET_ARG(ip)             ((ip)+SIZE_INSTR)
 
 /* get short/long argument pc */
-#define GETPC_S(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_S))
-#define GETPC_L(ip,o)           (GET_ARG(ip)+((o)*SIZE_ARG_L))
+#define GETPC_S(ip,o)           (GET_ARG(ip)+(cast_uint(o)*SIZE_ARG_S))
+#define GETPC_L(ip,o)           (GET_ARG(ip)+(cast_uint(o)*SIZE_ARG_L))
 
 
 /* get/set short parameter */
 #define GET_ARG_S(ip,o)         cast_ubyte(*GETPC_S(ip,o))
 #define SET_ARG_S(ip,o,v)       setbyte(GETPC_S(ip,0), o, v);
-#define SET_ARG_LLS(ip,v)       setbyte(GET_ARG(ip), 2*SIZE_ARG_L, v)
+#define SET_ARG_LLS(ip,v)       setbyte(GET_ARG(ip), 2u*SIZE_ARG_L, v)
 
 
 /* get/set long arg */
-#define GET_ARG_L(ip,o)         get3bytes(GET_ARG(ip) + ((o)*SIZE_ARG_L))
+#define GET_ARG_L(ip,o)         get3bytes(GET_ARG(ip)+(cast_uint(o)*SIZE_ARG_L))
 #define SET_ARG_L(ip,o,v)       set3bytes(GETPC_L(ip,o), v)
 
 
@@ -65,14 +65,16 @@
 ** sign from 8th bit to the 32nd bit.
 */
 #define IMM(imm) \
-        (((imm)&0x80) ? cast_int(~((imm)&0x7f)+1) : cast_int(imm))
+        (((imm) & 0x80) ? cast_int(~(cast_uint(imm) & 0x7f) + 1) \
+                        : cast_int(imm))
 
 /*
 ** Decode long immediate operand by moving the immediate operand
 ** sign from 24th bit to the 32nd bit.
 */
 #define IMML(imm) \
-        (((imm)&0x00800000) ? cast_int(~((imm)&0xff7fffff)+1) : cast_int(imm))
+        (((imm) & 0x00800000) ? cast_int(~(cast_uint(imm) & 0xff7fffff) + 1) \
+                              : cast_int(imm))
 
 
 

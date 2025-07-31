@@ -324,7 +324,7 @@ typedef struct List {
 
 
 /* ======================================================================
-** Hath Table {
+** Hashtable {
 ** ====================================================================== */
 
 #define TOKU_VTABLE         makevariant(TOKU_T_TABLE, 0)
@@ -438,7 +438,7 @@ typedef struct OString {
         size_t lnglen; /* length for long strings */
         struct OString *next; /* linked list for 'strtab' (hash table) */
     } u;
-    char bytes[]; /* string contents */
+    char bytes[1]; /* string contents */
 } OString;
 
 
@@ -656,14 +656,14 @@ typedef struct UpVal {
 typedef struct TClosure {
     ClosureHeader;
     Proto *p;
-    UpVal *upvals[];
+    UpVal *upvals[1];
 } TClosure;
 
 
 typedef struct CClosure {
     ClosureHeader;
     toku_CFunction fn;
-    TValue upvals[];
+    TValue upvals[1];
 } CClosure;
 
 
@@ -767,7 +767,7 @@ typedef struct UserData {
     size_t size; /* size of 'UserData' memory in bytes */
     Table *metatable;
     GCObject *gclist;
-    UValue uv[]; /* user values */
+    UValue uv[1]; /* user values */
     /* 'UserData' memory starts here */
 } UserData;
 
@@ -837,7 +837,7 @@ typedef enum N2IMode {
 
 /* fast 'module' operation for hashing (sz is always power of 2) */
 #define tmod(h,sz) \
-        (check_exp(((sz&(sz-1))==0), (cast_int((h) & ((sz)-1)))))
+        (check_exp((sz&(sz-1))==0, (cast_int((h) & ((sz)-1)))))
 
 
 TOKUI_FUNC int tokuO_ceillog2(t_uint x);

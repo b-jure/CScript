@@ -12,7 +12,7 @@
 #include "tstate.h"
 
 
-#define relpc(pc, p)	(cast_int((pc) - (p)->code) - SIZE_INSTR)
+#define relpc(pc, p)	cast_int((pc) - (p)->code - cast_int(SIZE_INSTR))
 
 
 /* active Tokudae function (given call frame) */

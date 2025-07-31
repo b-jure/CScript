@@ -364,8 +364,8 @@ static int newbreakjump(Lexer *lx, int pc, int bk, int close) {
     tokuM_growarray(lx->T, gl->arr, gl->size, n, TOKU_MAXINT, "pending jumps", Goto);
     gl->arr[n].pc = pc;
     gl->arr[n].nactlocals = lx->fs->nactlocals;
-    gl->arr[n].close = close;
-    gl->arr[n].bk = bk;
+    gl->arr[n].close = cast_ubyte(close);
+    gl->arr[n].bk = cast_ubyte(bk);
     gl->len = n + 1;
     return n;
 }
@@ -509,7 +509,7 @@ static void adjustlocals(Lexer *lx, int nvars) {
 
 
 static void enterscope(FunctionState *fs, Scope *s, int cf) {
-    s->cf = cf;
+    s->cf = cast_ubyte(cf);
     if (fs->scope) { /* not a global scope? */
         s->depth = fs->scope->depth + 1;
         s->havetbcvar = fs->scope->havetbcvar;
@@ -535,9 +535,9 @@ static void leavescope(FunctionState *fs) {
     toku_assert(s->nactlocals == fs->nactlocals);
     if (s->prev) { /* not main chunk scope? */
         if (fs->lasttarget == currPC)
-            fs->opbarrier |= 2; /* prevent POP merge */
+            fs->opbarrier |= 2u; /* prevent POP merge */
         tokuC_pop(fs, nvalues); /* pop locals */
-        fs->opbarrier &= ~2; /* allow POP merge */
+        fs->opbarrier &= cast_ubyte(~2u); /* allow POP merge */
     }
     if (haspendingjumps(s)) /* might have pending jumps? */
         patchpendingjumps(fs, s); /* patch them */
@@ -879,7 +879,7 @@ static void call(Lexer *lx, ExpInfo *e) {
     initexp(e, EXP_CALL, tokuC_call(fs, base, TOKU_MULTRET));
     tokuC_fixline(fs, linenum);
     linenum = lx->line;
-    if ((fs->callcheck = match(lx, '?'))) /* false check? */
+    if ((fs->callcheck = cast_ubyte(match(lx, '?')))) /* false check? */
         tokuC_check(fs, base, linenum);
 }
 
@@ -1144,7 +1144,7 @@ static void klass(Lexer *lx, ExpInfo *e) {
     expectnext(lx, '{');
     nm = classbody(lx, &havemt);
     if (nm > 0) { /* have methods? */
-        int nb = tokuO_ceillog2(nm + (nm == 1));
+        int nb = tokuO_ceillog2(cast_uint(nm + (nm == 1)));
         nb |= havemt * 0x80; /* flag for creating metatable */
         SET_ARG_S(&fs->p->code[pc], 0, nb);
     } else if (havemt) /* have metatable? */
@@ -1596,7 +1596,7 @@ static void localstm(Lexer *lx) {
     do {
         vidx = newlocalvar(lx, str_expectname(lx), 1);
         kind = getlocalattribute(lx);
-        getlocalvar(fs, vidx)->s.kind = kind;
+        getlocalvar(fs, vidx)->s.kind = cast_ubyte(kind);
         if (kind & VARTBC) { /* to-be-closed? */
             if (toclose != -1) /* one already present? */
                 tokuP_semerror(fs->lx,
@@ -1919,9 +1919,9 @@ static int checkmatch(Lexer *lx, SwitchState *ss, ExpInfo *e) {
 ** meaning if 'e' is nil, then it should not be merged with previous,
 ** as it might get optimized out.
 */
-static int codeconstexp(FunctionState *fs, ExpInfo *e) {
-    int res = 0;
-    fs->opbarrier |= 1;
+static t_ubyte codeconstexp(FunctionState *fs, ExpInfo *e) {
+    t_ubyte res = 0;
+    fs->opbarrier |= 1u;
     tokuC_exp2val(fs, e);
     if (eisconstant(e)) {
         ExpInfo pres = *e;
@@ -1929,7 +1929,7 @@ static int codeconstexp(FunctionState *fs, ExpInfo *e) {
         *e = pres;
         res = 1; /* true; 'e' is a constant */
     }
-    fs->opbarrier &= ~1;
+    fs->opbarrier &= cast_ubyte(~1u);
     return res;
 }
 

@@ -17,7 +17,7 @@
 ** may have any of these metamethods. (First access that fails after the
 ** clearing will set the bit again.)
 */
-#define invalidateTMcache(t)    ((t)->flags &= ~maskflags)
+#define invalidateTMcache(t)    ((t)->flags &= cast_ubyte(~maskflags))
 
 
 #define nodeval(n)          (&(n)->i_val)
@@ -34,7 +34,7 @@
 */
 
 #define BITDUMMY	    (1 << 7)
-#define NOTBITDUMMY	    cast_byte(~BITDUMMY)
+#define NOTBITDUMMY	    cast_ubyte(~BITDUMMY)
 #define isdummy(t)	    ((t)->flags & BITDUMMY)
 
 #define setnodummy(t)	    ((t)->flags &= NOTBITDUMMY)

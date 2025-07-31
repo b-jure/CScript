@@ -73,7 +73,7 @@ void *tokuM_realloc_(toku_State *T, void *ptr, size_t osz, size_t nsz) {
             return NULL; /* do not update 'gcdebt' */
     }
     toku_assert((nsz == 0) == (block == NULL));
-    gs->gcdebt = (gs->gcdebt + nsz) - osz;
+    gs->gcdebt = cast_mem((cast_umem(gs->gcdebt) + nsz) - osz);
     return block;
 }
 
@@ -91,13 +91,13 @@ void *tokuM_malloc_(toku_State *T, size_t size, int tag) {
         return NULL;
     } else {
         GState *gs = G(T);
-        void *block = firsttry(gs, NULL, tag, size);
+        void *block = firsttry(gs, NULL, cast_ubyte(tag), size);
         if (t_unlikely(block == NULL)) {
-            block = tryagain(T, NULL, tag, size);
+            block = tryagain(T, NULL, cast_ubyte(tag), size);
             if (t_unlikely(block == NULL))
                 tokuM_error(T);
         }
-        gs->gcdebt += size;
+        gs->gcdebt += cast_mem(size);
         return block;
     }
 }
@@ -123,8 +123,9 @@ checkspace:
             size *= 2;
             size = (MINASIZE <= size) ? size : MINASIZE;
         }
-        block = tokuM_saferealloc(T, block, cast_sizet(*sizep) * elemsize,
-                                            cast_sizet(size) * elemsize);
+        block = tokuM_saferealloc(T, block,
+                                     cast_sizet(*sizep) * cast_uint(elemsize),
+                                     cast_sizet(size) * cast_uint(elemsize));
         *sizep = size;
         goto checkspace;
     }
@@ -151,5 +152,5 @@ void tokuM_free_(toku_State *T, void *ptr, size_t osz) {
     GState *gs = G(T);
     toku_assert((osz == 0) == (ptr == NULL));
     callfalloc(gs, ptr, osz, 0);
-    gs->gcdebt -= osz;
+    gs->gcdebt -= cast_mem(osz);
 }

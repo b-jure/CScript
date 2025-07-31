@@ -6,7 +6,7 @@ TOKUDAE_A = libtokudae.a
 CORE_O = src/tapi.o src/tlist.o src/tcode.o src/tdebug.o src/tfunction.o\
 	 src/tgc.o src/ttable.o src/tlexer.o src/tmem.o src/tmeta.o\
 	 src/tobject.o src/tparser.o src/tvm.o src/tprotected.o src/treader.o\
-	 src/tokudae.o src/tstate.o src/tstring.o src/ttrace.o
+	src/tstate.o src/tstring.o src/ttrace.o
 LIB_O = src/tokudaeaux.o src/tbaselib.o src/tloadlib.o src/tokudaelib.o src/tstrlib.o\
 	src/tmathlib.o src/tiolib.o src/toslib.o src/treglib.o src/tdblib.o src/tlstlib.o\
 	src/tutf8lib.o

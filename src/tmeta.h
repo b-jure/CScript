@@ -18,7 +18,7 @@
 ** corresponding metamethod field. (Bit 7 of the flag indicates that
 ** the table is using the dummy node.)
 */
-#define maskflags	cast_byte(~(~0u << (TM_INIT + 1)))
+#define maskflags   cast_ubyte(~(~0u << (TM_INIT + 1)))
 
 
 #define notm(tm)    ttisnil(tm)
@@ -83,7 +83,7 @@ TOKUI_FUNC const TValue *tokuTM_objget(toku_State *T, const TValue *o,
 TOKUI_FUNC const TValue *tokuTM_get(Table *events, TM event, OString *ename);
 TOKUI_FUNC OClass *tokuTM_newclass(toku_State *T);
 TOKUI_FUNC Instance *tokuTM_newinstance(toku_State *T, OClass *cls);
-TOKUI_FUNC UserData *tokuTM_newuserdata(toku_State *T, size_t size, int nuv);
+TOKUI_FUNC UserData *tokuTM_newuserdata(toku_State *T, size_t size, t_ushort nuv);
 TOKUI_FUNC IMethod *tokuTM_newinsmethod(toku_State *T, Instance *receiver,
 				        const TValue *method);
 TOKUI_FUNC int tokuTM_eqim(const IMethod *v1, const IMethod *v2);

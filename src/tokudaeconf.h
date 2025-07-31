@@ -153,7 +153,7 @@
 #else                   /* }{ */
 
 #define TOKU_ROOT       "/usr/local/"
-#define TOKU_TDIR      TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
+#define TOKU_TDIR       TOKU_ROOT "share/tokudae/" TOKU_VDIR "/"
 #define TOKU_CDIR       TOKU_ROOT "lib/tokudae/" TOKU_VDIR "/"
 
 #if !defined(TOKU_PATH_DEFAULT)
@@ -324,9 +324,9 @@
 */
 
 
-#define TOKU_UNSIGNED         unsigned TOKU_INTEGER
+#define TOKU_UNSIGNED       unsigned TOKU_INTEGER
 
-#define TOKU_INTEGER_FMT      "%" TOKU_INTEGER_FMTLEN "d"
+#define TOKU_INTEGER_FMT    "%" TOKU_INTEGER_FMTLEN "d"
 
 #define toku_integer2str(s,sz,n) \
         t_snprintf((s),(sz),TOKU_INTEGER_FMT,(TOKU_INTEGER)(n))
@@ -344,23 +344,25 @@
 
 #if defined(LLONG_MAX)          /* { */
 
-#define TOKU_INTEGER              long long
-#define TOKU_INTEGER_MAX          LLONG_MAX
-#define TOKU_INTEGER_MIN          LLONG_MIN
+#define TOKU_INTEGER            long long
+#define TOKU_INTEGER_MAX        LLONG_MAX
+#define TOKU_INTEGER_MIN        LLONG_MIN
 
-#define TOKU_UNSIGNED_MAX         ULLONG_MAX
+#define TOKU_UNSIGNED_MAX       ULLONG_MAX
 
-#define TOKU_INTEGER_FMTLEN       "ll"
+#define t_intatt(i)             (i##LL)
+
+#define TOKU_INTEGER_FMTLEN     "ll"
 
 #elif defined(TOKU_USE_WINDOWS)   /* }{ */
 
-#define TOKU_INTEGER              __int64
-#define TOKU_INTEGER_MAX          _I64_MAX
-#define TOKU_INTEGER_MIN          _I64_MIN
+#define TOKU_INTEGER            __int64
+#define TOKU_INTEGER_MAX        _I64_MAX
+#define TOKU_INTEGER_MIN        _I64_MIN
 
-#define TOKU_UNSIGNED_MAX         _UI64_MAX
+#define TOKU_UNSIGNED_MAX       _UI64_MAX
 
-#define TOKU_INTEGER_FMTLEN       "I64"
+#define TOKU_INTEGER_FMTLEN     "I64"
 
 #else                           /* }{ */
 

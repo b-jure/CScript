@@ -89,8 +89,8 @@ t_sinline void setfield(toku_State *T, List *l, int lf, const TValue *v) {
             if (t_likely(tointeger(v, &i))) {
                 if (t_likely(i >= 0)) {
                     i = (i <= TOKU_MAXINT) ? i : TOKU_MAXINT;
-                    tokuA_ensure(T, l, i);
-                    l->len = i;
+                    tokuA_ensure(T, l, cast_int(i));
+                    l->len = cast_int(i);
                 } else /* otherwise negative length */
                     tokuD_listerror(T, v, slength, snegative);
             } else
@@ -175,7 +175,7 @@ void tokuA_setint(toku_State *T, List *l, const FatValue *k, const TValue *v) {
         if (t_unlikely(TOKU_MAXLISTINDEX < k->i)) /* 'index' too large? */
             tokuD_listerror(T, k->v, sindex, "too large");
         else { /* ok */
-            tokuA_ensureindex(T, l, k->i);
+            tokuA_ensureindex(T, l, cast_int(k->i));
             setobj(T, &l->arr[k->i], v);
         }
     } else /* XXX: remove this branch (wrap as unsigned) */
@@ -260,6 +260,6 @@ int tokuA_findindex(List *l, int rev, int nn, int s, int e) {
 
 
 void tokuA_free(toku_State *T, List *l) {
-    tokuM_freearray(T, l->arr, l->size);
+    tokuM_freearray(T, l->arr, cast_uint(l->size));
     tokuM_free(T, l);
 }

@@ -443,6 +443,7 @@ local fn logcmd(msg) { printf("[%]: %", RED("CMD"), msg); }
 /* temporary output file */
 local tempfile = (class {
     __gc = || {
+        assert(typeof(self) == "instance");
         if self.file {
             loginfo(fmt("removing temporary output file '%s'...", self.file));
             rm(self.file);

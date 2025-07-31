@@ -125,6 +125,7 @@ REQUIRED = ...;
 return AA;]=];
 
     createfiles(files, "", extras);
+    io.output(io.stdout);
 
     /// testing explicit "dir" separator in 'searchpath'
     assert(package.searchpath("C.toku", D("?"), "", "") == D("C.toku"));
@@ -199,6 +200,7 @@ return AA;]=];
     };
 
     createfiles(files, "__ENV = {};\n", "\nreturn __ENV;\n");
+    io.output(io.stdout);
     AA = 0;
 
     {
@@ -270,7 +272,9 @@ return AA;]=];
         assert(!f and typeof(err) == "string" and when == "absent");
         print("\n >>> cannot load dynamic library <<<\n");
         print(err, when);
+        (Message or print)("skipping 'loadlib` tests");
     } else {
+        print("\n >>> can load dynamic libraries <<<\n");
         { /// tests for loadlib
             local f = assert(package.loadlib(DC("lib1"), p.."onefunction"));
             local a, b = f(15, 25);

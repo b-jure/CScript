@@ -82,7 +82,7 @@ static void clonelist(toku_State *T, int index) {
     toku_Integer l;
     toku_assert(CACHEINDEX < index);
     tokuL_check_stack(T, 4, errclone); /* list+value+cache */
-    l = toku_len(T, index);
+    l = t_castU2S(toku_len(T, index));
     toku_push_list(T, cast_int(l));
     absi = toku_getntop(T);
     for (int i = 0; i < l; i++) {
@@ -157,9 +157,9 @@ static void cloneclass(toku_State *T, int index) {
 }
 
 
-static void cloneuservalues(toku_State *T, int index, t_uint nuv) {
+static void cloneuservalues(toku_State *T, int index, t_ushort nuv) {
     toku_assert(CACHEINDEX < index);
-    for (t_uint i = 0; i < nuv; i++) {
+    for (t_ushort i = 0; i < nuv; i++) {
         toku_get_uservalue(T, index, i);
         auxclone(T, toku_type(T, -1), toku_absindex(T, -1));
         toku_set_uservalue(T, -2, i);
@@ -169,7 +169,7 @@ static void cloneuservalues(toku_State *T, int index, t_uint nuv) {
 
 static void cloneuserdata(toku_State *T, int index) {
     void *p;
-    t_uint nuv = toku_numuservalues(T, check_exp(CACHEINDEX < index, index));
+    t_ushort nuv = toku_numuservalues(T, check_exp(CACHEINDEX < index, index));
     size_t size = toku_lenudata(T, index);
     tokuL_check_stack(T, 5, errclone); /* udata+(mt/methods/2xudval)+cache */
     p = toku_push_userdata(T, size, nuv);
@@ -267,7 +267,7 @@ static int b_clone(toku_State *T) {
 
 
 static int b_error(toku_State *T) {
-    int level = tokuL_opt_integer(T, 1, 1);
+    int level = cast_int(tokuL_opt_integer(T, 1, 1));
     toku_setntop(T, 1); /* leave only message on top */
     if (toku_type(T, 0) == TOKU_T_STRING && level >= 0) {
         tokuL_where(T, level); /* push extra information */
@@ -535,8 +535,8 @@ static int ipairsaux(toku_State *T) {
     i = tokuL_check_integer(T, 1);
     i = tokuL_intop(+, i, 1);
     toku_push_integer(T, i);
-    toku_get_index(T, 0, i);
-    return (toku_len(T, 0) <= i) ? 1 : 2;
+    toku_get_index(T, 0, cast_int(i));
+    return (toku_len(T, 0) <= t_castS2U(i)) ? 1 : 2;
 }
 
 
@@ -643,7 +643,7 @@ static int b_len(toku_State *T) {
     tokuL_expect_arg(T, t == TOKU_T_LIST || t == TOKU_T_TABLE || t == TOKU_T_INSTANCE
                       || t == TOKU_T_CLASS || t == TOKU_T_STRING, 0,
                       "list/table/class/instance/string");
-    toku_push_integer(T, toku_len(T, 0));
+    toku_push_integer(T, t_castU2S(toku_len(T, 0)));
     return 1;
 }
 
@@ -732,23 +732,23 @@ static int b_getargs(toku_State *T) {
 #define SPACECHARS      " \f\n\r\t\v"
 
 /* Lookup table for digit values. -1==255>=36 -> invalid */
-static const unsigned char table[] = { -1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
- 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,-1,-1,-1,-1,-1,-1,
--1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
-25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
--1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
-25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+static const t_ubyte table[] = { 255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,255,255,255,255,255,255,
+255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+ 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,255,255,255,255,255,
+255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+ 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
 };
 
 /*
@@ -757,9 +757,10 @@ static const unsigned char table[] = { -1,
 ** string. Conversion works for bases [2,36] and hexadecimal and octal
 ** literal strings.
 */
-static const char *strtoint(const char *s, int base, toku_Integer *pn, int *of) {
-    const unsigned char *val = table+1;
-    toku_Unsigned lim = TOKU_INTEGER_MIN;
+static const char *strtoint(const char *s, toku_Unsigned base,
+                                           toku_Integer *pn, int *of) {
+    const t_ubyte *val = table+1;
+    toku_Unsigned lim = t_castS2U(TOKU_INTEGER_MIN);
     toku_Unsigned n = 0;
     int sign = 1;
     int c;
@@ -803,7 +804,7 @@ static const char *strtoint(const char *s, int base, toku_Integer *pn, int *of) 
     }
     s--;
     s += strspn(s, SPACECHARS); /* skip trailing spaces */
-    *pn = sign * n;
+    *pn = sign * t_castU2S(n);
     return s;
 }
 
@@ -829,7 +830,7 @@ static int b_tonum(toku_State *T) {
         const char *s = tokuL_check_lstring(T, 0, &l); /* numeral to convert */
         toku_Integer n;
         tokuL_check_arg(T, 2 <= i && i <= 36, 1, "base out of range [2,36]");
-        if (strtoint(s, i, &n, &of) == s + l) { /* conversion ok? */
+        if (strtoint(s, t_castS2U(i), &n, &of) == s + l) { /* conversion ok? */
             toku_push_integer(T, n); /* push the conversion number */
         done:
             if (of) {

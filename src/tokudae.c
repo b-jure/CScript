@@ -64,7 +64,7 @@ static void setsignal(int sig, void (*handler)(int)) {
 /*
 ** Hook set by signal function to stop the interpreter.
 */
-static void cstop(toku_State *T, toku_Debug *ar) {
+static void tstop(toku_State *T, toku_Debug *ar) {
     (void)ar;  /* unused arg. */
     toku_sethook(T, NULL, 0, 0);  /* reset hook */
     tokuL_error(T, "interrupted!");
@@ -77,10 +77,10 @@ static void cstop(toku_State *T, toku_Debug *ar) {
 ** this function only sets a hook that, when called, will stop the
 ** interpreter.
 */
-static void caction(int i) {
+static void taction(int i) {
     int flag = TOKU_MASK_CALL | TOKU_MASK_RET | TOKU_MASK_LINE | TOKU_MASK_COUNT;
     setsignal(i, SIG_DFL); /* if another SIGINT happens, terminate process */
-    toku_sethook(globalT, cstop, flag, 1);
+    toku_sethook(globalT, tstop, flag, 1);
 }
 
 
@@ -238,8 +238,8 @@ static int docall(toku_State *T, int nargs, int nres) {
     toku_assert(base >= 0);
     toku_push_cfunction(T, msghandler); /* push 'msghandler' on top */
     toku_insert(T, base); /* insert 'msghandler' below the function */
-    globalT = T; /* to be available to 'caction' */
-    setsignal(SIGINT, caction); /* set C-signal handler */
+    globalT = T; /* to be available to 'taction' */
+    setsignal(SIGINT, taction); /* set C-signal handler */
     status = toku_pcall(T, nargs, nres, base);
     setsignal(SIGINT, SIG_DFL); /* reset C-signal handler */
     toku_remove(T, base); /* remove 'msghandler' */
@@ -331,7 +331,7 @@ static int pushargs(toku_State *T) {
     toku_pop(T, 1); /* remove 'cliargs' */
     if (toku_get_global(T, "args") != TOKU_T_LIST)
         tokuL_error(T, "'args' is not a list");
-    nargs = toku_len(T, -1);
+    nargs = cast_int(toku_len(T, -1));
     tokuL_check_stack(T, nargs + 3, "too many arguments to script");
     for (i = 1; i <= nargs; i++) /* push all args */
         toku_get_index(T, -i, i - 1);
@@ -696,7 +696,7 @@ static void create_arg_lists(toku_State *T, char **argv, int argc, int script) {
 ** Reads all options and handles them all.
 */
 static int pmain(toku_State *T) {
-    int argc = toku_to_integer(T, -2);
+    int argc = cast_int(toku_to_integer(T, -2));
     char **argv = toku_to_userdata(T, -1);
     int script;
     int args = collect_args(argv, &script);

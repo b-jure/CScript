@@ -218,7 +218,7 @@ static const char *start_capture(MatchState *ms, const char *s,
         tokuL_error(ms->T, "too many captures");
     ms->capture[level].init = s;
     ms->capture[level].len = what;
-    ms->level = level+1;
+    ms->level = cast_ubyte(level+1);
     if ((res=match(ms, s, p)) == NULL) /* match failed? */
         ms->level--; /* undo capture */
     return res;
@@ -238,8 +238,8 @@ static const char *end_capture(MatchState *ms, const char *s, const char *p) {
 static const char *match_capture(MatchState *ms, const char *s, int l) {
     size_t len;
     l = check_capture(ms, l);
-    len = ms->capture[l].len;
-    if ((size_t)(ms->srt_end-s) >= len &&
+    len = cast_diff2sz(ms->capture[l].len);
+    if (len <= cast_diff2sz(ms->srt_end - s) &&
             memcmp(ms->capture[l].init, s, len) == 0)
         return s+len;
     else
@@ -357,8 +357,8 @@ init: /* using goto to optimize tail recursion */
 ** its length and put its address in '*cap'. If it is an integer
 ** (a position), push it on the stack and return CAP_POSITION.
 */
-static size_t get_onecapture(MatchState *ms, int i, const char *s,
-                             const char *e, const char **cap) {
+static ptrdiff_t get_onecapture(MatchState *ms, int i, const char *s,
+                                const char *e, const char **cap) {
     if (i >= ms->level) {
         if (t_unlikely(i != 0))
             tokuL_error(ms->T, "invalid capture index %%%d", i + 1);
@@ -384,7 +384,7 @@ static void push_onecapture(MatchState *ms, int i, const char *s,
     const char *cap;
     ptrdiff_t l = get_onecapture(ms, i, s, e, &cap);
     if (l != CAP_POSITION)
-        toku_push_lstring(ms->T, cap, l);
+        toku_push_lstring(ms->T, cap, cast_diff2sz(l));
     /* else position was already pushed */
 }
 
@@ -441,8 +441,8 @@ static int find_aux(toku_State *T, int find) {
         /* do a plain search */
         const char *s2 = findstr(s + init, ls - init, p, lp, 0);
         if (s2) {
-            toku_push_integer(T, (s2 - s));
-            toku_push_integer(T, (s2 - s) + lp - 1);
+            toku_push_integer(T, cast_diff2S(s2 - s));
+            toku_push_integer(T, cast_sz2S(cast_diff2sz(s2 - s) + lp - 1));
             return 2;
         }
     } else {
@@ -530,12 +530,12 @@ static void add_s(MatchState *ms, tokuL_Buffer *b, const char *s,
     const char *news = toku_to_lstring(T, 2, &l);
     const char *p;
     while ((p = cast_charp(memchr(news, T_ESC, l))) != NULL) {
-        tokuL_buff_push_lstring(b, news, cast_sizet(p - news));
+        tokuL_buff_push_lstring(b, news, cast_diff2sz(p - news));
         p++; /* skip T_ESC */
         if (*p == T_ESC) /* '%%' */
             tokuL_buff_push(b, *p);
         else if (*p == '0') /* '%0' */
-            tokuL_buff_push_lstring(b, s, cast_sizet(e - s));
+            tokuL_buff_push_lstring(b, s, cast_diff2sz(e - s));
         else if (isdigit(uchar(*p))) { /* '%n' */
             const char *cap;
             ptrdiff_t resl = get_onecapture(ms, *p - '1', s, e, &cap);
@@ -544,10 +544,10 @@ static void add_s(MatchState *ms, tokuL_Buffer *b, const char *s,
                 toku_remove(T, -2); /* remove position */
                 tokuL_buff_push_stack(b); /* add pos. to accumulated result */
             } else
-                tokuL_buff_push_lstring(b, cap, cast_sizet(resl));
+                tokuL_buff_push_lstring(b, cap, cast_diff2sz(resl));
         } else
             tokuL_error(T, "invalid use of '%c' in replacement string", T_ESC);
-        l -= p + 1 - news;
+        l -= cast_diff2sz(p + 1 - news);
         news = p + 1;
     }
     tokuL_buff_push_lstring(b, news, l);
@@ -629,7 +629,7 @@ static int reg_gsub(toku_State *T) {
     if (!changed) /* no changes? */
         toku_push(T, 0); /* return original string */
     else { /* something changed */
-        tokuL_buff_push_lstring(&b, src, cast_sizet(ms.srt_end-src));
+        tokuL_buff_push_lstring(&b, src, cast_diff2sz(ms.srt_end - src));
         tokuL_buff_end(&b); /* create and return new string */
     }
     toku_push_integer(T, n); /* number of substitutions */

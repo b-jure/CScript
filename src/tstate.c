@@ -276,7 +276,7 @@ int tokuT_resetthread(toku_State *T, int status) {
     else
         T->sp.p = T->stack.p + 1;
     cf->top.p = T->sp.p + TOKU_MINSTACK;
-    tokuT_reallocstack(T, cf->top.p - T->sp.p, 0);
+    tokuT_reallocstack(T, cast_int(cf->top.p - T->sp.p), 0);
     return status;
 }
 
@@ -354,7 +354,7 @@ int tokuT_reallocstack(toku_State *T, int newsize, int raiseerr) {
     G(T)->gcstopem = 1; /* no emergency collection when reallocating stack */
     newstack = tokuM_reallocarray(T, T->stack.p, osz + EXTRA_STACK,
                                                newsize + EXTRA_STACK, SValue);
-    G(T)->gcstopem = old_stopem;
+    G(T)->gcstopem = cast_ubyte(old_stopem);
     if (t_unlikely(newstack == NULL)) {
         correctstack(T); /* change offsets back to pointers */
         if (raiseerr)

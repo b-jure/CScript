@@ -72,13 +72,13 @@ static const char *strtoolong = "string slice too long";
 ** Translate relative end position to absolute slice index.
 */
 static size_t posrelEnd(toku_Integer pos, size_t len) {
-    toku_assert(pos >= -(toku_Integer)len); /* should be handled already */
-    if (pos >= (toku_Integer)len) /* absolute that overflows? */
-        return cast_sizet(len - (len>0)); /* clip to last index */
-    else if (pos >= 0) /* absolute in-range 'pos'? */
+    toku_assert(-cast_sz2S(len) <= pos); /* should be handled already */
+    if (cast_sz2S(len) <= pos) /* absolute that overflows? */
+        return len - (len>0); /* clip to last index */
+    else if (0 <= pos) /* absolute in-range 'pos'? */
         return cast_sizet(pos);
     else /* otherwise negative 'pos' */
-        return len + pos;
+        return len + cast_sizet(pos);
 }
 
 
@@ -153,13 +153,13 @@ static int split_into_list(toku_State *T, int rev) {
         if (n < 1 || lpat == 0) goto pushs;
         while (n > 0 && (aux = findstr(s, ls, pat, lpat, rev)) != NULL) {
             if (!rev) { /* find from start? */
-                toku_push_lstring(T, s, aux-s);
-                ls -= (aux+lpat)-s;
-                s = aux+lpat;
+                toku_push_lstring(T, s, cast_diff2sz(aux - s));
+                ls -= cast_diff2sz((aux + lpat) - s);
+                s = aux + lpat;
             } else { /* reverse find */
-                toku_push_lstring(T, aux+lpat, e-(aux+lpat));
+                toku_push_lstring(T, aux+lpat, cast_diff2sz(e - (aux + lpat)));
                 e = aux;
-                ls = aux-s;
+                ls = cast_diff2sz(aux - s);
             }
             toku_set_index(T, arr, i);
             n--; i++;
@@ -198,7 +198,7 @@ static int s_startswith(toku_State *T) {
         size_t k = 0;
         while (posi <= posj && k < l2 && s1[posi] == s2[k])
             posi++, k++;
-        toku_push_integer(T, posi);
+        toku_push_integer(T, cast_sz2S(posi));
         if (k == l2)
             return 1; /* return index after 's2' in 's1' */
         else {
@@ -307,7 +307,7 @@ static int s_join(toku_State *T) {
     tokuL_expect_arg(T, (t == TOKU_T_LIST || t == TOKU_T_TABLE), 1, "list/table");
     tokuL_buff_init(T, &b);
     if (t == TOKU_T_LIST) {
-        int len = toku_len(T, 1);
+        int len = cast_int(toku_len(T, 1));
         if (len > 0)
             joinfromlist(T, &b, sep, lsep, len);
     } else
@@ -406,18 +406,18 @@ static void addquoted(tokuL_Buffer *b, const char *s, size_t len) {
 */
 static int quotefloat(toku_State *T, char *buff, toku_Number n) {
     const char *s; /* for the fixed representations */
-    if (n == (toku_Number)HUGE_VAL) /* inf? */
+    if (n == cast_num(HUGE_VAL)) /* inf? */
         s = "1e9999";
-    else if (n == -(toku_Number)HUGE_VAL) /* -inf? */
+    else if (n == -cast_num(HUGE_VAL)) /* -inf? */
         s = "-1e9999";
     else if (n != n) /* NaN? */
         s = "(0/0)";
     else { /* format number as hexadecimal */
-        int  nb = toku_number2strx(T, buff, MAX_ITEM, "%"TOKU_NUMBER_FMTLEN"a", n);
+        int nb = toku_number2strx(T, buff, MAX_ITEM, "%"TOKU_NUMBER_FMTLEN"a", n);
         /* ensures that 'buff' string uses a dot as the radix character */
-        if (memchr(buff, '.', nb) == NULL) { /* no dot? */
+        if (memchr(buff, '.', cast_uint(nb)) == NULL) { /* no dot? */
             char point = toku_getlocaledecpoint(); /* try locale point */
-            char *ppoint = (char *)memchr(buff, point, nb);
+            char *ppoint = cast_charp(memchr(buff, point, cast_uint(nb)));
             if (ppoint) *ppoint = '.'; /* change it to a dot */
         }
         return nb;
@@ -447,7 +447,7 @@ static void addliteral(toku_State *T, tokuL_Buffer *b, int arg) {
                     : TOKU_INTEGER_FMT; /* else use default format */
                 nb = t_snprintf(buff, MAX_ITEM, format, (toku_Integer)n);
             }
-            tokuL_buffadd(b, nb);
+            tokuL_buffadd(b, cast_uint(nb));
             break;
         }
         case TOKU_T_NIL: case TOKU_T_BOOL: {
@@ -539,7 +539,7 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
             continue;
         } /* else '%' */
         char form[MAX_FORMAT]; /* to store the format ('%...') */
-        int maxitem = MAX_ITEM; /* maximum length for the result */
+        t_uint maxitem = MAX_ITEM; /* maximum length for the result */
         char *buff = tokuL_buff_ensure(&b, maxitem); /* to put result */
         int nb = 0; /* number of bytes in result */
         if (++arg > top) /* too many format specifiers? */
@@ -621,8 +621,8 @@ static int formatstr(toku_State *T, const char *fmt, size_t lfmt) {
                 return tokuL_error(T, "invalid conversion '%s' to 'format'", form);
             }
         }
-        toku_assert(nb < maxitem);
-        tokuL_buffadd(&b, nb);
+        toku_assert(cast_uint(nb) < maxitem);
+        tokuL_buffadd(&b, cast_uint(nb));
     }
     tokuL_buff_end(&b);
     return 1; /* return formatted string */
@@ -661,11 +661,11 @@ static int auxtocase(toku_State *T, int (*f)(int c)) {
         char *p = tokuL_buff_initsz(T, &b, l);
         memcpy(p, s, posi);
         while (posi < posj) {
-            p[posi] = f(s[posi]); posi++;
-            p[posj] = f(s[posj]); posj--;
+            p[posi] = cast_char(f(s[posi])); posi++;
+            p[posj] = cast_char(f(s[posj])); posj--;
         }
-        p[posi] = f(s[posi]);
-        memcpy(p+endpos, s+endpos, l-endpos);
+        p[posi] = cast_char(f(s[posi]));
+        memcpy(p + endpos, s + endpos, l - endpos);
         tokuL_buff_endsz(&b, l);
     }
     return 1; /* return final string */
@@ -756,7 +756,7 @@ static int aux_span(toku_State *T, int complement) {
     }
 pushlen:
     /* return computed segment length (span) */
-    toku_push_integer(T, (posi - startpos));
+    toku_push_integer(T, cast_sz2S(posi - startpos));
     return 1;
 }
 
@@ -786,7 +786,7 @@ static int s_replace(toku_State *T) {
         const char *p;
         tokuL_buff_init(T, &b);
         while (n > 0 && (p = findstr(s, l, pat, lpat, 0))) {
-            size_t sz = p - s;
+            size_t sz = cast_diff2sz(p - s);
             tokuL_buff_push_lstring(&b, s, sz); /* push prefix */
             tokuL_buff_push_lstring(&b, v, lv); /* push replacement text */
             l -= sz + lpat; /* subtract prefix and pattern length */
@@ -808,15 +808,15 @@ static int s_substr(toku_State *T) {
     toku_Integer j = tokuL_opt_integer(T, 2, -1);
     if (toku_to_bool(T, 3)) { /* positions must be absolute? */
         if (!(i < 0 || j < 0 || j < i))
-            posi = i, posj = j;
+            posi = t_castS2U(i), posj = t_castS2U(j);
         else /* otherwise force to push empty string */
             posi = 1, posj = 0;
-    } else if (-(toku_Integer)l <= j) {
+    } else if (-cast_sz2S(l) <= j) {
         posi = posrelStart(i, l),
         posj = posrelEnd(j, l);
     } else goto pushempty;
     if (posi <= posj) {
-        toku_push_lstring(T, s + posi, (posj-posi)+1);
+        toku_push_lstring(T, s + posi, (posj - posi) + 1);
         return 1;
     }
 pushempty:
@@ -825,38 +825,38 @@ pushempty:
 }
 
 
-#define swapcase(c)     (isalpha(c) ? (c)^32 : (c))
-#define swaptolower(c)  (isupper(c) ? tolower(c) : (c))
-#define swaptoupper(c)  (islower(c) ? toupper(c) : (c))
+#define swapcase(c)         cast_char(isalpha(c) ? (c)^32 : (c))
+#define swaptolower(c)      cast_char(isupper(c) ? tolower(c) : (c))
+#define swaptoupper(c)      cast_char(islower(c) ? toupper(c) : (c))
 
 static void auxswapcase(char *d, const char *s, size_t posi, size_t posj) {
     t_ubyte c;
     while (posi < posj) {
-        c = s[posi], d[posi++] = swapcase(c);
-        c = s[posj], d[posj--] = swapcase(c);
+        c = uchar(s[posi]), d[posi++] = swapcase(c);
+        c = uchar(s[posj]), d[posj--] = swapcase(c);
     }
     if (posi == posj)
-        c = s[posi], d[posi] = swapcase(c);
+        c = uchar(s[posi]), d[posi] = swapcase(c);
 }
 
 
 static void auxuppercase(char *d, const char *s, size_t posi, size_t posj) {
     t_ubyte c;
     while (posi < posj) {
-        c = s[posi], d[posi++] = swaptolower(c);
-        c = s[posj], d[posj--] = swaptolower(c);
+        c = uchar(s[posi]), d[posi++] = swaptolower(c);
+        c = uchar(s[posj]), d[posj--] = swaptolower(c);
     }
-    c = s[posi], d[posi] = swaptolower(c);
+    c = uchar(s[posi]), d[posi] = swaptolower(c);
 }
 
 
 static void auxlowercase(char *d, const char *s, size_t posi, size_t posj) {
     t_ubyte c;
     while (posi < posj) {
-        c = s[posi], d[posi++] = swaptoupper(c);
-        c = s[posj], d[posj--] = swaptoupper(c);
+        c = uchar(s[posi]), d[posi++] = swaptoupper(c);
+        c = uchar(s[posj]), d[posj--] = swaptoupper(c);
     }
-    c = s[posi], d[posi] = swaptoupper(c);
+    c = uchar(s[posi]), d[posi] = swaptoupper(c);
 }
 
 
@@ -999,7 +999,7 @@ static int s_cmp(toku_State *T) {
     res = s1[i] - s2[i];
     toku_push_integer(T, res);
     if (res) /* strings are not equal? */
-        toku_push_integer(T, i); /* push "that" position */
+        toku_push_integer(T, cast_sz2S(i)); /* push "that" position */
     else /* otherwise strings are equal */
         toku_push_nil(T); /* "that" position doesn't exist */
     return 2; /* return comparison result and position */

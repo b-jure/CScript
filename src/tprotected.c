@@ -224,9 +224,9 @@ int tokuPR_parse(toku_State *T, BuffReader *br, const char *name) {
     incnnyc(T);
     status = tokuPR_call(T, pparse, &pd, savestack(T, T->sp.p), T->errfunc);
     tokuR_freebuffer(T, &pd.buff);
-    tokuM_freearray(T, pd.ps.actlocals.arr, pd.ps.actlocals.size);
-    tokuM_freearray(T, pd.ps.literals.arr, pd.ps.literals.size);
-    tokuM_freearray(T, pd.ps.gt.arr, pd.ps.gt.size);
+    tokuM_freearray(T, pd.ps.actlocals.arr, cast_uint(pd.ps.actlocals.size));
+    tokuM_freearray(T, pd.ps.literals.arr, cast_uint(pd.ps.literals.size));
+    tokuM_freearray(T, pd.ps.gt.arr, cast_uint(pd.ps.gt.size));
     decnnyc(T);
     return status;
 }

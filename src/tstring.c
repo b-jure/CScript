@@ -96,7 +96,7 @@ static void rehashtable(OString **arr, int osz, int nsz) {
         arr[i] = NULL; /* clear the slot */
         while (s) { /* for each string in the chain */
             OString *next = s->u.next; /* save 'next' */
-            t_uint h = tmod(s->hash, nsz); /* get hash position */
+            t_uint h = cast_uint(tmod(s->hash, cast_uint(nsz)));/* hash pos. */
             s->u.next = arr[h]; /* chain it into array */
             arr[h] = s;
             s = next;
@@ -166,7 +166,7 @@ OString *tokuS_newlngstrobj(toku_State *T, size_t len) {
 
 void tokuS_remove(toku_State *T, OString *s) {
     StringTable *tab = &G(T)->strtab;
-    OString **pp = &tab->hash[tmod(s->hash, tab->size)];
+    OString **pp = &tab->hash[tmod(s->hash, cast_uint(tab->size))];
     while (*pp != s) /* find previous element */
         pp = &(*pp)->u.next;
     *pp = (*pp)->u.next; /* remove it from list */
@@ -191,7 +191,7 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
     GState *gs = G(T);
     StringTable *tab = &gs->strtab;
     t_uint h = tokuS_hash(str, l, gs->seed);
-    OString **list = &tab->hash[tmod(h, tab->size)];
+    OString **list = &tab->hash[tmod(h, cast_uint(tab->size))];
     toku_assert(str != NULL); /* otherwise 'memcmp'/'memcpy' are undefined */
     for (s = *list; s != NULL; s = s->u.next) { /* probe chain */
         if (s->shrlen==l && (memcmp(str, getshrstr(s), l*sizeof(char))==0)) {
@@ -203,7 +203,7 @@ static OString *internshrstr(toku_State *T, const char *str, size_t l) {
     /* else must create a new string */
     if (tab->nuse >= tab->size) { /* need to grow the table? */
         growtable(T, tab);
-        list = &tab->hash[tmod(h, tab->size)]; /* rehash with new size */
+        list = &tab->hash[tmod(h, cast_uint(tab->size))]; /* rehash with new size */
     }
     s = newstrobj(T, l, TOKU_VSHRSTR, h);
     s->shrlen = cast_ubyte(l);
@@ -285,46 +285,46 @@ int tokuS_cmp(const OString *s1, const OString *s2) {
 ** ====================================================================== */
 
 /* convert hex character into digit */
-t_sinline int hexvalue(int c) {
+t_sinline t_ubyte hexvalue(int c) {
     if (c > '9') /* hex digit? */ 
-        return (ttolower(c) - 'a') + 10;
+        return cast_ubyte((ttolower(c) - 'a') + 10);
     else  /* decimal digit */
-        return c - '0';
+        return cast_ubyte(c - '0');
 }
 
-int tokuS_hexvalue(int c) {
-    toku_assert(tisxdigit(c));
-    return hexvalue(c);
+t_ubyte tokuS_hexvalue(int c) {
+    return check_exp(tisxdigit(c), hexvalue(c));
 }
 
 
 /* Lookup table for digit values. -1==255>=36 -> invalid */
-static const unsigned char table[] = { -1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
- 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,-1,-1,-1,-1,-1,-1,
--1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
-25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
--1,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,
-25,26,27,28,29,30,31,32,33,34,35,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
--1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
+static const unsigned char table[] = { 255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,255,255,255,255,255,255,
+255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+ 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,255,255,255,255,255,
+255, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+ 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
+255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,255,
 };
 
 static const char *str2int(const char *s, toku_Integer *i) {
     const t_ubyte *val = table + 1;
-    toku_Unsigned lim = TOKU_INTEGER_MIN;
+    toku_Unsigned lim = t_castS2U(TOKU_INTEGER_MIN);
     int sign = 1;
     uint32_t x;
     toku_Unsigned y = 0;
-    int base, c, empty;
+    t_uint base;
+    int c, empty;
     empty = 1;
     c = *s++;
     while (tisspace(c)) c = *s++; /* skip leading spaces */
@@ -385,7 +385,7 @@ static const char *str2int(const char *s, toku_Integer *i) {
     } else {
         while (tisspace(c)) c = *s++; /* skip trailing spaces */
         if (empty || c != '\0') return NULL; /* conversion failed? */
-        *i = t_castU2S(sign * y);
+        *i = sign * t_castU2S(y);
         return s - 1;
     }
 }
@@ -448,12 +448,12 @@ size_t tokuS_tonum(const char *s, TValue *o, int *pf) {
     } else /* both conversions failed */
         return 0;
     if (pf) *pf = f;
-    return (e - s) + 1; /* success; return string size */
+    return cast_diff2sz(e - s + 1); /* success; return string size */
 }
 
 
-unsigned tokuS_tostringbuff(const TValue *obj, char *buff) {
-    size_t len;
+t_uint tokuS_tostringbuff(const TValue *obj, char *buff) {
+    int len;
     toku_assert(ttisnum(obj));
     if (ttisint(obj)) {
         len = toku_integer2str(buff, TOKU_N2SBUFFSZ, ival(obj));
@@ -477,7 +477,7 @@ void tokuS_tostring(toku_State *T, TValue *obj) {
 }
 
 
-int tokuS_utf8esc(char *buff, t_ulong n) {
+int tokuS_utf8esc(char *buff, t_uint n) {
     int x = 1; /* number of bytes put in buffer (backwards) */
     toku_assert(n <= 0x7FFFFFFFu);
     if (n < 0x80) /* ascii? */
@@ -544,7 +544,7 @@ static void pushstr(BuffVFS *buff, const char *str, size_t len) {
 
 /* pushes buffer 'space' on the stack */
 static void pushbuff(BuffVFS *buff) {
-    pushstr(buff, buff->space, buff->len);
+    pushstr(buff, buff->space, cast_uint(buff->len));
     buff->len = 0;
 }
 
@@ -561,7 +561,7 @@ static char *getbuff(BuffVFS *buff, int n) {
 /* add string to buffer */
 static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
     if (len < BUFFVFSSIZ) {
-        char *p = getbuff(buff, len);
+        char *p = getbuff(buff, cast_int(len));
         memcpy(p, str, len);
         buff->len += cast_int(len);
     } else {
@@ -573,14 +573,14 @@ static void buffaddstring(BuffVFS *buff, const char *str, size_t len) {
 
 /* add number to buffer */
 static void buffaddnum(BuffVFS *buff, const TValue *nv) {
-    buff->len += tokuS_tostringbuff(nv, getbuff(buff, TOKU_N2SBUFFSZ));
+    buff->len += cast_int(tokuS_tostringbuff(nv, getbuff(buff, TOKU_N2SBUFFSZ)));
 }
 
 
 /* add pointer to buffer */
 static void buffaddptr(BuffVFS *buff, const void *p) {
     const int psize = 3 * sizeof(void*) + 8;
-    buff->len += toku_pointer2str(getbuff(buff, psize), psize, p);
+    buff->len += toku_pointer2str(getbuff(buff, psize), cast_uint(psize), p);
 }
 
 
@@ -591,10 +591,10 @@ const char *tokuS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
     BuffVFS buff;
     initvfs(T, &buff);
     while ((end = strchr(fmt, '%')) != NULL) {
-        buffaddstring(&buff, fmt, end - fmt);
+        buffaddstring(&buff, fmt, cast_diff2sz(end - fmt));
         switch (*(end + 1)) {
             case 'c': { /* 'char' */
-                char c = cast(unsigned char, va_arg(argp, int));
+                char c = cast_char(va_arg(argp, int));
                 buffaddstring(&buff, &c, sizeof(c));
                 break;
             }
@@ -615,8 +615,8 @@ const char *tokuS_pushvfstring(toku_State *T, const char *fmt, va_list argp) {
             }
             case 'U': {  /* a 'long' as a UTF-8 sequence */
                 char bf[UTF8BUFFSZ];
-                int len = tokuS_utf8esc(bf, va_arg(argp, long));
-                buffaddstring(&buff, bf + UTF8BUFFSZ - len, len);
+                int len = tokuS_utf8esc(bf, va_arg(argp, t_uint));
+                buffaddstring(&buff, bf + UTF8BUFFSZ - len, cast_uint(len));
                 break;
             }
             case 's': { /* 'string' */

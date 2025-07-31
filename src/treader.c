@@ -41,7 +41,7 @@ int tokuR_fill(BuffReader *br) {
         return TOKUEOF;
     br->n = size - 1; /* discount char being returned */
     br->buff = buff;
-    return cast_uchar(*(br->buff++));
+    return cast_ubyte(*(br->buff++));
 }
 
 

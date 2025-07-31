@@ -201,7 +201,7 @@ TOKU_API const char *toku_push_vfstring(toku_State *T, const char *f, va_list ap
 TOKU_API void    toku_push_cclosure(toku_State *T, toku_CFunction fn, int nup); 
 TOKU_API void        toku_push_bool(toku_State *T, int b); 
 TOKU_API void        toku_push_lightuserdata(toku_State *T, void *p); 
-TOKU_API void       *toku_push_userdata(toku_State *T, size_t sz, int nuv); 
+TOKU_API void *toku_push_userdata(toku_State *T, size_t sz, unsigned short nuv); 
 TOKU_API void        toku_push_list(toku_State *T, int sz);
 TOKU_API void        toku_push_table(toku_State *T, int sz);
 TOKU_API int         toku_push_thread(toku_State *T); 
@@ -323,16 +323,16 @@ TOKU_API int toku_find_index(toku_State *T, int idx, int fi, int s, int e);
 TOKU_API unsigned toku_numbertocstring(toku_State *T, int idx, char *buff); 
 
 TOKU_API size_t      toku_stringtonumber(toku_State *T, const char *s, int *f); 
-TOKU_API toku_Number toku_version(toku_State *T);
-TOKU_API toku_Integer toku_len(toku_State *T, int idx); 
-TOKU_API size_t      toku_lenudata(toku_State *T, int idx);
-TOKU_API int         toku_nextfield(toku_State *T, int idx); 
-TOKU_API void        toku_concat(toku_State *T, int n); 
+TOKU_API toku_Number    toku_version(toku_State *T);
+TOKU_API toku_Unsigned  toku_len(toku_State *T, int idx); 
+TOKU_API size_t         toku_lenudata(toku_State *T, int idx);
+TOKU_API int            toku_nextfield(toku_State *T, int idx); 
+TOKU_API void           toku_concat(toku_State *T, int n); 
 TOKU_API size_t      toku_numbertostring(toku_State *T, const char *s, int *f); 
-TOKU_API void        toku_toclose(toku_State *T, int idx); 
-TOKU_API void        toku_closeslot(toku_State *T, int idx); 
-TOKU_API void        toku_shrinklist(toku_State *T, int idx);
-TOKU_API unsigned    toku_numuservalues(toku_State *T, int idx);
+TOKU_API void           toku_toclose(toku_State *T, int idx); 
+TOKU_API void           toku_closeslot(toku_State *T, int idx); 
+TOKU_API void           toku_shrinklist(toku_State *T, int idx);
+TOKU_API unsigned short toku_numuservalues(toku_State *T, int idx);
 
 #define toku_is_function(C, n)      (toku_type(C, (n)) == TOKU_T_FUNCTION)
 #define toku_is_boundmethod(C, n)   (toku_type(C, (n)) == TOKU_T_BMETHOD)
@@ -424,7 +424,7 @@ struct toku_Debug {
     int lastdefline;            /* (s) */
     int nupvals;                /* (u) */
     int nparams;                /* (u) */
-    char isvararg;              /* (u) */
+    unsigned char isvararg;     /* (u) */
     int ftransfer;              /* (r) */
     int ntransfer;              /* (r) */
     char shortsrc[TOKU_IDSIZE]; /* (s) */

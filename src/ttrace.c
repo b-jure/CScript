@@ -45,7 +45,7 @@
 
 
 static void prefix(const Proto *p, const Instruction *pc) {
-    int relpc = pc - p->code;
+    int relpc = cast_int(pc - p->code);
     printPC(relpc); fflush(stdout);
     posfix_spaces(printLine(p, relpc)); fflush(stdout);
 }
@@ -510,7 +510,7 @@ static int traceOffset(Instruction *pc) {
 
 
 static void traceTarget(const Proto *p, Instruction *pc, int offset) {
-    int target = (pc - p->code) + getopSize(*pc) + offset;
+    int target = cast_int(pc - p->code) + getopSize(*pc) + offset;
     posfix_spaces(printf("target=%d", target));
 }
 
@@ -801,7 +801,7 @@ static const char *objtxt(const TValue *obj) {
             const void *p = getptr(obj);
             const char *s = typename(ttype(obj));
             int l = t_snprintf(buff, sizeof(buff), "%s: ", s);
-            t_snprintf(buff + l, sizeof(buff) - l, "%p", p);
+            t_snprintf(buff + l, sizeof(buff) - cast_uint(l), "%p", p);
             break;
         }
     }

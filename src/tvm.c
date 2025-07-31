@@ -82,7 +82,7 @@
 #endif
 
 
-static int booleans[2] = { TOKU_VFALSE, TOKU_VTRUE };
+static t_ubyte booleans[2] = { TOKU_VFALSE, TOKU_VTRUE };
 
 
 /*
@@ -708,7 +708,7 @@ t_sinline CallFrame *prepCallframe(toku_State *T, SPtr func, int nres,
     cf->func.p = func;
     cf->top.p = top;
     cf->nresults = nres;
-    cf->status = mask;
+    cf->status = cast_ubyte(mask);
     return cf;
 }
 
@@ -784,7 +784,7 @@ retry:
         case TOKU_VCSCL: { /* Tokudae closure */
             CallFrame *cf;
             Proto *p = clTval(s2v(func))->p;
-            int nargs = (T->sp.p - func) - 1; /* number of args received */
+            int nargs = cast_int(T->sp.p - func - 1); /* number of args received */
             int nparams = p->arity; /* number of fixed parameters */
             int fsize = p->maxstack; /* frame size */
             checkstackGCp(T, fsize, func);
@@ -1857,7 +1857,7 @@ returning: /* trap already set */
                 last = fetch_l(); /* num of elems. already in the list */
                 n = fetch_s(); /* num of elements to store */
                 if (n == 0)
-                    n = (sp - sl) - 1; /* get up to the top */
+                    n = cast_int(sp - sl - 1); /* get up to the top */
                 toku_assert(n >= 0);
                 last += n - 1; /* make 'last' be the last index */
                 tokuA_ensureindex(T, l, check_exp(last >= -1, last));
@@ -2067,7 +2067,7 @@ returning: /* trap already set */
                 stk = STK(fetch_l());
                 nres = fetch_l() - 1;
                 if (nres < 0) /* not fixed ? */
-                    nres = sp - stk;
+                    nres = cast_int(sp - stk);
                 if (fetch_s()) { /* have open upvalues? */
                     tokuF_close(T, base, CLOSEKTOP);
                     updatetrap(cf);

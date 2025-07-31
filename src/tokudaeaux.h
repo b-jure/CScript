@@ -170,7 +170,7 @@ TOKULIB_API void tokuL_unref(toku_State *T, int a, int ref);
 #define tokuL_get_metatable(T,tname)    toku_get_cfield_str(T, (tname))
 
 #define tokuL_find_index(T,idx,mask) \
-        toku_find_index(T, idx, mask, 0, toku_len(T, idx))
+        toku_find_index(T, idx, mask, 0, (int)toku_len(T, idx))
 
 
 /*

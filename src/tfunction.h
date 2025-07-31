@@ -17,11 +17,10 @@
 
 
 #define sizeofTcl(nup) \
-        (offsetof(TClosure, upvals) + ((nup) * cast_int(sizeof(UpVal*))))
-
+        (offsetof(TClosure, upvals) + (cast_uint(nup) * sizeof(UpVal*)))
 
 #define sizeofCcl(nup) \
-        (offsetof(CClosure, upvals) + ((nup) * cast_int(sizeof(TValue))))
+        (offsetof(CClosure, upvals) + (cast_uint(nup) * sizeof(TValue)))
 
 
 /* check if thread is in 'twups' (Threads with open UPvalueS) list */

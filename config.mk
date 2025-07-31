@@ -5,7 +5,7 @@
 # 			    Version and release
 # ==========================================================================
 V = 1.0
-R = $V.0
+R = $(V).0
 # }=========================================================================
 
 
@@ -13,7 +13,7 @@ R = $V.0
 # 				Paths & Installing
 # ==========================================================================
 # Your platform (see PLATFORMS for possible values).
-PLATFORM = guess
+PLATFORM = linux
 PLATFORMS = guess aix bsd freebsd ios macosx posix solaris linux mingw generic 
 
 # Install paths
@@ -22,18 +22,13 @@ INSTALL_BIN = $(INSTALL_ROOT)/bin
 INSTALL_INC = $(INSTALL_ROOT)/include
 INSTALL_LIB = $(INSTALL_ROOT)/lib
 INSTALL_MAN = $(INSTALL_ROOT)/man/man1
-INSTALL_TMOD = $(INSTALL_ROOT)/share/tokudae/$V
-INSTALL_CMOD = $(INSTALL_ROOT)/lib/tokudae/$V
+INSTALL_TMOD = $(INSTALL_ROOT)/share/tokudae/$(V)
+INSTALL_CMOD = $(INSTALL_ROOT)/lib/tokudae/$(V)
 
 # Install tool
 INSTALL = install -p
 INSTALL_EXEC = $(INSTALL) -m 0755
 INSTALL_DATA = $(INSTALL) -m 0644
-#
-# If you don't have "install" you can use "cp" instead.
-# INSTALL= cp -p
-# INSTALL_EXEC= $(INSTALL)
-# INSTALL_DATA= $(INSTALL)
 # }=========================================================================
 
 
@@ -52,7 +47,7 @@ INSTALL_DATA = $(INSTALL) -m 0644
 # where the stack can be reallocated.
 
 CC = gcc
-CFLAGS = -std=c99 -Wfatal-errors -Wall -Wextra $(SYSCFLAGS) $(MYCFLAGS)
+CFLAGS = -std=c99 -Wfatal-errors -Wall -Wextra -Werror -Wconversion $(SYSCFLAGS) $(MYCFLAGS)
 LDFLAGS = $(SYSLDFLAGS) $(MYLDFLAGS)
 LIBS = -lm $(SYSLIBS) $(MYLIBS)
 
