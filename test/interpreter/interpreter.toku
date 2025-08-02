@@ -43,7 +43,7 @@ local fn checkprogout(s) {
 local fn checkout(s) {
     local t = getoutput();
     if s != t printf("'%' - '%'\n", s, t);
-    assert(s <= t);
+    assert(s == t);
     return t;
 }
 
@@ -260,45 +260,40 @@ Tokudae warning: @on
 Tokudae warning: ZZZ
 ]=]);
 
-prepfile([=[
-warn("@allow");
-/// create two objects to be finalized when closing state
-/// the errors in the finalizers must generate warnings
-u1 = setmetatable((class{})(), {__gc = ||{ error("XYZ"); }});
-u2 = setmetatable((class{})(), {__gc = ||{ error("ZYX"); }});
-]=]);
-RUN("tokudae -W %s 2> %s", prog, out);
-checkprogout("ZYX)\nXYZ)\n");
+if !__TESTS.gc and !__TESTS.memory { /* not running GC and memory tests? */
+    prepfile([=[
+        warn("@allow");
+        /// create two objects to be finalized when closing state
+        /// the errors in the finalizers must generate warnings
+        u1 = setmetatable((class{})(), {__gc = ||{ error("XYZ"); }});
+        u2 = setmetatable((class{})(), {__gc = ||{ error("ZYX"); }});
+    ]=]);
+    RUN("tokudae -W %s 2> %s", prog, out);
+    checkprogout("ZYX)\nXYZ)\n");
 
-/// finalizer called when closing a state could
-/// subvert finalization order
-prepfile([=[
-    /// ensure instances will be collected only at the end of the program
-    gc("stop");
+    /// finalizer called when closing a state could
+    /// subvert finalization order
+    prepfile([=[
+        /// ensure instances will be collected only at the end of the program
+        gc("stop");
 
-    print("creating 1");
-    /// this finalizer should be called last
-    setmetatable((class{})(), { __gc = || { print(1); } });
-    print("creating 2");
-    setmetatable((class{})(), { __gc = || {
-        print("2");
-        print("creating 3");
-        /// this finalizer should not be called, as object will be
-        /// created after 'toku_close' has been called
-        setmetatable((class{})(), { __gc = || { print(3); } });
-        print(gc() or false); /// cannot call collector here
-        os.exit(0, true);
-    }});
-]=]);
-RUN("tokudae -W %s > %s", prog, out);
-checkout([=[
-creating 1
-creating 2
-2
-creating 3
-false
-1
-]=]);
+        print("creating 1");
+        /// this finalizer should be called last
+        setmetatable((class{})(), { __gc = || { print(1); } });
+        print("creating 2");
+        setmetatable((class{})(), { __gc = || {
+            print("2");
+            print("creating 3");
+            /// this finalizer should not be called, as object will be
+            /// created after 'toku_close' has been called
+            setmetatable((class{})(), { __gc = || { print(3); } });
+            print(gc() or false); /// cannot call collector here
+            os.exit(0, true);
+        }});
+    ]=]);
+    RUN("tokudae -W %s > %s", prog, out);
+    checkout("creating 1\ncreating 2\n2\ncreating 3\nfalse\n1\n");
+}
 
 
 /// test many arguments

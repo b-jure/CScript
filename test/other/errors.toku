@@ -153,7 +153,7 @@ checkmessage([=[
 __G.D = nil;
 
 { /// named objects (field '__name')
-    checkmessage("math.sin(io.input());", "(number expected, instead got FILE*)", true);
+    checkmessage("math.sin(io.input());", "(number expected, instead got FILE*)");
     __G.XX = (class{__name = "My Type";})();
     assert(reg.find(tostr(XX), "^My Type"));
     checkmessage("io.input(XX);", "(FILE* expected, instead got My Type)");
@@ -351,7 +351,7 @@ lineerror([=[
 }
 
 
-if __heavy {
+if __heavy and !(__TESTS.gc or __TESTS.memory) {
     /// several tests that exhaust the Tokudae stack
     gc();
     print("testing stack overflow");
@@ -540,4 +540,6 @@ if __heavy {
     testrep("local a = 1; return ", "a**", "a", "", 1);
 
     checkmessage("a = f(x"..string.repeat(",x", (1<<24)-1)..");", "stack slots");
+
 }
+__G.a = nil;

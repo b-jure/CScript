@@ -38,8 +38,10 @@
 ** Get first 3 bytes (LE byte order) from 'p' casted to 't_uint'.
 */
 #define get3bytes(p) \
-        cast_int(cast_uint(0) | ((*(cast_ubytep(p) + 2)) << 16) | \
-                 ((*(cast_ubytep(p) + 1)) << 8) | (*cast_ubytep(p)))
+        cast_int(cast_uint(0) | \
+        cast_uint((*(cast_ubytep(p) + 2)) << 16) | \
+        cast_uint((*(cast_ubytep(p) + 1)) << 8) | \
+        (*cast_ubytep(p)))
 
 
 /* 

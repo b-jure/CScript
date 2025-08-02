@@ -254,7 +254,6 @@ while (false); while (nil);
 
 { /// testing constants
   local prog <final> = "local x <XXX> = 10;";
-  print(load(prog));
   checkload(prog, "unknown attribute 'XXX'");
 
   checkload("local xxx <final> = 20; xxx = 10;",
@@ -327,7 +326,7 @@ return fn( a , b , c , d , e ) {
 ///================================================================
 ///================================================================
 
-{
+if !(__TESTS.gc or __TESTS.memory) {
     /// sometimes will be 0, sometimes will not...
     __ENV.GLOB1 = math.rand(0, 1);
 
@@ -389,7 +388,8 @@ return fn( a , b , c , d , e ) {
         return res;
     }
 
-    local level = __heavy and 4 and 3;
+    local level = !__heavy and 3 or 4;
+    if (__TESTS.gc or __TESTS.memory) level = 3;
     cases[0] = basiccases;
     foreach i in range(1, level)
         cases[i] = createcases(i);
@@ -404,7 +404,8 @@ return fn( a , b , c , d , e ) {
     }
     IX = nil;
     __G.GLOB1 = nil;
-}
+} else
+    (Message or print)("skipped heavy cases tests");
 ///------------------------------------------------------------------
 
 /// testing some syntax errors

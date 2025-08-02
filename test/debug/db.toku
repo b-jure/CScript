@@ -731,7 +731,8 @@ assert(typeof(debug.getclist()) == "list");
 }
 
 
-{ /// testing debug info for finalizers
+if !__TESTS.gc and !__TEST.memory { /* compiled without gc and memory tests? */
+    /// testing debug info for finalizers
     local name = nil;
     /// create a piece of garbage with a finalizer
     local mt = {}; mt.__gc = || {

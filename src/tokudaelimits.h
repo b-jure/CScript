@@ -299,7 +299,7 @@ typedef t_ubyte Instruction;
 #if !defined(t_numadd)
 #define t_numadd(T, a, b)       ((void)(T), (a) + (b))
 #define t_numsub(T, a, b)       ((void)(T), (a) - (b))
-#define t_nummul(T, a, b)       (void)(T), ((a) * (b))
+#define t_nummul(T, a, b)       ((void)(T), ((a) * (b)))
 #define t_numunm(T, a)          ((void)(T), -(a))
 #endif
 

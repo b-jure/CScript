@@ -56,6 +56,7 @@ fn controlstruct() {
     local st, msg = load(s);
     assert(!st and string.find(msg, "too long"));
     print(msg);
+    __G.a = nil;
 }
 
 
@@ -88,6 +89,7 @@ fn toomanyinst() {
     print("loading chunk with too many instructions");
     local st, msg = loadrep("a = 10; ", "instructions");
     print("+");
+    __G.a = nil;
 }
 
 
@@ -160,3 +162,5 @@ if __heavy and !__port {
     ///toomanyidx();
 } else
     (Message or print)("skipped heavy non-portable tests");
+
+__G.a = nil;

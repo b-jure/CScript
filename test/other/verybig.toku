@@ -142,3 +142,5 @@ io.close();
 runfile(file);
 assert(os.remove(file));
 io.output(oldout);
+
+__G.a = nil;

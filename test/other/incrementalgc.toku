@@ -1,3 +1,8 @@
+if __TESTS.gc or __TESTS.memory { /* compiled with GC or memory tests? */
+    (Message or print)("skipped incremental garbage collection tests");
+    return;
+}
+
 print("testing incremental garbage collection");
 
 assert(gc("isrunning"));
@@ -317,3 +322,5 @@ assert(gc("isrunning"));
     gc();
     assert(!res);
 }
+
+__G.a = nil;

@@ -16,6 +16,9 @@ x = -6.420e-2;
 assert(math.abs(x) == -x);
 assert(math.abs(x) == 6.420e-2);
 checkerr("number expected", math.abs, "str");
-assert(eqt(math.abs(math.minint), math.minint));
-assert(eqt(math.abs(math.maxint), math.maxint));
-assert(eqt(math.abs(-math.maxint), math.maxint));
+
+local minint = math.minint;
+local maxint = math.maxint;
+assert(eqt(math.abs(minint), minint));
+assert(eqt(math.abs(maxint), maxint));
+assert(eqt(math.abs(-maxint), maxint));

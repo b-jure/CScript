@@ -357,7 +357,7 @@ static t_mem markcsclosure(GState *gs, TClosure *cl) {
 
 static t_mem markuserdata(GState *gs, UserData *ud) {
     markobjectN(gs, ud->metatable);
-    for (int i = 0; i < ud->nuv; i++)
+    for (t_ushort i = 0; i < ud->nuv; i++)
         markvalue(gs, &ud->uv[i].val);
     return 1 + ud->nuv; /* user values + userdata */
 }

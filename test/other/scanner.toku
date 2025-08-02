@@ -277,3 +277,5 @@ local fn malformednum(n, exp) {
 malformednum("0xe-", "near ';'");
 malformednum("0xep-p", "malformed number");
 malformednum("1print()", "malformed number");
+
+__G.a = nil;

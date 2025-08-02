@@ -230,8 +230,9 @@ if __skipmsg { /* store skipped (parts of) tests? */
     ** @msg - string
     */
     fn Message(msg) {
-        local t = getinfo(2, "s");
-        skip_msgs[skip_msgs.len] = msg .. " in '" .. YELLOW(t.source) .. "'";
+        local t = getinfo(2, "sl");
+        local where = fmt("%s:%s: ", YELLOW(t.source), YELLOW(tostr(t.currline)));
+        skip_msgs[skip_msgs.len] = where .. msg;
     }
 }
 

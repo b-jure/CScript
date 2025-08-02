@@ -463,7 +463,7 @@ void tokuV_set(toku_State *T, const TValue *o, const TValue *k,
 
 #define tokuV_getgen(T,o,k,res,f) \
     { const TValue *tm = tokuTM_objget(T, o, TM_GETIDX); \
-      if (ttisnil(tm)) { f(T, o, k, res); } \
+      if (notm(tm)) { f(T, o, k, res); } \
       else { tokuTM_callgetres(T, tm, o, k, res); }}
 
 
@@ -478,7 +478,6 @@ void tokuV_set(toku_State *T, const TValue *o, const TValue *k,
 
 #define trybindmethod(T,slot,tag,inst,res) \
     { if (!tagisempty(tag)) { \
-          setobj2s(T, res, slot); \
           bindmethod(T, inst, slot, res); \
           break; }}
 
@@ -924,20 +923,23 @@ t_sinline OClass *checksuper(toku_State *T, const TValue *scl) {
 }
 
 
-t_sinline Table *copytable(toku_State *T, Table *dest, Table *src) {
+t_sinline void copytable(toku_State *T, Table **dest, Table *src) {
     toku_assert(src != NULL);
-    if (!dest) dest = tokuH_new(T);
-    tokuH_copy(T, dest, src);
-    invalidateTMcache(dest);
-    return dest;
+    if (!*dest) *dest = tokuH_new(T);
+    tokuH_copy(T, *dest, src);
+    invalidateTMcache(*dest);
 }
 
 
 static void doinherit(toku_State *T, OClass *cls, OClass *supcls) {
-    if (supcls->methods) /* superclass has methods? */
-        cls->methods = copytable(T, cls->methods, supcls->methods);
-    if (supcls->metatable)
-        cls->metatable = copytable(T, cls->metatable, supcls->metatable);
+    if (supcls->methods) { /* superclass has methods? */
+        copytable(T, &cls->methods, supcls->methods);
+        tokuG_objbarrier(T, cls, cls->methods);
+    }
+    if (supcls->metatable) {
+        copytable(T, &cls->metatable, supcls->metatable);
+        tokuG_objbarrier(T, cls, cls->metatable);
+    }
     cls->sclass = supcls; /* set the superclass */
 }
 
@@ -954,7 +956,7 @@ t_sinline void pushclass(toku_State *T, int b) {
     }
     if (b > 0) { /* have methods? */
         cls->methods = tokuH_new(T);
-        tokuH_resize(T, cls->methods, log2size1(b));
+        tokuH_resize(T, cls->methods, cast_uint(log2size1(b)));
     }
 }
 
@@ -971,8 +973,11 @@ t_sinline void pushtable(toku_State *T, int b) {
     Table *t = tokuH_new(T);
     settval2s(T, T->sp.p++, t);
     if (b > 0) /* table is not empty? */
-        tokuH_resize(T, t, log2size1(b));
+        tokuH_resize(T, t, cast_uint(log2size1(b)));
 }
+
+
+// FIX: Garbage collector "free after use" buggs!!!
 
 
 /* {======================================================================

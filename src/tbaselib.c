@@ -10,6 +10,7 @@
 #include "tokudaeprefix.h"
 
 #include <string.h>
+#include <ctype.h>
 
 #include "tokudae.h"
 
@@ -781,30 +782,32 @@ static const char *strtoint(const char *s, toku_Unsigned base,
             c = *s++; /* skip x|X */
         }
     }
-    if (!(val[c] < base)) /* no digit? */
+    if (!isalnum(cast_ubyte(c))) /* no digit? */
         return NULL;
     do {
-        if (val[c] >= base) return NULL; /* invalid numeral */
+        if (base <= val[c]) return NULL; /* invalid numeral */
+        if (TOKU_UNSIGNED_MAX/base < n || TOKU_UNSIGNED_MAX-val[c] < base*n)
+            break; /* (under)overflow */
         n = n * base + val[c];
         c = *s++;
-    } while (val[c] < base && n <= TOKU_UNSIGNED_MAX/base &&
-             base*n <= TOKU_UNSIGNED_MAX-val[c]);
-    if (val[c] < base) {
-        while (val[c] < base) c=*s++;
-        n = lim - (sign > 0);
+    } while (isalnum(cast_ubyte(c)));
+    if (isalnum(cast_ubyte(c))) { /* (under)overflow? */
+        while (val[c] < base) c = *s++; /* skip rest of valid digits */
+        if (isalnum(cast_ubyte(c))) return NULL; /* invalid numeral */
+        n = lim - (sign > 0); /* if positive, upper limit is one less */
         *of = sign;
-    } else if (n >= lim) {
-        if (sign > 0) {
-            *of = 1;
+    } else if (lim <= n) { /* greater or touching the signed limit? */
+        if (sign > 0) { /* positive? */
+            *of = 1; /* it is overflow by at least one */
             n = lim-1;
-        } else if (n > lim) {
+        } else if (lim < n) { /* overflow of negative number? */
             *of = -1;
             n = lim;
-        }
+        } /* otherwise we gucci */
     }
-    s--;
+    s--; /* go back once (lookahead char) */
     s += strspn(s, SPACECHARS); /* skip trailing spaces */
-    *pn = sign * t_castU2S(n);
+    *pn = t_castU2S((sign < 0) ? (0u - n) : n);
     return s;
 }
 
@@ -998,7 +1001,8 @@ static const tokuL_Entry basic_funcs[] = {
     /* compatibility flags */
     {"__POSIX", NULL},
     {"__WINDOWS", NULL},
-    /* table for meta indices */
+    /* internal test flags table */
+    {"__TESTS", NULL},
     {NULL, NULL},
 };
 
@@ -1024,6 +1028,26 @@ static void set_compat_flags(toku_State *T) {
 }
 
 
+static void set_internal_test_flags(toku_State *T) {
+    toku_push_table(T, 0);
+    toku_push(T, -1); /* table copy */
+    toku_set_field_str(T, -3, "__TESTS");
+    #if (defined(TOKUI_EMERGENCYGCTESTS))
+        toku_push_bool(T, 1);
+        toku_set_field_str(T, -2, "gc");
+    #endif
+    #if (defined(TOKUI_HARDMEMTESTS))
+        toku_push_bool(T, 1);
+        toku_set_field_str(T, -2, "memory");
+    #endif
+    #if (defined(TOKUI_HARDSTACKTESTS))
+        toku_push_bool(T, 1);
+        toku_set_field_str(T, -2, "stack");
+    #endif
+    toku_pop(T, 1); /* remove __TESTS table */
+}
+
+
 TOKUMOD_API int tokuopen_basic(toku_State *T) {
     /* open lib into global instance */
     toku_push_globaltable(T);
@@ -1036,5 +1060,6 @@ TOKUMOD_API int tokuopen_basic(toku_State *T) {
     toku_set_field_str(T, -2, "__VERSION");
     /* set compatibility flags */
     set_compat_flags(T);
+    set_internal_test_flags(T);
     return 1;
 }

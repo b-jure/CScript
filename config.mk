@@ -57,7 +57,7 @@ SYSLDFLAGS =
 SYSLIBS =
 
 # Release flags
-# MYCFLAGS = -O2 -march=native -fno-stack-protector -fno-common 
+#MYCFLAGS = -O2 -march=native -fno-stack-protector -fno-common
 # MYLDFLAGS =
 # MYLIBS =
 # MYOBJS =
@@ -65,8 +65,8 @@ SYSLIBS =
 # Testing flags
 #ASANFLAGS = -fsanitize=address -fsanitize=undefined \
 # 	    -fsanitize=pointer-subtract -fsanitize=pointer-compare
-MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DTOKU_USE_APICHECK -DTOKUI_ASSERT
-	   #-DTOKUI_DISASSEMBLE_BYTECODE -DTOKUI_TRACE_EXEC
+MYCFLAGS = $(ASANFLAGS) -O0 -g3 -DTOKU_USE_APICHECK -DTOKUI_ASSERT \
+	   -DTOKUI_EMERGENCYGCTESTS #-DTOKUI_DISASSEMBLE_BYTECODE -DTOKUI_TRACE_EXEC
 MYLDFLAGS = $(ASANFLAGS)
 MYLIBS =
 MYOBJS =
